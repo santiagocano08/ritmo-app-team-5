@@ -1,0 +1,50 @@
+# ---------------------------------------------------------------------------
+# RITMO / PulsoFlota — repository .gitignore
+# ---------------------------------------------------------------------------
+# Note: Spec Kit keeps its own machine-local excludes in .specify/.gitignore
+# (feature.json, integrations/packages, extension local-config). Those stay
+# local and are NOT shared; everything else under .specify/ and .kiro/ IS
+# committed so the agents work for everyone who clones the repo.
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp
+.vscode/
+.idea/
+
+# Environment & secrets (never commit)
+.env
+.env.*
+*.pem
+*.key
+
+# Logs
+*.log
+logs/
+
+# ---------------------------------------------------------------------------
+# Language/tooling artifacts — uncommented as the stack lands in the repo.
+# RITMO has no application code yet; keep these ready so build output never
+# gets committed once implementation starts.
+# ---------------------------------------------------------------------------
+
+# Node.js / TypeScript
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+*.egg-info/
