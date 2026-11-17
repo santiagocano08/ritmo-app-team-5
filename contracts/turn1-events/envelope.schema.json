@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "envelope.schema.json",
+  "title": "Turn 1 Event Envelope (v1.0.0)",
+  "description": "Common envelope for all simulator/ingestion events in turn 1, validated at the ingestion boundary. event_type selects the payload schema via oneOf. See ADR-0002.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "event_type", "source", "event_ts", "payload"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1.0.0"],
+      "description": "Message contract version (SemVer). Turn 1 accepts only 1.0.0. A breaking change requires a new major version; see ADR-0002."
+    },
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Globally unique event identifier (UUID v4). Together with source it forms the idempotency key (source + event_id)."
+    },
+    "event_type": {
+      "type": "string",
+      "enum": ["bus_position", "stop_arrival", "stop_departure", "rider_arrival", "driver_confirmation", "incident_report"],
+      "description": "Discriminator that selects the payload schema."
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Producing source identifier. Turn 1 source is 'simulator'."
+    },
+    "event_ts": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event time, when the event occurred, in UTC (RFC 3339). Used in all calculations."
+    },
+    "arrival_ts": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Arrival time, stamped by ingestion when the message is received. Not sent by the source; optional in the inbound message and overwritten by ingestion."
+    },
+    "payload": {
+      "type": "object",
+      "description": "Event-specific payload. Its shape is constrained by event_type through oneOf."
+    }
+  },
+  "oneOf": [
+    {
+      "required": ["event_type", "payload"],
+      "properties": {
+        "event_type": { "const": "bus_position" },
+        "payload": { "$ref": "bus_position.schema.json" }
+      }
+    },
+    {
+      "required": ["event_type", "payload"],
+      "properties": {
+        "event_type": { "const": "stop_arrival" },
+        "payload": { "$ref": "stop_arrival.schema.json" }
+      }
+    },
+    {
+      "required": ["event_type", "payload"],
+      "properties": {
+        "event_type": { "const": "stop_departure" },
+        "payload": { "$ref": "stop_departure.schema.json" }
+      }
+    },
+    {
+      "required": ["event_type", "payload"],
+      "properties": {
+        "event_type": { "const": "rider_arrival" },
+        "payload": { "$ref": "rider_arrival.schema.json" }
+      }
+    },
+    {
+      "required": ["event_type", "payload"],
+      "properties": {
+        "event_type": { "const": "driver_confirmation" },
+        "payload": { "$ref": "driver_confirmation.schema.json" }
+      }
+    },
+    {
+      "required": ["event_type", "payload"],
+      "properties": {
+        "event_type": { "const": "incident_report" },
+        "payload": { "$ref": "incident_report.schema.json" }
+      }
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0.0",
+  "event_id": "b1a2c3d4-4444-4444-8444-444444444444",
+  "event_type": "rider_arrival",
+  "source": "simulator",
+  "event_ts": "2026-11-24T08:02:00Z",
+  "payload": {
+    "stop_id": "S-001",
+    "direction": 1,
+    "origin": "train",
+    "destination_stop_id": "S-007",
+    "train_trip_id": "METRO-A-0815"
+  }
+}

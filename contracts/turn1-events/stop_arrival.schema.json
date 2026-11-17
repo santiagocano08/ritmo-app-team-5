@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "stop_arrival.schema.json",
+  "title": "Stop Arrival Payload (v1.0.0)",
+  "description": "A bus arrives at a stop. Records boarding/alighting during the dwell and occupancy on arrival.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["bus_id", "trip_id", "stop_id", "boarded", "alighted", "rejected", "occupancy"],
+  "properties": {
+    "bus_id": {
+      "type": "string",
+      "enum": ["B-101", "B-102", "B-103", "B-104", "B-105", "B-106", "B-107"],
+      "description": "Vehicle identifier. B-106 and B-107 are reserve buses."
+    },
+    "trip_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Trip identifier on the standard route."
+    },
+    "stop_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stop identifier along corridor C6-008."
+    },
+    "boarded": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Passengers who boarded at this stop."
+    },
+    "alighted": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Passengers who alighted at this stop."
+    },
+    "rejected": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Passengers left behind because the bus was full."
+    },
+    "occupancy": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 40,
+      "description": "Occupancy on arrival. Bus capacity is 40."
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0.0",
+  "event_id": "bad00009-0000-4000-8000-000000000009",
+  "event_type": "rider_arrival",
+  "source": "simulator",
+  "event_ts": "2026-11-24T08:02:00Z",
+  "payload": {
+    "stop_id": "S-001",
+    "direction": 1,
+    "origin": "train",
+    "destination_stop_id": "S-007"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0.0",
+  "event_id": "b1a2c3d4-2222-4222-8222-222222222222",
+  "event_type": "stop_arrival",
+  "source": "simulator",
+  "event_ts": "2026-11-24T08:01:10Z",
+  "payload": {
+    "bus_id": "B-102",
+    "trip_id": "C6-008-AM-001",
+    "stop_id": "S-003",
+    "boarded": 4,
+    "alighted": 2,
+    "rejected": 0,
+    "occupancy": 18
+  }
+}

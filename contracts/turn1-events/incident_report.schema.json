@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "incident_report.schema.json",
+  "title": "Incident Report Payload (v1.0.0)",
+  "description": "Report of an incident affecting the corridor. Reported by the dispatcher (Human-in-the-Loop) or by the simulation script.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["incident_type", "target_id", "duration_min", "reported_by"],
+  "properties": {
+    "incident_type": {
+      "type": "string",
+      "enum": ["bus_breakdown", "stop_closed", "other"],
+      "description": "Type of incident."
+    },
+    "target_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifier of the affected bus or stop."
+    },
+    "duration_min": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Estimated duration of the incident in minutes."
+    },
+    "reported_by": {
+      "type": "string",
+      "enum": ["dispatcher", "script"],
+      "description": "Who reported the incident."
+    }
+  }
+}
