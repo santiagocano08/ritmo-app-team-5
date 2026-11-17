@@ -26,6 +26,7 @@ permissions:
 resources:
   - "file://.kiro/prompts/speckit.implement.md"
   - "file://.specify/memory/constitution.md"
+  - "file://docs/vueltas-ritmo.md"
   - "file://.specify/feature.json"
   - "file://AGENTS.md"
   - "file://.kiro/steering/**/*.md"
