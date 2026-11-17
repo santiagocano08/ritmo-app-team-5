@@ -2,7 +2,7 @@
 
 ## Document Control
 * **PROJECT_NAME**: RITMO (Riesgo, Incrementos y Trazabilidad para la Movilidad Operativa) / PulsoFlota
-* **MAP VERSION**: 0.1.0 (draft for team review)
+* **MAP VERSION**: 0.1.1 (draft for team review)
 * **DATE**: 2026-11-17
 * **STATUS**: Proposal. Requires team approval
 * **GOVERNED BY**: Constitution v1.1.0, "Phased Adoption" section
@@ -57,6 +57,9 @@ trigger false alerts.
 neighborhood direction only. Base fleet of 5 buses + 2 in reserve.
 
 ### 3.1 Scope
+* **Containers from day one** (Principle III is never deferred): `docker-compose` with
+  separate services for PostgreSQL, the simulator/ingestion and the API. The ingestion
+  container keeps writing to bronze even if the API or the web console is down.
 * **Message contract** with Pydantic V2. Invalid events are rejected with `422`
   and recorded with their reason.
 * **Simulator** with a simple Python loop and a 5 s step. It publishes 5 events:
@@ -77,7 +80,9 @@ neighborhood direction only. Base fleet of 5 buses + 2 in reserve.
   geographic map) and US-02.
 
 ### 3.2 Norms adopted
-* The 5 Core Principles.
+* The 5 Core Principles, including Principle III (ingestion in its own container).
+* RNF-3.2.1 and RNF-3.2.2: Python packaged with Docker and `docker-compose`; ingestion
+  isolated from the web.
 * RNF-3.3.1: boundary validation and rejection of 100 % of packets without a
   valid schema.
 * RF-2.1, RF-2.2 and RF-2.3.
@@ -88,7 +93,7 @@ neighborhood direction only. Base fleet of 5 buses + 2 in reserve.
   secrets in the repository, error responses without stack traces.
 
 ### 3.3 Deferred norms (evolution)
-Redis, PostGIS, separate ingestion container, 1,000 events/s, geographic map
+Redis (and the `database-redis` service), PostGIS, 1,000 events/s, geographic map
 ≤ 2 s, SAST/SCA, RBAC/JWT/MFA, mTLS, HMAC, secret manager and route diversion
 (US-03).
 
@@ -112,15 +117,14 @@ Redis, PostGIS, separate ingestion container, 1,000 events/s, geographic map
 ## 5. Turn 3 — Real Time and Isolation (design)
 
 * **Scope:**
-  * `ingestion-service` in its own container, `docker-compose` with 3 services.
-  * Redis Pub/Sub (or a Kafka-API broker).
+  * Redis Pub/Sub (or a Kafka-API broker) as the `database-redis` service in `docker-compose`.
+  * Container hardening for production (non-root UID 10001, minimal images).
   * PostGIS and TimescaleDB.
   * Interactive map with refresh ≤ 2 s.
   * All 5 data faults: duplicates, out of order, impossible position, source
     outage and bursts.
   * Persistent buffer and local contingency mode.
-* **Norms adopted:** RNF-3.1.2 (1,000 events/s, P99 ≤ 500 ms), RNF-3.2.2,
-  RNF-3.2.3, RF-1.1, RF-1.3 and Gate 3 (DataOps: rejection < 0.1 %, ingestion
+* **Norms adopted:** RNF-3.1.2 (1,000 events/s, P99 ≤ 500 ms), RNF-3.2.3, RF-1.1, RF-1.3 and Gate 3 (DataOps: rejection < 0.1 %, ingestion
   ≤ 200 ms).
 
 ## 6. Turn 4 — Adaptive Lane (design)
