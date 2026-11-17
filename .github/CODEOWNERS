@@ -1,0 +1,5 @@
+# Data owner: mandatory review on contracts, quality rules and data ADRs
+# (prevents an agent from weakening a rule or changing the contract to make CI pass).
+/contracts/   @Yceballos
+/rules/       @Yceballos
+/docs/adr/    @Yceballos
