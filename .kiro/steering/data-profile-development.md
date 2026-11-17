@@ -13,6 +13,7 @@ According to `docs/turns-ritmo.md`, turn 1 builds the minimum that closes the lo
 
 | Topic | Turn 1 | Deferred (evolution) |
 |---|---|---|
+| Containers | `docker-compose`: PostgreSQL, simulator/ingestion and API as separate services (Principle III) | `database-redis` service, production hardening |
 | Transport | The simulator writes to the PostgreSQL bronze table; notifications with `LISTEN/NOTIFY` | Redis Pub/Sub or a broker |
 | Database | PostgreSQL only, `bronze`, `silver`, `gold` schemas | PostGIS, TimescaleDB |
 | Position | Distance along the corridor in meters, no geometry | Coordinates and geometry |
