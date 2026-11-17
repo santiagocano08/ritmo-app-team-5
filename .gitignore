@@ -48,3 +48,6 @@ venv/
 htmlcov/
 .coverage
 *.egg-info/
+
+# Raw source data (large, re-downloadable; see data/reference/SOURCES.md)
+data/raw/
