@@ -1,278 +1,262 @@
 <!--
-Sync Impact Report (borrador temporal — eliminar antes de commit)
+Sync Impact Report (temporary draft — remove before merge)
 ====================================================================
-- Enmienda propuesta 1.0.0 → 1.1.0 (MINOR), 2026-11-17, PR `constitutional-amendment`:
-  añade "Adopción por Fases" en Governance y una nota al inicio de "Restricciones
-  Técnicas y de Seguridad". Los Principios Core no cambian. Nuevo documento
-  referenciado: docs/vueltas-ritmo.md (mapa de vueltas). Motivo: la v1.0.0 exige
-  el sistema objetivo completo desde la vuelta 1, y eso es incompatible con una
-  espiral guiada por riesgo y con el alcance de la vuelta 1 (taller 2026-11-24).
-  Plantillas: sin cambios requeridos. Agentes: create-plan, validate-plan y
-  review-code deberían cargar docs/vueltas-ritmo.md en sus resources.
-- Cambio de versión inicial: (sin versión previa ratificada) → 1.0.0
-  El archivo .specify/memory/constitution.md preexistente era un andamiaje de
-  plantilla sin resolver (todos los marcadores [...] intactos, sin versión
-  concreta); no existía una constitución ratificada previa. Se adopta la
-  versión inicial 1.0.0, alineada con la versión 1.0.0 declarada en los
-  documentos fuente (OMD/PRD/SRD).
-- Principios modificados: N/A (ratificación inicial). Los 5 principios core
-  NON-NEGOTIABLE se incorporan a partir del OMD.
-- Secciones añadidas:
-  * Core Principles (5 principios NON-NEGOTIABLE)
-  * Restricciones Técnicas y de Seguridad (stack, tiempo real firme, OWASP Top 10 2025)
-  * Flujo de Desarrollo RITMO y Compuertas de Calidad (5 etapas, 2 carriles, 4 compuertas)
-  * Governance (enmiendas, SemVer, cumplimiento)
-- Secciones eliminadas: N/A
-- TODOs diferidos: ninguno. Ratificación = 2026-11-17 (fecha provista por el
-  operador); Last Amended = 2026-11-17 (acto de ratificación inicial).
+- Proposed amendment 1.0.0 → 1.1.0 (MINOR), 2026-11-17, PR `constitutional-amendment`:
+  adds "Phased Adoption" under Governance and a note at the top of "Technical and
+  Security Constraints". Core Principles are unchanged. New referenced document:
+  docs/turns-ritmo.md (spiral turn map). Rationale: v1.0.0 requires the complete
+  target system from turn 1, which is incompatible with a risk-driven spiral and
+  with the scope of turn 1 (workshop on 2026-11-24).
+  Templates: no changes required. Agents: create-spec, create-plan, create-tasks,
+  validate-plan, implement-code and review-code load docs/turns-ritmo.md.
+- Initial version: (no previously ratified version) → 1.0.0
+  The pre-existing .specify/memory/constitution.md was unresolved template
+  scaffolding (all [...] placeholders intact, no concrete version); there was no
+  previously ratified constitution. Initial version 1.0.0 is adopted, aligned
+  with version 1.0.0 declared in the source documents (OMD/PRD/SRD).
+- Modified principles: N/A (initial ratification). The 5 NON-NEGOTIABLE Core
+  Principles are taken from the OMD.
+- Added sections:
+  * Core Principles (5 NON-NEGOTIABLE principles)
+  * Technical and Security Constraints (stack, firm real time, OWASP Top 10 2025)
+  * RITMO Development Workflow and Quality Gates (5 stages, 2 lanes, 4 gates)
+  * Governance (amendments, SemVer, compliance, phased adoption)
+- Removed sections: N/A
+- Deferred TODOs: none. Ratified = 2026-11-17 (date provided by the operator);
+  Last Amended = 2026-11-17.
+- Language: translated to English on 2026-11-17 so the whole repository uses one
+  language. Source documents in docs/ (OMD, PRD, SRD) remain in Spanish.
 -->
 
 # RITMO / PulsoFlota Constitution
 
 ## Core Principles
 
-### I. Orden Guiado por Riesgo (Risk-First Order) — NON-NEGOTIABLE
+### I. Risk-First Order — NON-NEGOTIABLE
 
-- El backlog de desarrollo y la secuencia de vueltas de la espiral RITMO DEBEN
-  ordenarse estrictamente por el nivel de riesgo técnico y arquitectónico (ASRs),
-  no por prioridad comercial estática.
-- NINGUNA nueva funcionalidad del carril adaptativo DEBE iniciarse si existe un
-  riesgo de Nivel 1 (seguridad o integridad del dato) no mitigado en la vuelta
-  activa.
-- **Justificación:** en sistemas de tiempo real firme con control supervisorio,
-  ignorar los riesgos de concurrencia o corrupción de datos al inicio conduce al
-  colapso de la operación durante picos de demanda.
+- The development backlog and the sequence of spiral turns MUST be ordered
+  strictly by technical and architectural risk level (ASRs), not by static
+  business priority.
+- NO new adaptive-lane feature MAY start while a Level 1 risk (security or data
+  integrity) remains unmitigated in the active turn.
+- **Rationale:** in firm real-time systems with supervisory control, ignoring
+  concurrency or data-corruption risks early leads to operational collapse
+  during demand peaks.
 
-### II. El Dato Tiene Dueño y Contrato Primero (Contract-First & Data Ownership) — NON-NEGOTIABLE
+### II. Contract-First and Data Ownership — NON-NEGOTIABLE
 
-- Todo intercambio de datos entre módulos o servicios DEBE definir y validar un
-  contrato explícito de mensaje (Pydantic V2 / OpenAPI) antes de escribir el
-  código de implementación.
-- NINGÚN modelo de datos DEBE ser persistido o procesado en el pipeline si carece
-  de un propietario de módulo asignado y de un esquema validado en frontera.
-- **Justificación:** elimina el acoplamiento implícito y previene que datos
-  malformados o no estandarizados procedentes de múltiples operadores
-  contaminen los indicadores del cálculo de pago por calidad.
+- Every data exchange between modules or services MUST define and validate an
+  explicit message contract (Pydantic V2 / OpenAPI) before implementation code
+  is written.
+- NO data model MAY be persisted or processed in the pipeline without an
+  assigned owning module and a schema validated at the boundary.
+- **Rationale:** removes implicit coupling and prevents malformed or
+  non-standardized data from multiple operators from contaminating the
+  indicators used for quality-based payment.
 
-### III. Ingesta Aislada y Tiempo Real Determinista — NON-NEGOTIABLE
+### III. Isolated Ingestion and Deterministic Real Time — NON-NEGOTIABLE
 
-- El pipeline de ingesta de telemetría e infraestructura vial DEBE ejecutarse en
-  un contenedor de proceso aislado de la interfaz web.
-- El camino crítico de ejecución de tiempo real (≤ 10 s de extremo a extremo)
-  DEBE ser determinista y NUNCA DEBE depender de llamadas síncronas a agentes de
-  IA Generativa o servicios externos de terceros.
-- **Justificación:** garantiza la supervivencia de la ingesta y la observabilidad
-  de flota en la central incluso si el frontend supervisorio o los servicios
-  auxiliares sufren degradación o caídas.
+- The telemetry and road-infrastructure ingestion pipeline MUST run in a
+  process container isolated from the web interface.
+- The real-time critical path (≤ 10 s end to end) MUST be deterministic and
+  MUST NEVER depend on synchronous calls to generative-AI agents or external
+  third-party services.
+- **Rationale:** guarantees that ingestion and fleet observability survive at
+  the control center even if the supervisory frontend or auxiliary services
+  degrade or fail.
 
-### IV. Compuerta Humana Inquebrantable (Human-in-the-Loop Supervision) — NON-NEGOTIABLE
+### IV. Unbreakable Human Gate (Human-in-the-Loop Supervision) — NON-NEGOTIABLE
 
-- Todo agente de IA, algoritmo de optimización o regla automática DEBE operar
-  exclusivamente en modo sugerido.
-- NINGUNA acción de regulación en vía (modificación de frecuencias, envío de
-  mensajes a conductores o redireccionamientos de ruta) DEBE ejecutarse de forma
-  autónoma sin la autorización explícita de un despachador humano mediante la
-  interfaz web.
-- **Justificación:** la responsabilidad operativa y contractual frente a la
-  ciudad y los usuarios recae en la central supervisora; la tecnología asiste la
-  decisión, pero el humano mantiene el control supervisorio.
+- Every AI agent, optimization algorithm or automated rule MUST operate
+  exclusively in suggestion mode.
+- NO on-road regulation action (frequency changes, messages to drivers or route
+  diversions) MAY run autonomously without explicit authorization from a human
+  dispatcher through the web interface.
+- **Rationale:** operational and contractual responsibility towards the city
+  and its riders lies with the supervisory control center; technology assists
+  the decision, but the human keeps supervisory control.
 
-### V. Pruebas Obligatorias y Compuertas Automatizadas (Test-First & Automated Gates) — NON-NEGOTIABLE
+### V. Test-First and Automated Gates — NON-NEGOTIABLE
 
-- Todo Pull Request DEBE incluir pruebas unitarias y de integración que
-  garanticen una cobertura superior al 80 %, además de superar automáticamente
-  las compuertas de contrato (DataOps) y de integración continua (CI) antes de
-  su fusión en la rama principal.
-- NINGÚN desarrollador o agente DEBE omitir el paso por las compuertas.
-- **Justificación:** previene regresiones en los cálculos de la métrica
-  P(abordar ≤ t) y asegura la estabilidad del monolito modular en producción.
+- Every Pull Request MUST include unit and integration tests that guarantee
+  coverage above 80 %, and MUST automatically pass the contract gate (DataOps)
+  and the continuous-integration gate (CI) before being merged into the main
+  branch.
+- NO developer or agent MAY skip the gates.
+- **Rationale:** prevents regressions in the P(board ≤ t) metric calculations
+  and keeps the modular monolith stable in production.
 
-## Restricciones Técnicas y de Seguridad
+## Technical and Security Constraints
 
-> Estas normas describen el **sistema objetivo**. La sección
-> **Adopción por Fases** (en Governance) y `docs/vueltas-ritmo.md` fijan en qué
-> vuelta es exigible cada una. Los 5 Principios Core aplican siempre.
+> These norms describe the **target system**. The **Phased Adoption** section
+> (under Governance) and `docs/turns-ritmo.md` define in which turn each one
+> becomes mandatory. The 5 Core Principles always apply.
 
-**Stack tecnológico obligatorio.**
+**Mandatory technology stack.**
 
-- Lenguaje: Python 3.12+.
-- API: FastAPI o Flask.
-- Central del despachador: Streamlit / Dash o HTML5/Jinja2 con WebSockets.
-- Persistencia: PostgreSQL con extensión PostGIS (o SQLite para entornos de
-  desarrollo/testing empaquetados).
-- Tiempo real y caché: Redis (Pub/Sub para eventos de telemetría en vivo y
-  gestión de estado en memoria).
-- Contenerización: Docker Engine y `docker-compose` con un mínimo de tres
-  servicios: `ingestion-service`, `pulsoflota-web` y `database-redis`.
+- Language: Python 3.12+.
+- API: FastAPI or Flask.
+- Dispatcher console: Streamlit / Dash or HTML5/Jinja2 with WebSockets.
+- Persistence: PostgreSQL with the PostGIS extension (or SQLite for packaged
+  development/testing environments).
+- Real time and cache: Redis (Pub/Sub for live telemetry events and in-memory
+  state management).
+- Containers: Docker Engine and `docker-compose` with at least three services:
+  `ingestion-service`, `pulsoflota-web` and `database-redis`.
 
-**Rendimiento y tiempo real firme.**
+**Performance and firm real time.**
 
-- El sistema se clasifica de tiempo real firme: una recomendación tardía no
-  genera fallos catastróficos físicos, pero carece de valor operativo.
-- El pipeline de ingesta DEBE procesar hasta 1 000 eventos/segundo con una
-  latencia pico P99 ≤ 500 ms.
-- El tiempo total desde la detección de una anomalía en vía hasta la
-  presentación de la recomendación en la consola del despachador DEBE ser
-  ≤ 10 s.
-- El recálculo automático de ruta ante un bloqueo vial DEBE ocurrir en ≤ 5 s.
-- El mapa interactivo DEBE refrescar la posición de la flota con latencia
-  ≤ 2 s.
+- The system is classified as firm real time: a late recommendation causes no
+  catastrophic physical failure, but has no operational value.
+- The ingestion pipeline MUST process up to 1,000 events/second with a peak
+  P99 latency ≤ 500 ms.
+- The total time from detecting an on-road anomaly to showing the
+  recommendation on the dispatcher console MUST be ≤ 10 s.
+- Automatic route recalculation after a road blockage MUST happen in ≤ 5 s.
+- The interactive map MUST refresh fleet positions with latency ≤ 2 s.
 
-**Seguridad (alineada con OWASP Top 10 — 2025).** El detalle operativo de cada
-criterio de aceptación vive en `.kiro/steering/security.md`; lo siguiente es la
-norma de gobierno.
+**Security (aligned with OWASP Top 10 — 2025).** The operational detail of each
+acceptance criterion lives in `.kiro/steering/security.md`; what follows is the
+governing norm.
 
-- **Control de acceso:** todo endpoint REST/WebSocket DEBE autenticar al emisor
-  y verificar permisos por RBAC en el middleware del backend. Quedan prohibidas
-  las referencias directas a objetos inseguras (IDOR): un acceso a recurso ajeno
-  DEBE devolver `403 Forbidden` y registrar alerta. Las autorizaciones DEBEN
-  evaluarse exclusivamente en el backend; el frontend NO DEBE ser el único
-  mecanismo de control. La telemetría de consorcios privados DEBE estar aislada
-  lógicamente (multi-tenant).
-- **Infraestructura:** los contenedores DEBEN ejecutarse como usuario no root
-  (UID 10001). El servidor DEBE emitir las cabeceras de seguridad obligatorias
-  (`Content-Security-Policy`, `Strict-Transport-Security`,
-  `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`) y remover las que
-  revelan la pila tecnológica. `DEBUG=False` DEBE estar forzado en homologación y
-  producción; Swagger/ReDoc NO DEBE exponerse en producción sin autenticación.
-- **Cadena de suministro:** el CI/CD DEBE ejecutar análisis de composición de
-  software (SCA) en cada PR, bloquear la fusión ante vulnerabilidades de
-  severidad Alta o Crítica (CVSS ≥ 7.0) y fijar dependencias con versión exacta
-  y hash SHA-256.
-- **Criptografía y secretos:** las comunicaciones externas DEBEN usar TLS 1.3
-  (mínimo TLS 1.2 con *ciphersuites* PFS); la flota IoT DEBE autenticarse con
-  mTLS y certificados x509 por unidad. Las contraseñas DEBEN procesarse con
-  Argon2id (o bcrypt con coste ≥ 12). Los secretos DEBEN provenir de un gestor
-  externo (Docker Secrets o HashiCorp Vault); NUNCA DEBEN incluirse en código
-  fuente ni en archivos `.env` del repositorio.
-- **Inyección y validación:** las consultas DEBEN parametrizarse (ORM / SQLAlchemy
-  / asyncpg / Pydantic V2). Todo evento de ingesta DEBE validarse contra un
-  esquema estricto Pydantic V2; los paquetes inválidos DEBEN rechazarse en el
-  acto con código `422 Unprocessable Entity`.
-- **Aislamiento de IA generativa:** la ruta de tiempo real determinista DEBE
-  aislar completamente los modelos de IA predictivos; ningún modelo o agente
-  autónomo DEBE tener escritura directa sobre la base de datos de producción ni
-  las APIs de despacho de las unidades a bordo. Toda nueva funcionalidad del
-  carril disciplinado DEBE contar con un modelado de amenazas STRIDE documentado
-  y priorizado por riesgo.
-- **Autenticación y sesiones:** los JWT DEBEN firmarse con `RS256`, expirar en
-  ≤ 15 min y transmitirse únicamente en cookies `HttpOnly`, `Secure` y
-  `SameSite=Strict`. Administradores y supervisores de cuenca DEBEN usar MFA
-  (TOTP). El sistema DEBE bloquear 15 minutos cualquier cuenta o IP con 5
-  intentos fallidos consecutivos.
-- **Integridad y antifraude de recaudo:** el pipeline de ingesta DEBE registrar
-  procedencia, marca de tiempo inmutable y checksum por mensaje, y DEBE detectar
-  y descartar datos manipulados (saltos GPS > 120 km/h, validaciones duplicadas,
-  inconsistencia entre sensores viales y coordenadas del bus). Los paquetes de
-  recaudo DEBEN incluir una firma HMAC basada en el secreto del módulo seguro
-  del validador vehicular.
-- **Observabilidad SRE:** los logs DEBEN emitirse en JSON estructurado compatible
-  con OpenTelemetry y registrar, con marca UTC e identificador de usuario, los
-  intentos de autenticación, los cambios de permisos, los desvíos autorizados o
-  rechazados y las alteraciones en las fuentes de ingesta. Los logs NUNCA DEBEN
-  incluir contraseñas, claves privadas, tokens JWT completos ni PII de
-  conductores o pasajeros. Una tasa de rechazo de mensajes IoT > 5 % en 1 min
-  DEBE disparar alertas al equipo SRE/DevSecOps.
-- **Excepciones y resiliencia:** ninguna respuesta HTTP/WebSocket DEBE exponer
-  trazas de pila, rutas de archivos locales ni estructuras internas de
-  PostgreSQL; ante un error 500 se DEBE devolver un mensaje genérico con un
-  `correlation_id` registrado internamente en los logs. Si la central o la web
-  colapsan, la ingesta IoT aislada DEBE seguir registrando eventos en el buffer
-  persistente y la consola del despachador DEBE conmutar a un modo de
-  contingencia local basado en planes de despacho estáticos prefijados.
+- **Access control:** every REST/WebSocket endpoint MUST authenticate the
+  caller and check permissions through RBAC in the backend middleware. Insecure
+  direct object references (IDOR) are forbidden: access to someone else's
+  resource MUST return `403 Forbidden` and log an alert. Authorization MUST be
+  evaluated only in the backend; the frontend MUST NOT be the only control
+  mechanism. Telemetry from private consortia MUST be logically isolated
+  (multi-tenant).
+- **Infrastructure:** containers MUST run as a non-root user (UID 10001). The
+  server MUST send the mandatory security headers (`Content-Security-Policy`,
+  `Strict-Transport-Security`, `X-Content-Type-Options: nosniff`,
+  `X-Frame-Options: DENY`) and remove headers that reveal the technology stack.
+  `DEBUG=False` MUST be enforced in staging and production; Swagger/ReDoc MUST
+  NOT be exposed in production without authentication.
+- **Supply chain:** CI/CD MUST run software composition analysis (SCA) on every
+  PR, block merges on High or Critical vulnerabilities (CVSS ≥ 7.0) and pin
+  dependencies to exact versions with SHA-256 hashes.
+- **Cryptography and secrets:** external communication MUST use TLS 1.3
+  (minimum TLS 1.2 with PFS cipher suites); the IoT fleet MUST authenticate with
+  mTLS and one x509 certificate per unit. Passwords MUST be hashed with Argon2id
+  (or bcrypt with cost ≥ 12). Secrets MUST come from an external manager (Docker
+  Secrets or HashiCorp Vault); they MUST NEVER be included in source code or in
+  `.env` files in the repository.
+- **Injection and validation:** queries MUST be parameterized (ORM / SQLAlchemy
+  / asyncpg / Pydantic V2). Every ingestion event MUST be validated against a
+  strict Pydantic V2 schema; invalid packets MUST be rejected immediately with
+  `422 Unprocessable Entity`.
+- **Generative-AI isolation:** the deterministic real-time path MUST fully
+  isolate predictive AI models; no model or autonomous agent MAY have direct
+  write access to the production database or to the dispatch APIs of on-board
+  units. Every new disciplined-lane feature MUST have a documented STRIDE threat
+  model prioritized by risk.
+- **Authentication and sessions:** JWTs MUST be signed with `RS256`, expire in
+  ≤ 15 min and travel only in `HttpOnly`, `Secure`, `SameSite=Strict` cookies.
+  Administrators and basin supervisors MUST use MFA (TOTP). The system MUST lock
+  for 15 minutes any account or IP with 5 consecutive failed attempts.
+- **Fare-collection integrity and anti-fraud:** the ingestion pipeline MUST
+  record provenance, an immutable timestamp and a checksum per message, and MUST
+  detect and discard tampered data (GPS jumps > 120 km/h, duplicate fare
+  validations, inconsistency between road sensors and bus coordinates).
+  Fare-collection packets MUST include an HMAC signature based on the secret of
+  the on-board validator's secure module.
+- **SRE observability:** logs MUST be emitted as structured JSON compatible with
+  OpenTelemetry and record, with a UTC timestamp and user identifier,
+  authentication attempts, permission changes, authorized or rejected diversions
+  and changes to ingestion sources. Logs MUST NEVER include passwords, private
+  keys, full JWTs or PII of drivers or riders. An IoT message rejection rate
+  > 5 % within 1 min MUST trigger alerts to the SRE/DevSecOps team.
+- **Exceptions and resilience:** no HTTP/WebSocket response MAY expose stack
+  traces, local file paths or internal PostgreSQL structures; on a 500 error a
+  generic message MUST be returned with a `correlation_id` recorded internally in
+  the logs. If the control center or the web app fails, the isolated IoT
+  ingestion MUST keep recording events in the persistent buffer and the
+  dispatcher console MUST switch to a local contingency mode based on predefined
+  static dispatch plans.
 
-## Flujo de Desarrollo RITMO y Compuertas de Calidad
+## RITMO Development Workflow and Quality Gates
 
-**Ciclo de vida RITMO — 5 etapas por vuelta de espiral.** Todas las vueltas
-recorren secuencialmente:
+**RITMO lifecycle — 5 stages per spiral turn.** Every turn goes through these
+stages in order:
 
-1. **Planear** — selección del riesgo prioritario a mitigar, fecha de cierre de
-   la vuelta e hipótesis operativas (responsable: Dueño de Vuelta).
-2. **Especificar** — redacción de la historia de usuario como especificación SDD
-   (*Specification-Driven Development*) medible y compuerta de contrato si
-   existen cambios en esquemas.
-3. **Construir** — desarrollo de una historia a la vez en rama aislada
-   `feature/US-XX`, incluyendo código de producción, pruebas y reglas del dato.
-4. **Verificar** — ejecución del pipeline de CI (linting, pruebas unitarias,
-   cobertura > 80 %), pruebas de contrato DataOps e inspección del revisor
-   humano.
-5. **Revisar (Compuerta de Valor)** — validación de la hipótesis de valor midiendo
-   el impacto en P(abordar ≤ t) con el despachador en el entorno de
-   pruebas/simulación.
+1. **Plan** — select the priority risk to mitigate, the turn's closing date and
+   the operational hypotheses (owner: Turn Owner).
+2. **Specify** — write the user story as a measurable SDD
+   (*Specification-Driven Development*) specification, plus a contract gate if
+   schemas change.
+3. **Build** — develop one story at a time on an isolated `feature/US-XX`
+   branch, including production code, tests and data rules.
+4. **Verify** — run the CI pipeline (linting, unit tests, coverage > 80 %),
+   DataOps contract tests and human reviewer inspection.
+5. **Review (Value Gate)** — validate the value hypothesis by measuring the
+   impact on P(board ≤ t) with the dispatcher in the test/simulation
+   environment.
 
-**Dos carriles operativos de desarrollo.**
+**Two development lanes.**
 
-- **Carril Disciplinado** (Ingesta, Contratos de Mensaje, Pago por Calidad):
-  especificación estricta Contract-First / SDD; autonomía de agentes baja (solo
-  propuestas validadas en código y compuertas); criticidad máxima; CI estricto y
-  pruebas de contrato DataOps.
-- **Carril Adaptativo** (Central Web, Visualización, Reglas de Alerta y Desvío):
-  iteraciones guiadas por hipótesis de valor validadas con el despachador;
-  autonomía de agentes media (desarrollo automatizado en ramas aisladas con
-  revisión obligatoria del dueño del módulo).
+- **Disciplined Lane** (Ingestion, Message Contracts, Quality-Based Payment):
+  strict Contract-First / SDD specification; low agent autonomy (only proposals
+  validated in code and gates); maximum criticality; strict CI and DataOps
+  contract tests.
+- **Adaptive Lane** (Web Console, Visualization, Alert and Diversion Rules):
+  iterations driven by value hypotheses validated with the dispatcher; medium
+  agent autonomy (automated development on isolated branches with mandatory
+  review by the module owner).
 
-**Compuertas de calidad (automatizadas y humanas).** Ningún incremento puede ser
-promovido de etapa ni desplegado en producción sin superar:
+**Quality gates (automated and human).** No increment may be promoted to the
+next stage or deployed to production without passing:
 
-- **Compuerta 1 — Contrato y Análisis Estático** (cada PR): SAST (`Bandit`,
-  `ESLint`) y validación de esquemas Pydantic. Aprobación: 0 hallazgos
-  Críticos/Altos en SAST y esquema de contrato validado.
-- **Compuerta 2 — Integración y Supply Chain** (CI): escaneo SCA (`pip-audit`,
-  `Trivy`) y suites de pruebas unitarias/integración. Aprobación: cobertura
-  > 80 % y 0 vulnerabilidades conocidas en dependencias.
-- **Compuerta 3 — Compuerta del Dato (DataOps)** (en tiempo de ejecución de
-  ingesta): pruebas de contrato de mensaje, validación HMAC y detección de
-  anomalías. Aprobación: tasa de rechazo de paquetes < 0,1 % y latencia de
-  ingesta ≤ 200 ms.
-- **Compuerta 4 — Valor y Seguridad Operativa** (cierre de vuelta): validación
-  Human-in-the-Loop, auditoría de desvíos y prueba de fallback. Aprobación:
-  aprobación explícita del despachador y verificación de no interferencia de la
-  IA en el camino de tiempo real.
+- **Gate 1 — Contract and Static Analysis** (every PR): SAST (`Bandit`,
+  `ESLint`) and Pydantic schema validation. Pass: 0 Critical/High SAST findings
+  and a validated contract schema.
+- **Gate 2 — Integration and Supply Chain** (CI): SCA scan (`pip-audit`,
+  `Trivy`) and unit/integration test suites. Pass: coverage > 80 % and 0 known
+  dependency vulnerabilities.
+- **Gate 3 — Data Gate (DataOps)** (at ingestion runtime): message contract
+  tests, HMAC validation and anomaly detection. Pass: packet rejection rate
+  < 0.1 % and ingestion latency ≤ 200 ms.
+- **Gate 4 — Value and Operational Safety** (turn closing): Human-in-the-Loop
+  validation, diversion audit and fallback test. Pass: explicit dispatcher
+  approval and verification that AI does not interfere with the real-time path.
 
 ## Governance
 
-- Esta constitución es el documento de gobierno supremo del proyecto
-  RITMO / PulsoFlota; prevalece sobre cualquier otra práctica cuando haya
-  conflicto.
-- **Enmiendas:** cualquier modificación a los principios core o a este documento
-  DEBE proponerse mediante un Pull Request etiquetado `constitutional-amendment`,
-  con justificación basada en evidencia de campo o nuevas restricciones del
-  dominio de transporte en Medellín. Los cambios a requisitos normativos
-  (normas DEBE / DEBERÍA) requieren además un documento de decisión de
-  arquitectura (ADR), validación en la compuerta de riesgo del espiral y firma
-  unánime del Dueño de Vuelta, el Arquitecto (de Software / de Seguridad) y el
-  Representante del Despachador.
-- **Versionado (SemVer):** MAJOR (X.0.0) para cambios en los principios core
-  NON-NEGOTIABLE o reestructuración de la arquitectura de contenedores/carriles;
-  MINOR (1.X.0) para nuevos objetos del modelo de dominio, nuevas historias de
-  usuario en la matriz o modificaciones compatibles del stack; PATCH (1.0.X)
-  para correcciones de redacción, aclaraciones de reglas o ajustes de métricas
-  secundarias.
-- **Cumplimiento:** al final de cada vuelta del espiral, el equipo DEBE realizar
-  una revisión de cumplimiento de los principios core. Una violación detectada
-  (p. ej. código sin pruebas fusionado a la rama principal, o recomendaciones
-  emitidas sin compuerta humana) DEBE marcar el build de CI como fallado de
-  inmediato.
-- **Adopción por Fases:**
-  - Los **5 Principios Core NON-NEGOTIABLE** son exigibles desde la primera
-    vuelta y en todas las vueltas.
-  - Las normas de las secciones *Restricciones Técnicas y de Seguridad* y
-    *Compuertas de calidad* se adoptan **de forma incremental, vuelta por
-    vuelta**. El orden lo fija el Principio 1: primero los riesgos de Nivel 1.
-  - El **mapa de vueltas** (`docs/vueltas-ritmo.md`) es la única fuente que
-    declara, para cada vuelta, qué normas son exigibles y cuáles quedan
-    diferidas como evolución. Se actualiza en la Etapa 1 — Planear de cada
-    vuelta mediante un PR revisado por el equipo. Esa actualización **NO**
-    requiere enmienda constitucional, siempre que no contradiga esta
-    constitución.
-  - Una norma adoptada en una vuelta sigue siendo exigible en todas las vueltas
-    posteriores. Una norma diferida **NO DEBE** tratarse como hallazgo
-    bloqueante en la vuelta activa; los agentes DEBERÍAN registrarla como
-    evolución.
-  - La revisión de cumplimiento al cierre de cada vuelta verifica los
-    Principios Core y las normas adoptadas **hasta esa vuelta** según el mapa.
-- **Guía operativa:** la constitución gobierna; `AGENTS.md` y los archivos
-  `.kiro/steering/*.md` la operacionalizan por contexto. Para el detalle de
-  seguridad, ver `.kiro/steering/security.md`.
+- This constitution is the supreme governing document of the RITMO / PulsoFlota
+  project; it prevails over any other practice in case of conflict.
+- **Amendments:** any change to the core principles or to this document MUST be
+  proposed through a Pull Request labeled `constitutional-amendment`, with a
+  justification based on field evidence or new constraints of the Medellín
+  transport domain. Changes to normative requirements (MUST / SHOULD norms) also
+  require an architecture decision record (ADR), validation at the spiral's risk
+  gate and the unanimous sign-off of the Turn Owner, the Architect (Software /
+  Security) and the Dispatcher Representative.
+- **Versioning (SemVer):** MAJOR (X.0.0) for changes to the NON-NEGOTIABLE core
+  principles or restructuring of the container/lane architecture; MINOR (1.X.0)
+  for new domain-model objects, new user stories in the matrix or compatible
+  stack changes; PATCH (1.0.X) for wording fixes, rule clarifications or
+  adjustments to secondary metrics.
+- **Compliance:** at the end of each spiral turn the team MUST review compliance
+  with the core principles. A detected violation (e.g. untested code merged into
+  the main branch, or recommendations issued without the human gate) MUST
+  immediately mark the CI build as failed.
+- **Phased Adoption:**
+  - The **5 NON-NEGOTIABLE Core Principles** are mandatory from the first turn
+    and in every turn.
+  - The norms in *Technical and Security Constraints* and *Quality gates* are
+    adopted **incrementally, turn by turn**. The order is set by Principle I:
+    Level 1 risks first.
+  - The **turn map** (`docs/turns-ritmo.md`) is the single source that
+    declares, for each turn, which norms are mandatory and which are deferred as
+    evolution. It is updated in the Plan stage of each turn through a PR reviewed
+    by the team. That update does **NOT** require a constitutional amendment, as
+    long as it does not contradict this constitution.
+  - A norm adopted in a turn remains mandatory in all later turns. A deferred
+    norm MUST NOT be treated as a blocking finding in the active turn; agents
+    SHOULD record it as evolution.
+  - The compliance review at the close of each turn checks the Core Principles
+    and the norms adopted **up to that turn** according to the map.
+- **Operational guidance:** the constitution governs; `AGENTS.md` and the
+  `.kiro/steering/*.md` files operationalize it by context. For security detail,
+  see `.kiro/steering/security.md`.
 
 **Version**: 1.1.0 | **Ratified**: 2026-11-17 | **Last Amended**: 2026-11-17

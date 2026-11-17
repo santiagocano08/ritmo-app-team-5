@@ -24,7 +24,7 @@ resources:
   - "file://.kiro/prompts/speckit.checklist.md"
   - "file://.specify/templates/checklist-template.md"
   - "file://.specify/memory/constitution.md"
-  - "file://docs/vueltas-ritmo.md"
+  - "file://docs/turns-ritmo.md"
   - "file://.specify/feature.json"
   - "file://AGENTS.md"
   - "file://.kiro/steering/**/*.md"
@@ -76,9 +76,9 @@ Follow that prompt exactly; it is the source of truth. Key points:
 - Build the requirements/task inventories and run the detection passes: Duplication, Ambiguity,
   Underspecification, Constitution Alignment, Coverage Gaps, Inconsistency.
 - Assign severity (CRITICAL / HIGH / MEDIUM / LOW). **Constitution MUST violations are always
-  CRITICAL**, except norms deferred for the active vuelta (see below).
-- **Phased adoption:** a constitution MUST that `docs/vueltas-ritmo.md` lists as *deferred* for the
-  active vuelta is NOT CRITICAL and NOT blocking — record it as `evolution` (LOW) instead. The
+  CRITICAL**, except norms deferred for the active turn (see below).
+- **Phased adoption:** a constitution MUST that `docs/turns-ritmo.md` lists as *deferred* for the
+  active turn is NOT CRITICAL and NOT blocking — record it as `evolution` (LOW) instead. The
   5 Core Principles are never deferred.
 - Emit the Specification Analysis Report (findings table, coverage summary, constitution alignment
   issues, unmapped tasks, metrics) and a Next Actions block. Do not auto-apply remediation; offer it.

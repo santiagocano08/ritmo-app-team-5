@@ -1,110 +1,111 @@
 ---
 inclusion: auto
 name: security
-description: Al implementar seguridad, autenticación, criptografía, gestión de secretos, hardening de contenedores, cabeceras HTTP, cadena de suministro (SCA) o modelado de amenazas STRIDE. Matriz OWASP Top 10 (2025).
+description: When implementing security, authentication, cryptography, secret management, container hardening, HTTP headers, supply chain (SCA) or STRIDE threat modeling. OWASP Top 10 (2025) matrix.
 ---
 
-# Seguridad — OWASP Top 10 (2025) — PulsoFlota
+# Security — OWASP Top 10 (2025) — PulsoFlota
 
-Matriz completa de criterios de aceptación. La constitución (sección
-"Restricciones Técnicas y de Seguridad") fija los MUSTs de gobierno; este
-archivo operacionaliza los criterios.
+Full matrix of acceptance criteria. The constitution ("Technical and Security
+Constraints" section) sets the governing MUSTs; this file operationalizes the
+criteria. These norms are adopted in the turn that `docs/turns-ritmo.md` assigns
+(mostly turn 2, "Operational security").
 
 ## A01 — Broken Access Control
 
-- RBAC en el middleware del backend; autenticar emisor y verificar permisos antes
-  de la lógica de negocio.
-- Prohibido IDOR: acceso a recurso ajeno → `403 Forbidden` + alerta de seguridad.
-- Autorizaciones solo en el backend; el frontend no decide acceso ni se limita a
-  ocultar botones.
-- Aislamiento multi-tenant: telemetría de consorcios privados aislada
-  lógicamente.
+- RBAC in the backend middleware; authenticate the caller and check permissions
+  before business logic.
+- IDOR is forbidden: access to someone else's resource → `403 Forbidden` +
+  security alert.
+- Authorization only in the backend; the frontend never decides access and does
+  not just hide buttons.
+- Multi-tenant isolation: telemetry from private consortia is logically
+  isolated.
 
 ## A02 — Security Misconfiguration
 
-- Contenedores Python (Ingesta y Central) como usuario no root: `USER appuser`
-  con UID `10001`.
-- Cabeceras HTTP obligatorias en todas las respuestas:
+- Python containers (Ingestion and Console) run as a non-root user:
+  `USER appuser` with UID `10001`.
+- Mandatory HTTP headers on every response:
   - `Content-Security-Policy: default-src 'self'; script-src 'self'; object-src 'none';`
   - `Strict-Transport-Security: max-age=31536000; includeSubDomains`
   - `X-Content-Type-Options: nosniff`
   - `X-Frame-Options: DENY`
-- Remover `Server`, `X-Powered-By` y versiones de Python/FastAPI.
-- `DEBUG=False` forzado en homologación y producción; Swagger/ReDoc no expuestos
-  en producción sin autenticación.
+- Remove `Server`, `X-Powered-By` and Python/FastAPI versions.
+- `DEBUG=False` enforced in staging and production; Swagger/ReDoc not exposed in
+  production without authentication.
 
 ## A03 — Software Supply Chain Failures
 
-- SCA en cada PR: `pip-audit`, `Safety` o `Snyk` (Python), `Trivy` (imágenes
-  Docker base y librerías JS).
-- Bloquear la fusión ante CVE de severidad Alta o Crítica (CVSS ≥ 7.0).
-- Fijar dependencias con versión exacta y hash SHA-256 (`poetry.lock` o
-  `requirements.txt` con hashes).
+- SCA on every PR: `pip-audit`, `Safety` or `Snyk` (Python), `Trivy` (base
+  Docker images and JS libraries).
+- Block merges on High or Critical CVEs (CVSS ≥ 7.0).
+- Pin dependencies to exact versions with SHA-256 hashes (`poetry.lock` or
+  `requirements.txt` with hashes).
 
 ## A04 — Cryptographic Failures
 
-- Cifrado en tránsito: TLS 1.3 (mínimo TLS 1.2 con *ciphersuites* PFS); flota IoT
-  con mTLS y certificados x509 por unidad.
-- Contraseñas con Argon2id (o `bcrypt` con factor de coste ≥ 12).
-- Secretos (contraseñas, JWT, claves de BD, API Keys) vía Docker Secrets o
-  HashiCorp Vault, inyectados en runtime. Prohibido en código fuente o `.env`
-  del repositorio.
+- Encryption in transit: TLS 1.3 (minimum TLS 1.2 with PFS cipher suites); IoT
+  fleet with mTLS and one x509 certificate per unit.
+- Passwords with Argon2id (or `bcrypt` with cost factor ≥ 12).
+- Secrets (passwords, JWT, DB keys, API keys) through Docker Secrets or
+  HashiCorp Vault, injected at runtime. Forbidden in source code or repository
+  `.env` files.
 
 ## A05 — Injection
 
-- Consultas parametrizadas (SQLAlchemy / asyncpg / Pydantic V2); prohibida la
-  concatenación de SQL.
-- Validación estricta Pydantic V2 en la ingesta: tipos incorrectos, valores fuera
-  de rango geográfico o campos no declarados → `422 Unprocessable Entity`.
+- Parameterized queries (SQLAlchemy / asyncpg / Pydantic V2); SQL string
+  concatenation is forbidden.
+- Strict Pydantic V2 validation at ingestion: wrong types, values outside the
+  geographic range or undeclared fields → `422 Unprocessable Entity`.
 
 ## A06 — Insecure Design
 
-- Aislar la ruta de tiempo real determinista de los módulos de IA predictiva.
-- Human-in-the-Loop: las recomendaciones de IA se presentan como sugerencias no
-  vinculantes; cualquier cambio en la operación en vía requiere aprobación
-  manual explícita del despachador.
-- Ningún modelo/agente con escritura directa sobre la BD de producción ni las
-  APIs de despacho.
-- STRIDE documentado y priorizado por riesgo para toda nueva funcionalidad o
-  modificación del carril disciplinado.
+- Isolate the deterministic real-time path from predictive AI modules.
+- Human-in-the-Loop: AI recommendations are non-binding suggestions; any change
+  to on-road operation requires explicit manual approval from the dispatcher.
+- No model/agent with direct write access to the production DB or the dispatch
+  APIs.
+- Documented STRIDE, prioritized by risk, for every new feature or change in the
+  disciplined lane.
 
 ## A07 — Authentication Failures
 
-- JWT firmado con `RS256`, expiración ≤ 15 min, cookies `HttpOnly` + `Secure` +
-  `SameSite=Strict`.
-- MFA (TOTP) obligatorio para administradores y supervisores de cuenca.
-- Bloqueo 15 min de cuenta o IP con 5 intentos fallidos consecutivos.
+- JWT signed with `RS256`, expiry ≤ 15 min, `HttpOnly` + `Secure` +
+  `SameSite=Strict` cookies.
+- MFA (TOTP) mandatory for administrators and basin supervisors.
+- 15-min lock of an account or IP after 5 consecutive failed attempts.
 
 ## A08 — Data & Software Integrity Failures
 
-- Linaje de datos (DataOps): procedencia, marca de tiempo inmutable y checksum
-  por mensaje.
-- Detección de anomalías: saltos GPS > 120 km/h, duplicación de pasaje,
-  inconsistencia entre sensores viales y coordenadas del bus.
-- Firma HMAC en paquetes de recaudo (secreto del módulo seguro del validador).
+- Data lineage (DataOps): provenance, immutable timestamp and checksum per
+  message.
+- Anomaly detection: GPS jumps > 120 km/h, duplicated fares, inconsistency
+  between road sensors and bus coordinates.
+- HMAC signature on fare-collection packets (secret of the validator's secure
+  module).
 
 ## A09 — Security Logging and Alerting Failures
 
-- Logs en JSON estructurado compatible con OpenTelemetry.
-- Eventos auditables con marca UTC e identificador de usuario: intentos de
-  autenticación (éxito/fallo), cambios de permisos/usuarios, desvíos o ajustes
-  de despacho autorizados/rechazados, alteraciones o caídas en las fuentes de
-  ingesta.
-- Prohibido registrar contraseñas en texto plano, claves privadas, tokens JWT
-  completos o PII de conductores/pasajeros.
-- Alertas en tiempo real al equipo SRE/DevSecOps (PagerDuty/Slack) ante
-  anomalías de seguridad o rechazo de mensajes IoT > 5 % en 1 min.
+- Structured JSON logs compatible with OpenTelemetry.
+- Auditable events with UTC timestamp and user identifier: authentication
+  attempts (success/failure), permission/user changes, authorized/rejected
+  diversions or dispatch adjustments, changes or outages in ingestion sources.
+- Never log plain-text passwords, private keys, full JWTs or PII of drivers or
+  riders.
+- Real-time alerts to the SRE/DevSecOps team (PagerDuty/Slack) on security
+  anomalies or IoT message rejection > 5 % in 1 min.
 
 ## A10 — Exceptional Conditions Handling
 
-- Sanitizar trazas: ninguna respuesta HTTP/WebSocket expone *stack traces*,
-  rutas locales (`/workspace/...`) ni estructuras internas de PostgreSQL.
-- HTTP 500 → mensaje genérico + `correlation_id` registrado en los logs.
-- Fallback operativo: ingesta IoT aislada sigue en buffer persistente; la
-  consola conmuta a planes de despacho estáticos prefijados.
+- Sanitize traces: no HTTP/WebSocket response exposes stack traces, local paths
+  (`/workspace/...`) or internal PostgreSQL structures.
+- HTTP 500 → generic message + `correlation_id` recorded in the logs.
+- Operational fallback: isolated IoT ingestion keeps buffering persistently; the
+  console switches to predefined static dispatch plans.
 
-## Referencias
+## References
 
-- Flujo de API/auth y manejo de errores: `backend-api.md`.
-- Compuertas de SAST/SCA en CI: `testing-quality-gates.md`.
-- Hardening de imágenes y `docker-compose`: `deployment-containers.md`.
+- API/auth flow and error handling: `backend-api.md`.
+- SAST/SCA gates in CI: `testing-quality-gates.md`.
+- Image and `docker-compose` hardening: `deployment-containers.md`.

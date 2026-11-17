@@ -1,53 +1,56 @@
 ---
 inclusion: auto
 name: testing-quality-gates
-description: Al escribir pruebas, configurar CI/CD, o verificar una compuerta de calidad (SAST, SCA, DataOps, cobertura >80 %, Human-in-the-Loop).
+description: When writing tests, configuring CI/CD, or checking a quality gate (SAST, SCA, DataOps, coverage >80 %, Human-in-the-Loop).
 ---
 
-# Pruebas y Compuertas de Calidad — PulsoFlota
+# Testing and Quality Gates — PulsoFlota
 
-## Test-First (Principio V, NON-NEGOTIABLE)
+> Each gate applies from the turn in which `docs/turns-ritmo.md` adopts it. In
+> turn 1: Gate 1 (schema validation only), Gate 2 (tests and coverage) and the
+> human approval of Gate 4.
 
-- Todo PR incluye pruebas unitarias y de integración con cobertura > 80 %.
-- Ningún desarrollador o agente omite el paso por las compuertas.
+## Test-First (Principle V, NON-NEGOTIABLE)
 
-## Compuerta 1 — Contrato y Análisis Estático (cada PR)
+- Every PR includes unit and integration tests with coverage > 80 %.
+- No developer or agent skips the gates.
 
-- SAST: `Bandit` (Python) y `ESLint` (JavaScript).
-- Validación de esquemas Pydantic.
-- Aprobación: 0 hallazgos Críticos/Altos en SAST y esquema de contrato validado.
+## Gate 1 — Contract and Static Analysis (every PR)
 
-## Compuerta 2 — Integración y Supply Chain (CI)
+- SAST: `Bandit` (Python) and `ESLint` (JavaScript).
+- Pydantic schema validation.
+- Pass: 0 Critical/High SAST findings and a validated contract schema.
 
-- SCA: `pip-audit` / `Trivy` (y `Safety`/`Snyk` para Python).
-- Suites de pruebas unitarias/integración.
-- Aprobación: cobertura > 80 % y 0 vulnerabilidades conocidas en dependencias
-  (CVE CVSS ≥ 7.0 bloquea la fusión).
+## Gate 2 — Integration and Supply Chain (CI)
 
-## Compuerta 3 — Compuerta del Dato (DataOps, runtime de ingesta)
+- SCA: `pip-audit` / `Trivy` (and `Safety`/`Snyk` for Python).
+- Unit/integration test suites.
+- Pass: coverage > 80 % and 0 known dependency vulnerabilities (a CVE with
+  CVSS ≥ 7.0 blocks the merge).
 
-- Pruebas de contrato de mensaje, validación HMAC y detección de anomalías.
-- Aprobación: tasa de rechazo de paquetes < 0,1 % y latencia de ingesta
-  ≤ 200 ms.
+## Gate 3 — Data Gate (DataOps, ingestion runtime)
 
-## Compuerta 4 — Valor y Seguridad Operativa (cierre de vuelta)
+- Message contract tests, HMAC validation and anomaly detection.
+- Pass: packet rejection rate < 0.1 % and ingestion latency ≤ 200 ms.
 
-- Validación Human-in-the-Loop, auditoría de desvíos y prueba de fallback.
-- Aprobación: aprobación explícita del despachador y verificación de no
-  interferencia de la IA en el camino de tiempo real.
+## Gate 4 — Value and Operational Safety (turn closing)
 
-## Falla inmediata
+- Human-in-the-Loop validation, diversion audit and fallback test.
+- Pass: explicit dispatcher approval and verification that AI does not interfere
+  with the real-time path.
 
-- Una violación de principios (p. ej. código sin pruebas fusionado a la rama
-  principal, o recomendaciones emitidas sin compuerta humana) marca el build de
-  CI como fallado de inmediato.
+## Immediate failure
 
-## Foco de pruebas de integración
+- A principle violation (e.g. untested code merged into the main branch, or
+  recommendations issued without the human gate) immediately marks the CI build
+  as failed.
 
-- Nuevos contratos de servicio, cambios de contrato, comunicación
-  inter-servicios y esquemas compartidos.
+## Integration test focus
 
-## Referencias
+- New service contracts, contract changes, inter-service communication and
+  shared schemas.
 
-- Matriz OWASP Top 10 (2025) y criterios de SAST/SCA: `security.md`.
-- Ciclo RITMO, ramas `feature/US-XX` y carriles: `ritmo-workflow.md`.
+## References
+
+- OWASP Top 10 (2025) matrix and SAST/SCA criteria: `security.md`.
+- RITMO cycle, `feature/US-XX` branches and lanes: `ritmo-workflow.md`.

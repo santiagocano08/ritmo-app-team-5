@@ -54,7 +54,7 @@ resources:
   - "file://.kiro/prompts/speckit.converge.md"
   - "file://.kiro/prompts/speckit.implement.md"
   - "file://.specify/memory/constitution.md"
-  - "file://docs/vueltas-ritmo.md"
+  - "file://docs/turns-ritmo.md"
   - "file://.specify/feature.json"
   - "file://AGENTS.md"
   - "file://.kiro/steering/**/*.md"
@@ -150,8 +150,8 @@ For each failing check:
 Constitution (highest — MUST violations are CRITICAL; skip if unfilled template) → AGENTS.md →
 applicable steering → spec/plan/tasks. Surface conflicts rather than silently choosing.
 
-**Phased adoption:** a constitution MUST that `docs/vueltas-ritmo.md` lists as *deferred* for the
-active vuelta is NOT CRITICAL and NOT blocking — record it as `evolution` (LOW) instead. The
+**Phased adoption:** a constitution MUST that `docs/turns-ritmo.md` lists as *deferred* for the
+active turn is NOT CRITICAL and NOT blocking — record it as `evolution` (LOW) instead. The
 5 Core Principles are never deferred.
 
 ## Guardrails

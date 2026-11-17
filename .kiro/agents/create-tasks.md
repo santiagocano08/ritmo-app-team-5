@@ -23,7 +23,7 @@ resources:
   - "file://.kiro/prompts/speckit.tasks.md"
   - "file://.specify/templates/tasks-template.md"
   - "file://.specify/memory/constitution.md"
-  - "file://docs/vueltas-ritmo.md"
+  - "file://docs/turns-ritmo.md"
   - "file://.specify/feature.json"
   - "file://AGENTS.md"
   - "file://.kiro/steering/**/*.md"

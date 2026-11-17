@@ -1,61 +1,61 @@
 ---
 inclusion: auto
 name: backend-api
-description: Al trabajar en la API/backend Python de PulsoFlota (FastAPI/Flask): endpoints REST/WebSocket, middleware RBAC, autenticación JWT, manejo de errores, correlation_id y validación con Pydantic.
+description: When working on the PulsoFlota Python API/backend (FastAPI/Flask) - REST/WebSocket endpoints, RBAC middleware, JWT authentication, error handling, correlation_id and Pydantic validation.
 ---
 
 # Backend API — PulsoFlota
 
-Guía para la API/backend Python de la central (`pulsoflota-web`): FastAPI o Flask.
+Guidance for the control center's Python API/backend (`pulsoflota-web`): FastAPI or Flask.
 
-## Estructura y enrutado
+## Structure and routing
 
-- Monolito modular `pulsoflota-web` (central supervisora, cálculo de métricas,
-  mapa interactivo). Exponer endpoints REST + WebSocket.
-- Versionar la API bajo `/api/v1/...`.
+- `pulsoflota-web` modular monolith (supervisory console, metric calculation,
+  interactive map). Expose REST + WebSocket endpoints.
+- Version the API under `/api/v1/...`.
 
-## Control de acceso (A01) — en el backend, siempre
+## Access control (A01) — always in the backend
 
-- Autenticar la identidad del emisor y verificar permisos por RBAC en el
-  middleware **antes** de ejecutar lógica de negocio.
-- Prohibido IDOR: acceder/modificar un recurso ajeno (p. ej.
-  `/api/v1/buses/{bus_id}` de otra cuenca) DEBE devolver `403 Forbidden` y
-  registrar una alerta de seguridad.
-- Las autorizaciones se evalúan **exclusivamente en el backend**. El frontend no
-  decide acceso ni se limita a ocultar botones como único mecanismo.
-- Aislamiento multi-tenant: la telemetría de consorcios privados se aísla
-  lógicamente; un operador no accede a la telemetría cruda de competidores.
+- Authenticate the caller and check permissions through RBAC in the middleware
+  **before** running business logic.
+- IDOR is forbidden: reading/modifying someone else's resource (e.g.
+  `/api/v1/buses/{bus_id}` from another basin) MUST return `403 Forbidden` and
+  log a security alert.
+- Authorization is evaluated **only in the backend**. The frontend never decides
+  access and hiding buttons is never the only mechanism.
+- Multi-tenant isolation: telemetry from private consortia is logically
+  isolated; an operator cannot access competitors' raw telemetry.
 
-## Autenticación y sesiones (A07)
+## Authentication and sessions (A07)
 
-- JWT firmado con `RS256`, expiración ≤ 15 min, transmitido únicamente en
-  cookies `HttpOnly`, `Secure`, `SameSite=Strict`.
-- MFA (TOTP) obligatorio para administradores y supervisores de cuenca.
-- Anti-fuerza-bruta: bloquear 15 min cualquier cuenta o IP con 5 intentos
-  fallidos consecutivos.
+- JWT signed with `RS256`, expiry ≤ 15 min, sent only in `HttpOnly`, `Secure`,
+  `SameSite=Strict` cookies.
+- MFA (TOTP) mandatory for administrators and basin supervisors.
+- Brute-force protection: lock any account or IP for 15 min after 5 consecutive
+  failed attempts.
 
-## Validación y datos
+## Validation and data
 
-- Request/response validados con Pydantic V2; los inválidos se rechazan con
-  `422 Unprocessable Entity`. La definición de esquemas y contratos
-  inter-módulo vive en `data-contracts.md`.
-- Consultas parametrizadas (ORM / SQLAlchemy / asyncpg / Pydantic V2); prohibida
-  la concatenación de SQL.
+- Requests/responses validated with Pydantic V2; invalid ones are rejected with
+  `422 Unprocessable Entity`. Schema and inter-module contract definitions live in
+  `data-contracts.md`.
+- Parameterized queries (ORM / SQLAlchemy / asyncpg / Pydantic V2); SQL string
+  concatenation is forbidden.
 
-## Errores y excepciones (A10)
+## Errors and exceptions (A10)
 
-- Nunca exponer trazas de pila, rutas locales (`/workspace/...`) ni estructuras
-  internas de PostgreSQL.
-- HTTP 500 → mensaje genérico estandarizado + `correlation_id` registrado en los
-  logs. Errores de validación → `422`.
+- Never expose stack traces, local paths (`/workspace/...`) or internal
+  PostgreSQL structures.
+- HTTP 500 → standardized generic message + `correlation_id` recorded in the
+  logs. Validation errors → `422`.
 
-## Configuración
+## Configuration
 
-- `DEBUG=False` forzado en homologación/producción; Swagger/ReDoc no expuestos en
-  producción sin autenticación previa.
+- `DEBUG=False` enforced in staging/production; Swagger/ReDoc not exposed in
+  production without prior authentication.
 
-## Referencias
+## References
 
-- Matriz OWASP Top 10 (2025) completa (cabeceras HTTP, criptografía, secretos,
-  supply chain, STRIDE, logs/PII): `security.md`.
-- Esquemas y validación de telemetría: `data-contracts.md`.
+- Full OWASP Top 10 (2025) matrix (HTTP headers, cryptography, secrets, supply
+  chain, STRIDE, logs/PII): `security.md`.
+- Telemetry schemas and validation: `data-contracts.md`.

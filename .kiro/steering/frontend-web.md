@@ -1,59 +1,58 @@
 ---
 inclusion: auto
 name: frontend-web
-description: Al trabajar en la central web del despachador (Streamlit/Dash/HTML5+WebSockets): mapa interactivo, visualización de headway y congestión, UI de Human-in-the-Loop y modo de contingencia.
+description: When working on the dispatcher web console (Streamlit/Dash/HTML5+WebSockets) - interactive map, headway and congestion visualization, Human-in-the-Loop UI and contingency mode.
 ---
 
-# Central Web del Despachador — PulsoFlota
+# Dispatcher Web Console — PulsoFlota
 
 ## Stack
 
-- Streamlit / Dash o HTML5/Jinja2 con WebSockets.
-- Monolito modular `pulsoflota-web`: central supervisora, cálculo de métricas y
-  mapa interactivo. Pertenece al **Carril Adaptativo** (ver `ritmo-workflow.md`).
+- Streamlit / Dash or HTML5/Jinja2 with WebSockets.
+- `pulsoflota-web` modular monolith: supervisory console, metric calculation and
+  interactive map. It belongs to the **Adaptive Lane** (see `ritmo-workflow.md`).
 
-## Mapa interactivo en tiempo real
+## Real-time interactive map
 
-- Posición geoespacial actualizada de todos los buses activos del corredor.
-- Refresco de posición con latencia ≤ 2 s (validar con 100 buses simulados).
+- Up-to-date geospatial position of every active bus in the corridor.
+- Position refresh latency ≤ 2 s (validate with 100 simulated buses).
 
-## Headway y regularidad
+## Headway and regularity
 
-- Calcular y visualizar el intervalo de paso (*headway*) entre vehículos
-  consecutivos en cada ruta estándar.
-- Resaltar desviaciones > ±15 % respecto al plan de marcha.
+- Compute and show the headway between consecutive vehicles on each standard
+  route.
+- Highlight deviations > ±15 % from the schedule.
 
-## Congestión vial
+## Road congestion
 
-- Ingerir la velocidad de flujo vehicular por tramo y clasificar la congestión
-  con codificación por colores:
-  - **Verde:** fluido.
-  - **Amarillo:** moderado.
-  - **Rojo:** congestionado.
+- Ingest traffic flow speed per segment and classify congestion with a color
+  code:
+  - **Green:** free flow.
+  - **Yellow:** moderate.
+  - **Red:** congested.
 
-## Human-in-the-Loop (Principio IV, NON-NEGOTIABLE)
+## Human-in-the-Loop (Principle IV, NON-NEGOTIABLE)
 
-- Alertas tempranas de desincronización de flota con ≥ 3 min de anticipación
-  antes de consolidar *bunching* o *gap*.
-- Las recomendaciones de regulación (retención, salida anticipada, inyección de
-  reserva, desvío) se presentan como **sugerencias no vinculantes**.
-- Ningún comando se transmite a la flota sin un **clic de confirmación humana**
-  explícito del despachador.
-- Llevar registro de auditoría de los desvíos autorizados (para compensaciones y
-  cumplimiento de contrato con operadores).
+- Early fleet desynchronization alerts at least 3 min before *bunching* or a
+  *gap* consolidates.
+- Regulation recommendations (holding, early departure, reserve injection,
+  diversion) are shown as **non-binding suggestions**.
+- No command is sent to the fleet without an explicit **human confirmation
+  click** from the dispatcher.
+- Keep an audit log of authorized diversions (for compensation and contract
+  compliance with operators).
 
-## Desvíos por contingencias
+## Contingency diversions
 
-- Presentar la recomendación de desvío en el mapa con la ruta sugerida, la
-  distancia adicional y la variación proyectada en el indicador de servicio.
+- Show the diversion recommendation on the map with the suggested route, the
+  extra distance and the projected change in the service indicator.
 
-## Contingencia
+## Contingency
 
-- Si la central o la web colapsan, la consola conmuta a un modo de contingencia
-  local basado en planes de despacho estáticos prefijados.
+- If the control center or the web app fails, the console switches to a local
+  contingency mode based on predefined static dispatch plans.
 
-## Control de acceso
+## Access control
 
-- El frontend **no** debe ser el único mecanismo de control de acceso; las
-  autorizaciones se evalúan en el backend. Ver `security.md` (A01) y
-  `backend-api.md`.
+- The frontend must **not** be the only access-control mechanism; authorization
+  is evaluated in the backend. See `security.md` (A01) and `backend-api.md`.

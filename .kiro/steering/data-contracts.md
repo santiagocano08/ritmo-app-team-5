@@ -1,65 +1,71 @@
 ---
 inclusion: auto
 name: data-contracts
-description: Al definir o modificar el modelo de dominio, contratos de mensaje de telemetría/ingesta, esquemas Pydantic V2, validación en frontera, antifraude de recaudo o linaje de datos (DataOps).
+description: When defining or changing the domain model, telemetry/ingestion message contracts, Pydantic V2 schemas, boundary validation, fare-collection anti-fraud or data lineage (DataOps).
 ---
 
-# Contratos de Datos y Modelo de Dominio — PulsoFlota
+# Data Contracts and Domain Model — PulsoFlota
 
-## Contract-First & Data Ownership (Principio II)
+> These are norms of the **target system**. For what the active turn requires,
+> check `docs/turns-ritmo.md`; the data profiles (`data-profile-*.md`) narrow it down.
 
-- Todo intercambio de datos entre módulos o servicios define y valida un
-  contrato explícito de mensaje (Pydantic V2 / OpenAPI) **antes** de escribir la
-  implementación.
-- Ningún modelo de datos se persiste ni procesa en el pipeline sin un
-  propietario de módulo asignado y un esquema validado en frontera.
+## Contract-First and Data Ownership (Principle II)
 
-## Modelo de objetos de dominio (OMD)
+- Every data exchange between modules or services defines and validates an
+  explicit message contract (Pydantic V2 / OpenAPI) **before** the
+  implementation is written.
+- No data model is persisted or processed in the pipeline without an assigned
+  owning module and a schema validated at the boundary.
 
-- **Vehiculo** — `id_vehiculo: str (UUID)`, `placa: str`, `id_operador: str`,
-  `capacidad_pasajeros: int`, `estado_operativo: Enum (EN_RUTA, EN_ESTACION,
-  EN_DESVIO, FUERA)`.
-- **EventoTelemetria** — `timestamp: datetime (UTC)`, `latitud: float`,
-  `longitud: float`, `velocidad_kmh: float`, `nivel_ocupacion: float (0.0-1.0)`.
-- **RutaEstandar** — `id_ruta: str`, `nombre_corredor: str`,
+## Domain object model (OMD)
+
+Identifiers are kept exactly as defined in the OMD (`docs/omd-ritmo.md`).
+
+- **Vehiculo** (vehicle) — `id_vehiculo: str (UUID)`, `placa: str`,
+  `id_operador: str`, `capacidad_pasajeros: int`, `estado_operativo: Enum
+  (EN_RUTA, EN_ESTACION, EN_DESVIO, FUERA)`.
+- **EventoTelemetria** (telemetry event) — `timestamp: datetime (UTC)`,
+  `latitud: float`, `longitud: float`, `velocidad_kmh: float`,
+  `nivel_ocupacion: float (0.0-1.0)`.
+- **RutaEstandar** (standard route) — `id_ruta: str`, `nombre_corredor: str`,
   `estaciones_ordenadas: List[Estacion]`, `headway_objetivo_segundos: int`.
-- **TramoVial** — `id_tramo: str`, `coordenada_inicio: GeoPoint`,
+- **TramoVial** (road segment) — `id_tramo: str`, `coordenada_inicio: GeoPoint`,
   `coordenada_fin: GeoPoint`, `nivel_congestion: Enum (VERDE, AMARILLO, ROJO)`,
   `velocidad_promedio_actual: float`.
-- **MetricaServicio** — `ventana_tiempo: TimeWindow`, `id_estacion: str`,
-  `p_abordar_t: float`, `ewt_segundos: float`, `percentil_evaluado: int (85, 95)`.
-- **PropuestaRegulacion** — `id_propuesta: str`, `tipo_accion: Enum
-  (DESPACHO_ANTICIPADO, RETENCION, DESVIO_RUTA)`, `vehiculo_objetivo: Vehiculo`,
-  `ruta_sugerida: List[TramoVial]`, `tiempo_respuesta_calculado: float`,
-  `estado_aprobacion: Enum (PENDIENTE, APROBADA, RECHAZADA)`,
-  `autorizado_por: Optional[UsuarioDespachador]`.
+- **MetricaServicio** (service metric) — `ventana_tiempo: TimeWindow`,
+  `id_estacion: str`, `p_abordar_t: float`, `ewt_segundos: float`,
+  `percentil_evaluado: int (85, 95)`.
+- **PropuestaRegulacion** (regulation proposal) — `id_propuesta: str`,
+  `tipo_accion: Enum (DESPACHO_ANTICIPADO, RETENCION, DESVIO_RUTA)`,
+  `vehiculo_objetivo: Vehiculo`, `ruta_sugerida: List[TramoVial]`,
+  `tiempo_respuesta_calculado: float`, `estado_aprobacion: Enum (PENDIENTE,
+  APROBADA, RECHAZADA)`, `autorizado_por: Optional[UsuarioDespachador]`.
 
-## Compuerta de ingesta (validación en frontera)
+## Ingestion gate (boundary validation)
 
-- Todo evento de telemetría GPS o recaudo se valida contra un esquema estricto
-  Pydantic V2. Tipos incorrectos, valores fuera de rango geográfico o campos no
-  declarados → rechazo `422 Unprocessable Entity`.
-- Tasa de rechazo de paquetes objetivo: < 0,1 %.
+- Every GPS telemetry or fare-collection event is validated against a strict
+  Pydantic V2 schema. Wrong types, values outside the geographic range or
+  undeclared fields → `422 Unprocessable Entity` rejection.
+- Target packet rejection rate: < 0.1 %.
 
-## Antifraude y detección de anomalías (A08)
+## Anti-fraud and anomaly detection (A08)
 
-- Descartar datos manipulados: saltos de ubicación GPS con velocidad
-  > 120 km/h, duplicación de secuencias de pasaje, inconsistencia entre sensores
-  viales y coordenadas del bus.
+- Discard tampered data: GPS jumps implying speed > 120 km/h, duplicated fare
+  sequences, inconsistency between road sensors and bus coordinates.
 
-## Integridad y linaje de datos (DataOps)
+## Data integrity and lineage (DataOps)
 
-- Firma HMAC en los paquetes de recaudo, basada en un secreto del módulo seguro
-  del validador vehicular.
-- Registrar procedencia, marca de tiempo inmutable y checksum por mensaje.
+- HMAC signature on fare-collection packets, based on a secret of the on-board
+  validator's secure module.
+- Record provenance, an immutable timestamp and a checksum per message.
 
-## Headway y regularidad
+## Headway and regularity
 
-- Visualizar el intervalo de paso entre vehículos consecutivos; resaltar
-  desviaciones > ±15 % respecto al plan de marcha.
+- Show the headway between consecutive vehicles; highlight deviations > ±15 %
+  from the schedule.
 
-## Referencias
+## References
 
-- SLOs de latencia/rendimiento de la ingesta (≤ 200 ms, 1 000 eventos/s) y
-  aislamiento del contenedor: `realtime-ingestion.md`.
-- RBAC sobre endpoints y aislamiento multi-tenant: `security.md`.
+- Ingestion latency/throughput SLOs (≤ 200 ms, 1,000 events/s) and container
+  isolation: `realtime-ingestion.md`.
+- Endpoint RBAC and multi-tenant isolation: `security.md`.

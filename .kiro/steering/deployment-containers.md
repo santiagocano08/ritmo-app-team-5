@@ -3,55 +3,54 @@ inclusion: fileMatch
 fileMatchPattern: ["**/Dockerfile", "**/Dockerfile.*", "**/docker-compose*.yml", "**/docker-compose*.yaml", "**/.dockerignore"]
 ---
 
-# Despliegue y Contenedores — PulsoFlota
+# Deployment and Containers — PulsoFlota
 
-## Servicios de `docker-compose`
+> Target system. Check `docs/turns-ritmo.md` for what the active turn requires.
 
-Mínimo tres servicios:
+## `docker-compose` services
 
-1. **`ingestion-service`** — ingesta síncrona de telemetría IoT y fuentes de
-   tráfico mockeadas.
-2. **`pulsoflota-web`** — monolito modular: central supervisora, cálculo de
-   métricas y mapa interactivo.
-3. **`database-redis`** — infraestructura de persistencia y caché/pub-sub de
-   eventos.
+At least three services:
 
-## Aislamiento
+1. **`ingestion-service`** — synchronous ingestion of IoT telemetry and mocked
+   traffic sources.
+2. **`pulsoflota-web`** — modular monolith: supervisory console, metric
+   calculation and interactive map.
+3. **`database-redis`** — persistence and event cache/pub-sub infrastructure.
 
-- `ingestion-service` se ejecuta en un contenedor **totalmente aislado** del
-  monolito `pulsoflota-web`, para que fallos de la interfaz no afecten la
-  captura de datos.
+## Isolation
+
+- `ingestion-service` runs in a container **fully isolated** from the
+  `pulsoflota-web` monolith, so interface failures do not affect data capture.
 
 ## Hardening (A02)
 
-- Ejecución **non-root**: `USER appuser` con UID `10001` en todos los
-  contenedores Python (Ingesta y Central). Mínimo privilegio.
-- Proxy inverso (Nginx/Traefik) endurecido bajo mínimo privilegio.
-- Cabeceras HTTP de seguridad obligatorias (valores exactos en `security.md`):
-  CSP, HSTS, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`.
-- Remover cabeceras que revelan la pila (`Server`, `X-Powered-By`, versiones).
-- `DEBUG=False` forzado en homologación/producción; Swagger/ReDoc no expuestos
-  en producción sin autenticación.
+- **Non-root** execution: `USER appuser` with UID `10001` in every Python
+  container (Ingestion and Console). Least privilege.
+- Hardened reverse proxy (Nginx/Traefik) under least privilege.
+- Mandatory HTTP security headers (exact values in `security.md`): CSP, HSTS,
+  `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`.
+- Remove headers that reveal the stack (`Server`, `X-Powered-By`, versions).
+- `DEBUG=False` enforced in staging/production; Swagger/ReDoc not exposed in
+  production without authentication.
 
-## Datos
+## Data
 
-- Persistencia: PostgreSQL con extensión PostGIS (SQLite para entornos de
-  desarrollo/testing empaquetados).
-- Tiempo real/caché: Redis (Pub/Sub para telemetría en vivo + estado en
-  memoria).
+- Persistence: PostgreSQL with the PostGIS extension (SQLite for packaged
+  development/testing environments).
+- Real time/cache: Redis (Pub/Sub for live telemetry + in-memory state).
 
-## Secretos (A04)
+## Secrets (A04)
 
-- Inyectados en runtime vía Docker Secrets o HashiCorp Vault.
-- Nunca en imágenes, código fuente ni `.env` del repositorio (`.env` está
+- Injected at runtime through Docker Secrets or HashiCorp Vault.
+- Never in images, source code or repository `.env` files (`.env` is
   git-ignored).
 
-## Dependencias de imagen (A03)
+## Image dependencies (A03)
 
-- Fijar versión exacta + hash SHA-256.
-- Escaneo SCA (`Trivy` para imágenes) en CI; bloquear CVE con CVSS ≥ 7.0.
+- Pin exact version + SHA-256 hash.
+- SCA scan (`Trivy` for images) in CI; block CVEs with CVSS ≥ 7.0.
 
-## Referencias
+## References
 
-- Matriz OWASP Top 10 (2025): `security.md`.
-- Compuertas de SCA/CI: `testing-quality-gates.md`.
+- OWASP Top 10 (2025) matrix: `security.md`.
+- SCA/CI gates: `testing-quality-gates.md`.

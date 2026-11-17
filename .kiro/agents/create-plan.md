@@ -23,7 +23,7 @@ resources:
   - "file://.kiro/prompts/speckit.plan.md"
   - "file://.specify/templates/plan-template.md"
   - "file://.specify/memory/constitution.md"
-  - "file://docs/vueltas-ritmo.md"
+  - "file://docs/turns-ritmo.md"
   - "file://.specify/feature.json"
   - "file://AGENTS.md"
   - "file://.kiro/steering/**/*.md"
@@ -51,8 +51,8 @@ after a spec already exists; it ends at Phase 1 design (it does not generate tas
    template. Also read `AGENTS.md` and any `.kiro/steering/*.md` files (see "Context sources" below).
 3. **Execute the plan workflow** from the template:
    - Fill Technical Context (mark genuine unknowns as `NEEDS CLARIFICATION`).
-   - Read `docs/vueltas-ritmo.md` to know the active vuelta: plan only the norms it adopts and
-     list deferred norms under an "Evolución" note instead of designing them now.
+   - Read `docs/turns-ritmo.md` to know the active turn: plan only the norms it adopts and
+     list deferred norms under an "Evolution" note instead of designing them now.
    - Fill the Constitution Check section from the constitution and evaluate the gates; ERROR on
      unjustified violations.
    - Phase 0: generate `research.md`, resolving every `NEEDS CLARIFICATION` (Decision / Rationale /

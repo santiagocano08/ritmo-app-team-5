@@ -1,54 +1,54 @@
 ---
 inclusion: auto
 name: ritmo-workflow
-description: Al planear o ejecutar una vuelta del espiral RITMO, una historia de usuario (US-XX), ramas por característica, o decidir el carril (Disciplinado/Adaptativo).
+description: When planning or running a RITMO spiral turn, a user story (US-XX), feature branches, or choosing the lane (Disciplined/Adaptive).
 ---
 
-# Flujo RITMO, Carriles y Ramas — PulsoFlota
+# RITMO Workflow, Lanes and Branches — PulsoFlota
 
-## Orden guiado por riesgo (Principio I)
+## Risk-first order (Principle I)
 
-- El backlog y la secuencia de vueltas se ordenan por riesgo técnico y
-  arquitectónico (ASRs), no por prioridad comercial estática.
-- Ninguna funcionalidad del carril adaptativo inicia si existe un riesgo de
-  Nivel 1 (seguridad o integridad del dato) no mitigado en la vuelta activa.
+- The backlog and the sequence of turns are ordered by technical and
+  architectural risk (ASRs), not by static business priority.
+- No adaptive-lane feature starts while a Level 1 risk (security or data
+  integrity) remains unmitigated in the active turn.
+- The order of turns and what each one adopts live in `docs/turns-ritmo.md`.
 
-## 5 etapas por vuelta de espiral
+## 5 stages per spiral turn
 
-1. **Planear** — Dueño de Vuelta: riesgo prioritario, fecha de cierre de la
-   vuelta e hipótesis operativas.
-2. **Especificar** — historia de usuario como especificación SDD medible +
-   compuerta de contrato si cambia el esquema.
-3. **Construir** — una historia a la vez en rama aislada `feature/US-XX`
-   (código de producción + pruebas + reglas del dato).
-4. **Verificar** — CI (linting, pruebas unitarias, cobertura > 80 %), pruebas
-   de contrato DataOps e inspección del revisor humano.
-5. **Revisar (Compuerta de Valor)** — medir el impacto en P(abordar ≤ t) con el
-   despachador en el entorno de pruebas/simulación.
+1. **Plan** — Turn Owner: priority risk, the turn's closing date and operational
+   hypotheses. Update `docs/turns-ritmo.md` for the next turn.
+2. **Specify** — user story as a measurable SDD specification + contract gate if
+   the schema changes.
+3. **Build** — one story at a time on an isolated `feature/US-XX` branch
+   (production code + tests + data rules).
+4. **Verify** — CI (linting, unit tests, coverage > 80 %), DataOps contract tests
+   and human reviewer inspection.
+5. **Review (Value Gate)** — measure the impact on P(board ≤ t) with the
+   dispatcher in the test/simulation environment.
 
-## Ramas
+## Branches
 
-- Una historia a la vez en rama aislada `feature/US-XX`.
-- Convención de mensajes de commit: ver `AGENTS.md` (Conventional Commits
-  inferido).
+- One story at a time on an isolated `feature/US-XX` branch.
+- Commit message convention: see `AGENTS.md` (Conventional Commits, inferred).
 
-## Dos carriles operativos
+## Two development lanes
 
-- **Carril Disciplinado** (Ingesta, Contratos de Mensaje, Pago por Calidad):
-  Contract-First / SDD estricto; autonomía de agentes baja (solo propuestas
-  validadas en código y compuertas); criticidad máxima; CI estricto y pruebas
-  de contrato DataOps.
-- **Carril Adaptativo** (Central Web, Visualización, Reglas de Alerta y
-  Desvío): iteraciones guiadas por hipótesis de valor con el despachador;
-  autonomía media; revisión obligatoria del dueño del módulo.
+- **Disciplined Lane** (Ingestion, Message Contracts, Quality-Based Payment):
+  strict Contract-First / SDD; low agent autonomy (only proposals validated in
+  code and gates); maximum criticality; strict CI and DataOps contract tests.
+- **Adaptive Lane** (Web Console, Visualization, Alert and Diversion Rules):
+  iterations driven by value hypotheses with the dispatcher; medium autonomy;
+  mandatory review by the module owner.
 
-## Cumplimiento
+## Compliance
 
-- Al cerrar cada vuelta, revisar el cumplimiento de los 5 principios core.
-- Una violación detectada marca el build de CI como fallado de inmediato.
+- At the close of each turn, review compliance with the 5 core principles and
+  the norms adopted up to that turn.
+- A detected violation immediately marks the CI build as failed.
 
-## Enmiendas a la constitución
+## Constitutional amendments
 
-- PR etiquetado `constitutional-amendment` + ADR + firma unánime del Dueño de
-  Vuelta, el Arquitecto (de Software / de Seguridad) y el Representante del
-  Despachador. Ver constitución § Governance.
+- PR labeled `constitutional-amendment` + ADR + unanimous sign-off of the Turn
+  Owner, the Architect (Software / Security) and the Dispatcher Representative.
+  See constitution § Governance.

@@ -1,86 +1,92 @@
 # AGENTS.md — RITMO / PulsoFlota
 
-> Contexto compartido para **TODOS** los agentes. Conciso y estable; se carga siempre.
-> La guía situacional vive en `.kiro/steering/` (se carga según contexto);
-> el gobierno supremo es `.specify/memory/constitution.md`.
+> Shared context for **ALL** agents. Concise and stable; always loaded.
+> Situational guidance lives in `.kiro/steering/` (loaded by context);
+> the supreme governing document is `.specify/memory/constitution.md`.
 
-## Propósito
+## Purpose
 
-**PulsoFlota** es la central web supervisora en tiempo real para despachadores de
-buses y controladores de tráfico de Medellín. Habilita decisiones de regulación
-oportunas y confiables a partir de telemetría integrada, algoritmos de
-regularidad y alertas viales predictivas. Combate dos problemas estructurales:
-la ceguera operativa por datos tardíos o no estandarizados, y los incentivos
-distorsionados ("guerra del centavo" y *bus bunching*) que degradan la
-regularidad del servicio. **RITMO** (Riesgo, Incrementos y Trazabilidad para la
-Movilidad Operativa) es la metodología de espiral que gobierna el desarrollo.
+**PulsoFlota** is the real-time supervisory web console for bus dispatchers and
+traffic controllers in Medellín. It enables timely, reliable regulation decisions
+from integrated telemetry, regularity algorithms and predictive road alerts. It
+tackles two structural problems: operational blindness caused by late or
+non-standardized data, and distorted incentives (the "guerra del centavo" — the
+penny war — and *bus bunching*) that degrade service regularity. **RITMO**
+(Riesgo, Incrementos y Trazabilidad para la Movilidad Operativa — Risk,
+Increments and Traceability for Operational Mobility) is the spiral methodology
+that governs development.
 
-## Métrica eje
+## Key metric
 
-La calidad de servicio se mide como la probabilidad de abordar en *t* minutos o
-menos, **P(abordar ≤ t)**, complementada por el **EWT** (*Excess Wait Time*),
-leídas en percentiles P85 / P95 desde la perspectiva real del usuario (incluida
-la ocupación de buses). Esta métrica alimenta el pago por calidad a los
-operadores, de modo que su integridad es crítica (antifraude de recaudo).
+Service quality is measured as the probability of boarding within *t* minutes or
+less, **P(board ≤ t)**, complemented by **EWT** (*Excess Wait Time*), read at the
+P85 / P95 percentiles from the rider's real perspective (including bus
+occupancy). This metric feeds quality-based payment to operators, so its
+integrity is critical (fare-collection anti-fraud).
 
-## Stack tecnológico (restricciones duras)
+## Technology stack (hard constraints of the target system)
 
-- **Lenguaje:** Python 3.12+.
-- **API:** FastAPI o Flask.
-- **Central del despachador:** Streamlit / Dash o HTML5/Jinja2 + WebSockets.
-- **Persistencia:** PostgreSQL + PostGIS (SQLite para dev/test empaquetados).
-- **Tiempo real / caché:** Redis (Pub/Sub para telemetría en vivo + estado en
-  memoria).
-- **Contenedores:** Docker + `docker-compose`, mínimo 3 servicios:
+- **Language:** Python 3.12+.
+- **API:** FastAPI or Flask.
+- **Dispatcher console:** Streamlit / Dash or HTML5/Jinja2 + WebSockets.
+- **Persistence:** PostgreSQL + PostGIS (SQLite for packaged dev/test).
+- **Real time / cache:** Redis (Pub/Sub for live telemetry + in-memory state).
+- **Containers:** Docker + `docker-compose`, at least 3 services:
   `ingestion-service`, `pulsoflota-web`, `database-redis`.
-- **Validación de datos:** Pydantic V2 / JSON Schema en la compuerta de ingesta.
+- **Data validation:** Pydantic V2 / JSON Schema at the ingestion gate.
 
-No hay código de aplicación todavía; el layout de fuentes seguirá la
-descomposición de servicios anterior. Las herramientas de build (Node / Python)
-ya están preparadas en `.gitignore`.
+These are adopted **turn by turn**: check `docs/turns-ritmo.md` for what the
+active turn requires and what is deferred.
 
-## Layout del repositorio
+There is no application code yet; the source layout will follow the service
+breakdown above. Build tooling (Node / Python) is already covered in `.gitignore`.
 
-| Ruta | Qué es |
-|------|--------|
-| `docs/` | Documentación fuente de verdad (OMD, PRD, SRD — en español). |
-| `docs/vueltas-ritmo.md` | **Mapa de vueltas:** qué normas son exigibles en la vuelta activa y cuáles quedan diferidas. |
-| `specs/` | Artefactos generados por característica (spec, plan, tasks, checklists). |
-| `.specify/memory/constitution.md` | **Constitución — documento de gobierno supremo.** |
-| `.kiro/steering/` | Guía situacional (se carga según contexto, no siempre). |
-| `.kiro/agents/` | Agentes de Kiro (uno por fase del flujo Spec Kit). |
-| `.kiro/prompts/speckit.*.md` | Prompts de Spec Kit que siguen los agentes. |
-| `.specify/scripts/`, `.specify/templates/` | Maquinaria Spec Kit (bash + plantillas). |
-| `.specify/feature.json`, `.specify/integrations/` | Estado local por checkout (git-ignored). |
+## Repository layout
 
-## Convenciones universales
+| Path | What it is |
+|------|------------|
+| `docs/` | Source-of-truth documentation (OMD, PRD, SRD — in Spanish). |
+| `docs/turns-ritmo.md` | **Turn map:** which norms are mandatory in the active turn and which are deferred. |
+| `specs/` | Generated per-feature artifacts (spec, plan, tasks, checklists). |
+| `.specify/memory/constitution.md` | **Constitution — supreme governing document.** |
+| `.kiro/steering/` | Situational guidance (loaded by context, not always). |
+| `.kiro/agents/` | Kiro agents (one per Spec Kit workflow phase). |
+| `.kiro/prompts/speckit.*.md` | Spec Kit command prompts the agents follow. |
+| `.specify/scripts/`, `.specify/templates/` | Spec Kit machinery (bash + templates). |
+| `.specify/feature.json`, `.specify/integrations/` | Per-checkout local state (git-ignored). |
 
-- **Flujo RITMO (espiral):** cada vuelta recorre Planear → Especificar →
-  Construir → Verificar → Revisar. Una historia a la vez, en rama aislada
-  `feature/US-XX`.
-- **Contract-First:** todo intercambio de datos entre módulos define y valida un
-  contrato (Pydantic V2 / OpenAPI) **antes** de escribir la implementación.
-- **Ingesta aislada y tiempo real determinista:** la ingesta corre en un
-  contenedor aislado de la web; el camino crítico (≤ 10 s de extremo a extremo)
-  nunca depende de llamadas síncronas a IA generativa ni a terceros.
-- **Human-in-the-Loop:** toda recomendación de IA / regla / optimización es solo
-  una sugerencia; ninguna acción de regulación en vía se ejecuta sin aprobación
-  explícita del despachador humano.
-- **Pruebas y compuertas:** cobertura > 80 % obligatoria; cada PR supera SAST,
-  SCA y DataOps antes de fusionarse; el CI marca el build como fallado ante
-  cualquier violación de principios.
-- **Seguridad:** RBAC solo en el backend (nunca solo en el frontend), sin IDOR,
-  aislamiento multi-tenant, secretos vía gestor externo (nunca en código ni
-  `.env`). Detalle en `.kiro/steering/security.md`.
-- **Commits:** los agentes no hacen commit/push (bloqueado en permisos); revisa
-  y confirma tú. *Los documentos fuente no fijan convención de mensajes; se
-  infiere **Conventional Commits** (`tipo(alcance): descripción`, p. ej.
-  `feat(ingestion): valida esquema GPS con Pydantic V2`). Si el equipo adopta
-  otra, documéntala aquí y actualiza la constitución.*
+## Universal conventions
 
-## Documento de gobierno
+- **Language:** the repository is written in **English** (agents, steering,
+  constitution, specs, code, commits and PRs). The source documents in `docs/`
+  (OMD, PRD, SRD) are still in Spanish; domain identifiers defined there (e.g.
+  `id_vehiculo`, `p_abordar_t`) are kept as defined until the team decides
+  otherwise.
+- **RITMO workflow (spiral):** every turn goes Plan → Specify → Build → Verify →
+  Review. One story at a time, on an isolated `feature/US-XX` branch.
+- **Contract-First:** every data exchange between modules defines and validates a
+  contract (Pydantic V2 / OpenAPI) **before** the implementation is written.
+- **Isolated ingestion and deterministic real time:** ingestion runs in a
+  container isolated from the web; the critical path (≤ 10 s end to end) never
+  depends on synchronous calls to generative AI or third parties.
+- **Human-in-the-Loop:** every AI recommendation / rule / optimization is only a
+  suggestion; no on-road regulation action runs without explicit approval from
+  the human dispatcher.
+- **Tests and gates:** coverage > 80 % is mandatory; every PR passes the gates
+  adopted in the active turn before merging; CI marks the build as failed on any
+  principle violation.
+- **Security:** RBAC only in the backend (never only in the frontend), no IDOR,
+  multi-tenant isolation, secrets from an external manager (never in code or
+  `.env`). Detail in `.kiro/steering/security.md`.
+- **Commits:** agents never commit/push (blocked in their permissions); review
+  and commit yourself. *The source documents do not set a commit-message
+  convention; **Conventional Commits** is inferred (`type(scope): description`,
+  e.g. `feat(ingestion): validate GPS schema with Pydantic V2`). If the team
+  adopts another one, document it here and update the constitution.*
 
-La **constitución** (`.specify/memory/constitution.md`, v1.1.0) es el documento
-de gobierno supremo: sus 5 principios core son NON-NEGOTIABLE y prevalecen sobre
-cualquier otra práctica. Para detalle situacional, carga el steering file
-correspondiente (`.kiro/steering/*.md`).
+## Governing document
+
+The **constitution** (`.specify/memory/constitution.md`, v1.1.0) is the supreme
+governing document: its 5 core principles are NON-NEGOTIABLE and prevail over
+any other practice. For situational detail, load the matching steering file
+(`.kiro/steering/*.md`).

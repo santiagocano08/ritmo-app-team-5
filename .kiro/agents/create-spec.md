@@ -24,7 +24,7 @@ resources:
   - "file://.specify/templates/spec-template.md"
   - "file://.specify/templates/checklist-template.md"
   - "file://.specify/memory/constitution.md"
-  - "file://docs/vueltas-ritmo.md"
+  - "file://docs/turns-ritmo.md"
   - "file://AGENTS.md"
   - "file://.kiro/steering/**/*.md"
 welcomeMessage: "Give me a feature description and I'll create its Spec Kit specification."
