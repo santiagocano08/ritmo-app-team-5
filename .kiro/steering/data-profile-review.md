@@ -1,6 +1,6 @@
 ---
 inclusion: fileMatch
-fileMatchPattern: ["contracts/**", "ingestion/**", "rules/**", "simulator/**", "docs/adr/**"]
+fileMatchPattern: ["contracts/**", "db/**", "docs/adr/**", "**/ingestion/**", "**/reference/**", "**/rules/**", "**/simulator/**", "data/reference/**"]
 ---
 
 # Data profile — Review
