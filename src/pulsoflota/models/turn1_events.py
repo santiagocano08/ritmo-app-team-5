@@ -6,6 +6,14 @@
 #
 # To regenerate: make generate (then re-apply the model_validator manually or
 # run the patching step in the Makefile).
+#
+# STRICT-TYPE NOTE (defect fix): numeric and boolean payload fields are wrapped
+# with pydantic.types.Strict so that a JSON string like "28.5" is rejected for a
+# float field, matching the JSON Schema "type":"number" / "type":"boolean"
+# semantics. String fields (StrEnum, str) are intentionally NOT wrapped — they
+# accept plain strings from JSON as expected.  The fix uses per-field Strict
+# annotation rather than ConfigDict(strict=True), which would also reject
+# string→StrEnum coercion and string→UUID coercion that must work.
 from __future__ import annotations
 
 from enum import IntEnum, StrEnum
@@ -13,6 +21,7 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, RootModel, model_validator
+from pydantic import Strict
 
 
 # ---------------------------------------------------------------------------
@@ -68,6 +77,17 @@ class ReportedBy(StrEnum):
 
 
 # ---------------------------------------------------------------------------
+# Strict numeric / bool aliases used by payloads
+# ---------------------------------------------------------------------------
+# These ensure a JSON string like "28.5" is rejected for float fields and
+# "true" / 1 is rejected for bool fields — matching JSON Schema type semantics.
+
+StrictFloat = Annotated[float, Strict()]
+StrictInt = Annotated[int, Strict()]
+StrictBool = Annotated[bool, Strict()]
+
+
+# ---------------------------------------------------------------------------
 # Payload models
 # ---------------------------------------------------------------------------
 
@@ -82,15 +102,15 @@ class BusPositionPayload(BaseModel):
     """Trip identifier on the standard route."""
     direction: Direction
     """Travel direction. Turn 1 supports direction 1 only (station -> neighborhood)."""
-    distance_along_m: Annotated[float, Field(ge=0.0)]
+    distance_along_m: Annotated[StrictFloat, Field(ge=0.0)]
     """Distance along the corridor from the origin, in meters. No geometry in turn 1."""
-    speed_kmh: Annotated[float, Field(ge=0.0, le=120.0)]
+    speed_kmh: Annotated[StrictFloat, Field(ge=0.0, le=120.0)]
     """Instantaneous speed in km/h. Range 0-120."""
-    schedule_deviation_s: int
+    schedule_deviation_s: StrictInt
     """Deviation from the schedule in seconds. Negative = early, positive = late."""
-    doors_open: bool
+    doors_open: StrictBool
     """Whether the bus doors are open."""
-    occupancy: Annotated[int, Field(ge=0, le=40)]
+    occupancy: Annotated[StrictInt, Field(ge=0, le=40)]
     """Number of passengers on board. Bus capacity is 40."""
 
 
@@ -103,13 +123,13 @@ class StopArrivalPayload(BaseModel):
     """Trip identifier on the standard route."""
     stop_id: Annotated[str, Field(min_length=1)]
     """Stop identifier along corridor C6-008."""
-    boarded: Annotated[int, Field(ge=0)]
+    boarded: Annotated[StrictInt, Field(ge=0)]
     """Passengers who boarded at this stop."""
-    alighted: Annotated[int, Field(ge=0)]
+    alighted: Annotated[StrictInt, Field(ge=0)]
     """Passengers who alighted at this stop."""
-    rejected: Annotated[int, Field(ge=0)]
+    rejected: Annotated[StrictInt, Field(ge=0)]
     """Passengers left behind because the bus was full."""
-    occupancy: Annotated[int, Field(ge=0, le=40)]
+    occupancy: Annotated[StrictInt, Field(ge=0, le=40)]
     """Occupancy on arrival. Bus capacity is 40."""
 
 
@@ -122,13 +142,13 @@ class StopDeparturePayload(BaseModel):
     """Trip identifier on the standard route."""
     stop_id: Annotated[str, Field(min_length=1)]
     """Stop identifier along corridor C6-008."""
-    boarded: Annotated[int, Field(ge=0)]
+    boarded: Annotated[StrictInt, Field(ge=0)]
     """Passengers who boarded at this stop."""
-    alighted: Annotated[int, Field(ge=0)]
+    alighted: Annotated[StrictInt, Field(ge=0)]
     """Passengers who alighted at this stop."""
-    rejected: Annotated[int, Field(ge=0)]
+    rejected: Annotated[StrictInt, Field(ge=0)]
     """Passengers left behind because the bus was full."""
-    occupancy: Annotated[int, Field(ge=0, le=40)]
+    occupancy: Annotated[StrictInt, Field(ge=0, le=40)]
     """Occupancy on departure. Bus capacity is 40."""
 
 
@@ -189,7 +209,7 @@ class IncidentReportPayload(BaseModel):
     """Type of incident."""
     target_id: Annotated[str, Field(min_length=1)]
     """Identifier of the affected bus or stop."""
-    duration_min: Annotated[float, Field(ge=0.0)]
+    duration_min: Annotated[StrictFloat, Field(ge=0.0)]
     """Estimated duration of the incident in minutes."""
     reported_by: ReportedBy
     """Who reported the incident."""

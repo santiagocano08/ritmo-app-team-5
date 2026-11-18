@@ -1,0 +1,104 @@
+# ---------------------------------------------------------------------------
+# PulsoFlota — Turn-1 docker-compose
+#
+# Three isolated services per Principle III (Constitution §III):
+#   db        — PostgreSQL 16 (persistence only)
+#   ingestion — simulator stdout → ingestion reader (keeps writing even if
+#               api is down; this is the isolation invariant of T009)
+#   api       — FastAPI health-only endpoint
+#
+# Stopping 'api' does NOT stop 'ingestion': they are separate services with
+# no depends_on relationship from ingestion to api.
+#
+# Secrets: DB credentials are injected via environment variables at runtime.
+# No secrets are hard-coded here or in .env files committed to the repo
+# (.env is git-ignored per the constitution's no-cost security baseline).
+#
+# Turn-1 scope (docs/turns-ritmo.md §3.3 deferred norms):
+#   - No Redis / database-redis service (deferred to turn 3)
+#   - No PostGIS (deferred to turn 3)
+#   - No production hardening (reverse proxy, HSTS, SCA) — turn 2/3
+#   - Non-root UID 10001 is applied in the Dockerfile (trivial, included)
+# ---------------------------------------------------------------------------
+
+services:
+
+  # --------------------------------------------------------------------------
+  # db — PostgreSQL 16
+  # Mounts db/init/ scripts into /docker-entrypoint-initdb.d/ so the schemas
+  # and bronze tables are created on first start.  Scripts are idempotent
+  # (IF NOT EXISTS guards) so container restarts are safe.
+  # --------------------------------------------------------------------------
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: pulsoflota
+      POSTGRES_USER: pulsoflota
+      POSTGRES_PASSWORD: pulsoflota_dev
+    volumes:
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pulsoflota -d pulsoflota"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # ingestion — simulator stdout piped into ingestion reader.
+  # This service is intentionally independent of 'api': stopping api does NOT
+  # propagate here (Principle III).  It depends only on db being healthy.
+  # Entry-point: sh -c so the pipe works in a shell.
+  # SEED and DURATION are configurable via .env or environment overrides.
+  # --------------------------------------------------------------------------
+  ingestion:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: >
+      sh -c "python -m src.simulator.main --seed ${SEED:-42} --duration ${DURATION:-3600}
+             | python -m src.ingestion.run"
+    environment:
+      DATABASE_URL: postgresql://pulsoflota:pulsoflota_dev@db:5432/pulsoflota
+      LOG_LEVEL: INFO
+      PYTHONPATH: /app
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # api — FastAPI health-only endpoint (uvicorn).
+  # Isolated from ingestion: stopping this service has no effect on the
+  # ingestion container.
+  # --------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: >
+      python -m uvicorn src.api.main:app
+      --host 0.0.0.0
+      --port 8000
+      --no-access-log
+    environment:
+      DATABASE_URL: postgresql://pulsoflota:pulsoflota_dev@db:5432/pulsoflota
+      LOG_LEVEL: INFO
+      PYTHONPATH: /app
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    restart: unless-stopped
+
+volumes:
+  db_data:

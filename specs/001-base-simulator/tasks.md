@@ -77,13 +77,13 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T008 [P] [US2] Write `tests/integration/test_health.py`: `GET /healthz` → `200 {"status": "healthy"}`.
-- [ ] T009 [P] [US2] Write `tests/integration/test_isolation.py`: start all services; `docker compose stop api`; assert the `ingestion` container keeps running and `bronze.events` keeps growing (Principle III). NOTE: this test finalizes once US-3 (ingestion write) and US-4 (simulator) land; the test scaffold is written now and run after those stories.
+- [X] T008 [P] [US2] Write `tests/integration/test_health.py`: `GET /healthz` → `200 {"status": "healthy"}`.
+- [X] T009 [P] [US2] Write `tests/integration/test_isolation.py`: start all services; `docker compose stop api`; assert the `ingestion` container keeps running and `bronze.events` keeps growing (Principle III). NOTE: this test finalizes once US-3 (ingestion write) and US-4 (simulator) land; the test scaffold is written now and run after those stories.
 
 ### Implementation for User Story 2
 
-- [ ] T010 [P] [US2] Implement `src/api/main.py`: FastAPI + uvicorn app exposing only `GET /healthz` → `200 {"status": "healthy"}` (DB-free so the API reports healthy even if the DB is briefly unreachable), generic errors with no stack traces, `DEBUG=False`; reserve `/api/v1` base unused.
-- [ ] T011 [US2] Write `docker-compose.yml` with three services — `db` (postgres:16, mount `db/init/` into `/docker-entrypoint-initdb.d/`), `ingestion` (entry point pipes the simulator's JSON-lines stdout into the ingestion reader: `python -m src.simulator.main --seed "$SEED" --duration "$DURATION" | python -m src.ingestion.run`), `api` (uvicorn) — plus `make up`/`make down`. DB DSN via an env var in the container (no secrets in the repo); stopping `api` is a separate service from `ingestion` so it cannot stop ingestion.
+- [X] T010 [P] [US2] Implement `src/api/main.py`: FastAPI + uvicorn app exposing only `GET /healthz` → `200 {"status": "healthy"}` (DB-free so the API reports healthy even if the DB is briefly unreachable), generic errors with no stack traces, `DEBUG=False`; reserve `/api/v1` base unused.
+- [X] T011 [US2] Write `docker-compose.yml` with three services — `db` (postgres:16, mount `db/init/` into `/docker-entrypoint-initdb.d/`), `ingestion` (entry point pipes the simulator's JSON-lines stdout into the ingestion reader: `python -m src.simulator.main --seed "$SEED" --duration "$DURATION" | python -m src.ingestion.run`), `api` (uvicorn) — plus `make up`/`make down`. DB DSN via an env var in the container (no secrets in the repo); stopping `api` is a separate service from `ingestion` so it cannot stop ingestion.
 
 **Checkpoint**: User Story 2 fully functional — three isolated services start with one command; the API is health-only and isolated from ingestion.
 
