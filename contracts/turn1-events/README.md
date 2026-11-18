@@ -37,3 +37,18 @@ accepted or explicitly rejected. A **non-breaking** change (new optional field) 
 ## Examples
 
 Valid and invalid examples live in `examples/valid/` and `examples/invalid/`.
+
+## Stop ids in examples
+
+Examples previously used placeholder stop ids (`S-001`, `S-003`, `S-007`).  As of T007
+(implementation of US-1), all examples use **real `P-<objectid>` stop ids** from
+`data/reference/stops.csv`:
+
+| Placeholder | Real id | Stop name |
+|---|---|---|
+| `S-001` → | `P-883` | Cra.51 con Cll.59 (Prado feeder stop — direction-1 origin) |
+| `S-003` → | `P-885` | Cll. 61 con Cra. 45D |
+| `S-007` → | `P-889` | Cll. 58 con Cra. 32 |
+
+No schema version change (`stop_id` is a free `string` field; `P-<objectid>` satisfies
+`minLength: 1`).  This change requires data-owner sign-off per CODEOWNERS.

@@ -382,9 +382,9 @@ independent RNGs (rejected — ordering fragility); `numpy` mandatory (rejected
   seeded by the run seed. Tunable so the running time ≈ 19.5 min holds.
 - Dwell = `10 + 3*boarded + 2*alighted` seconds (FR-020, TCQSM), minimum 10 s
   when no boardings/alightings (edge case).
-- Peak hour = the hour with the lowest congestion factor (spec assumption).
-- A peak-hour end-to-end trip ≈ 19.5 min running + 5.7 min dwell = 25 min,
-  asserted within ±20 % by `test_simulator_travel_time`.
+- **Peak hour = FIXED at 17:00** (line A PM peak, Afluencia 2025 — data-owner decision). The computed SIMM factor is lowest at 23:00 only due to thin night samples; 17:00 is the operationally correct calibration point. SC-006 is checked at 17:00 (~22.8 min trip, within 25 min ±20%).
+- A peak-hour end-to-end trip ≈ 22.8 min, asserted within ±20 % (i.e. 20–30 min)
+  by `test_simulator_travel_time`.
 
 **Rationale**: directly from the spec's FR and assumptions. A single declared
 `SIGMA` keeps the model tunable and reviewable; the test pins the target so a

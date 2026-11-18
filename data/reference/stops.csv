@@ -1,0 +1,19 @@
+stop_id,stop_name,distance_along_m,segment_id
+P-883,Cra.51 con Cll.59,0.0,1
+P-884,Cll. 61 con Cra.50,837.4,2
+P-885,Cll. 61 con Cra. 45D,1226.5,3
+P-886,Cll.57 con Cra.42,1991.0,4
+P-887,Cll 58 con Cra. 39,2318.1,5
+P-888,Cll. 58 con Cra. 36A - 13 ,2583.4,6
+P-889,Cll. 58 con Cra. 32,2820.1,7
+P-890,Cll 58 con Cra. 31 - 9,2976.2,8
+P-891,Cll. 58 con Cra. 28A,3240.5,9
+P-892,Cra. 27 con Cll. 57C,3469.7,10
+P-893,Cll. 56A con Cra. 25BB,3814.0,11
+P-894,Cll 56A con Cra 25B,3904.9,12
+P-895,Cll. 56E con Cra. 25 - 32,4137.8,13
+P-896,Cra 25 con Cll 56A,4456.3,14
+P-897,Cra. 24AA con Cll 56,4579.2,15
+P-898,Cll 56 con Cra. 22A,4757.7,16
+P-899,Cll. 56A con Cra. 20A,5005.8,17
+P-900,Cra 20A con Cll 56A,5119.4,17

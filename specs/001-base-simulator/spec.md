@@ -23,7 +23,7 @@ A team member builds the reference data set from the raw sources. The simulator 
 **Acceptance Scenarios**:
 
 1. **Given** the raw sources present, **When** the reference data is built twice, **Then** both builds are byte-identical and the total size is under 1 MB.
-2. **Given** the reference data, **When** it is inspected, **Then** it contains the 17 direction-1 segments (length, free-flow speed, slope), the real C6-008 stops with their real stop ids, the Prado train arrivals with a weekday service calendar, the hourly congestion factor (in the 0.43–0.56 range), and the demand parameters (Metro line A hourly shape and basin-6 feeder share).
+2. **Given** the reference data, **When** it is inspected, **Then** it contains the 17 direction-1 segments (length, free-flow speed, slope), the real C6-008 stops with their real stop ids, the Prado train arrivals with a weekday service calendar, the hourly congestion factor as the computed mean SIMM speed ÷ corridor free-flow speed (the 0.43–0.56 band is a sanity check: a warning is emitted if any value falls outside it, but the computed values are kept), and the demand parameters (Metro line A hourly shape and basin-6 feeder share).
 3. **Given** the reference data, **When** `SOURCES.md` is inspected, **Then** every file has one line recording source URL, license, download date and the transformation applied.
 4. **Given** the test fixtures, **When** they reference stops, **Then** they use the real stop ids from the reference data.
 
@@ -98,7 +98,7 @@ A team member runs the simulator with a seed and a duration. It produces a deter
 - **FR-002**: The reference data MUST include the 17 direction-1 segments of route C6-008 with real length, free-flow speed and slope.
 - **FR-003**: The reference data MUST include the real C6-008 stops with their real stop ids.
 - **FR-004**: The reference data MUST include the train arrivals at Prado station from the 2025 Metro GTFS with a weekday service calendar.
-- **FR-005**: The reference data MUST include an hourly congestion factor (real speed / free-flow speed, in the 0.43–0.56 range) aggregated from SIMM, the Sistema Inteligente de Movilidad de Medellín (real speed measurements on the corridor).
+- **FR-005**: The reference data MUST include an hourly congestion factor (real speed / free-flow speed) aggregated from SIMM, the Sistema Inteligente de Movilidad de Medellín (real speed measurements on the corridor). The 0.43–0.56 value is a **sanity band**: the build emits a warning if the computed values fall outside it but keeps the computed values as-is; the band is never used as an acceptance range or a target to manufacture.
 - **FR-006**: The reference data MUST include demand parameters: the hourly shape of Metro line A and the feeder share of basin 6.
 - **FR-007**: The reference data MUST ship a `SOURCES.md` with one line per file, each recording source URL, license, download date and the transformation applied.
 - **FR-008**: Test fixtures MUST use the real stop ids from the reference data.
@@ -148,7 +148,7 @@ A team member runs the simulator with a seed and a duration. It produces a deter
 - **SC-003**: An invalid event is captured in the rejections store with the correct reason.
 - **SC-004**: A duplicate event (same source + event_id) is stored exactly once in bronze.
 - **SC-005**: With the API service stopped, the bronze store keeps growing (ingestion survives the failure).
-- **SC-006**: A peak-hour direction-1 trip completes in ~25 min within ±20 %.
+- **SC-006**: A peak-hour direction-1 trip at the **fixed 17:00 calibration hour** completes in ~22.8 min, within ±20% of the 25 min target (i.e. 20–30 min).
 - **SC-007**: The reference data set rebuilds reproducibly (byte-identical) and stays under 1 MB.
 - **SC-008**: A single command brings up the full run environment (database + simulator/ingestion + API).
 
@@ -160,7 +160,7 @@ A team member runs the simulator with a seed and a duration. It produces a deter
 - Reserve buses B-106/B-107 are part of the fleet roster as available but are not dispatched and do not run revenue trips in this story (the decision engine is out of scope).
 - Alightings per stop follow a simple declared, tunable model (e.g., a per-stop alighting probability for each onboard rider), tuned so peak-hour dwell matches the ~5.7 min target.
 - Lognormal travel-time noise uses a fixed, declared dispersion seeded by the run seed; it is tunable so the running-time target (~19.5 min) holds.
-- "Peak hour" means the most congested hour per the congestion factor (lowest real/free ratio).
+- "Peak hour" is fixed at **17:00** (line A PM peak, Afluencia 2025 — data-owner decision). The computed SIMM congestion factor is lowest at 23:00 only due to thin night samples; 17:00 is the operationally correct peak. SC-006 is checked at 17:00 (~22.8 min end-to-end trip, within 25 min ±20%).
 - `bus_position` is emitted for in-service buses only; reserve buses are not in motion.
 - The raw sources in `data/raw/` are present locally (git-ignored); the reference-data build is reproducible only when those sources are present.
 
@@ -170,8 +170,8 @@ The following are deferred to later stories or turns (`docs/turns-ritmo.md`); th
 
 - Silver and gold data layers and any derived metrics (headway, EWT, P(board ≤ t)); this story produces raw inputs only.
 - Scenario injectors C1–C5 (bunching, gap, transfer surge, accident, broken-down bus).
-- Data-fault handling D1 beyond basic idempotency: the duplicate/source-outage scenario injectors and the source-outage "Estimated, no alert" behaviour.
-- The decision/recommendation engine (hold, adjust departure, reserve dispatch) and the dispatcher approval loop.
+- Data-fault handling D1 beyond basic idempotency: the duplicate/source-outage scenario injectors and the source-outage "Estimated, no alert" behaviour. These are deferred to **later stories within turn 1** (not later turns), consistent with `docs/turns-ritmo.md` §3.1 which lists source outage as turn-1 scope.
+- The decision/recommendation engine (hold, adjust departure, reserve dispatch) and the dispatcher approval loop. These are deferred to **later stories within turn 1** (RF-2.1, RF-2.2, RF-2.3 are turn-1 adopted norms per `docs/turns-ritmo.md` §3.2; they are out of scope for this story, not for the full turn).
 - ML models (travel-time and demand baselines/predictions, anomaly detection).
 - API features beyond the health check.
 - The dispatcher web console and the interactive map.

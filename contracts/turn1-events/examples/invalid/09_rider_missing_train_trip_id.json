@@ -5,9 +5,9 @@
   "source": "simulator",
   "event_ts": "2026-11-24T08:02:00Z",
   "payload": {
-    "stop_id": "S-001",
+    "stop_id": "P-883",
     "direction": 1,
     "origin": "train",
-    "destination_stop_id": "S-007"
+    "destination_stop_id": "P-889"
   }
 }

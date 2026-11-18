@@ -1,0 +1,18 @@
+segment_id,from_name,length_m,free_flow_kmh,slope_pct
+1,Cra.51 con Cll.59,834.0,60.0,2.6
+2,Cll. 61 con Cra.50,388.0,50.0,5.8
+3,Cll. 61 con Cra. 45D,762.0,30.0,-1.7
+4,Cll.57 con Cra.42,326.0,30.0,4.5
+5,Cll 58 con Cra. 39,265.0,30.0,4.4
+6,Cll. 58 con Cra. 36A - 13,237.0,30.0,11.6
+7,Cll. 58 con Cra. 32,156.0,30.0,14.4
+8,Cll 58 con Cra. 31 - 9,264.0,30.0,13.0
+9,Cll. 58 con Cra. 28A,229.0,30.0,9.4
+10,Cra. 27 con Cll. 57C,343.0,30.0,-0.3
+11,Cll. 56A con Cra. 25BB,90.0,30.0,12.7
+12,Cll 56A con Cra 25B,232.0,30.0,11.6
+13,Cll. 56E con Cra. 25 - 32,318.0,20.0,-12.3
+14,Cra 25 con Cll 56A,122.0,30.0,-3.4
+15,Cra. 24AA con Cll 56,178.0,30.0,-2.1
+16,Cll 56 con Cra. 22A,247.0,30.0,4.9
+17,Cll. 56A con Cra. 20A,113.0,30.0,16.8

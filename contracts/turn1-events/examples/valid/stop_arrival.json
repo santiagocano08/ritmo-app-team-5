@@ -7,7 +7,7 @@
   "payload": {
     "bus_id": "B-102",
     "trip_id": "C6-008-AM-001",
-    "stop_id": "S-003",
+    "stop_id": "P-885",
     "boarded": 4,
     "alighted": 2,
     "rejected": 0,

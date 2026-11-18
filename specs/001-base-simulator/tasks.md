@@ -28,7 +28,7 @@
 
 **Purpose**: Project initialization and basic structure
 
-- [ ] T001 Scaffold the Python project per plan.md: `pyproject.toml` (python `>=3.12`, `uv`-managed, runtime deps `psycopg` 3 binary / `pydantic` V2 / `fastapi` / `uvicorn`, dev deps `datamodel-code-generator` / `pytest` / `pytest-cov`, with coverage `> 80 %` config), `Makefile` (`generate | reference | up | down | test | lint | clean`), `src/` package layout (`pulsoflota/`, `reference/`, `ingestion/`, `simulator/`, `api/`), `db/init/`, `data/raw/` (git-ignored) + `data/reference/`, `tests/{unit,contract,integration}/` + `tests/conftest.py`, and `.gitignore` entries for `data/raw/` and `.env`.
+- [X] T001 Scaffold the Python project per plan.md: `pyproject.toml` (python `>=3.12`, `uv`-managed, runtime deps `psycopg` 3 binary / `pydantic` V2 / `fastapi` / `uvicorn`, dev deps `datamodel-code-generator` / `pytest` / `pytest-cov`, with coverage `> 80 %` config), `Makefile` (`generate | reference | up | down | test | lint | clean`), `src/` package layout (`pulsoflota/`, `reference/`, `ingestion/`, `simulator/`, `api/`), `db/init/`, `data/raw/` (git-ignored) + `data/reference/`, `tests/{unit,contract,integration}/` + `tests/conftest.py`, and `.gitignore` entries for `data/raw/` and `.env`.
 
 ---
 
@@ -38,8 +38,8 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T002 [P] Generate Pydantic V2 models from the accepted contract `contracts/turn1-events/*.schema.json` into `src/pulsoflota/models/turn1_events.py` via `datamodel-code-generator` (`make generate`); verify `additionalProperties: false` → `model_config(extra='forbid')`, the `oneOf`/`const` discriminated union on `event_type`, and the `rider_arrival` conditional (`train_trip_id` required when `origin == "train"`, forbidden otherwise). Treated as a build artifact — never hand-edited; CI asserts the committed file matches a fresh generation.
-- [ ] T003 [P] Write the bronze schema init scripts: `db/init/001_schemas.sql` (`CREATE SCHEMA IF NOT EXISTS bronze, silver, gold`), `db/init/002_bronze.sql` creating `bronze.events` (insert-only; columns per data-model.md E3: `id BIGSERIAL PK`, `source TEXT NOT NULL`, `event_id UUID NOT NULL`, `schema_version TEXT`, `event_type TEXT`, `event_ts TIMESTAMPTZ NOT NULL`, `arrival_ts TIMESTAMPTZ NOT NULL`, `payload JSONB NOT NULL`, `ingested_at TIMESTAMPTZ DEFAULT now()`, with `CONSTRAINT bronze_events_unique UNIQUE (source, event_id)`) and `bronze.rejections` (data-model.md E4: `original_message JSONB`, `reason TEXT NOT NULL`, `received_ts TIMESTAMPTZ NOT NULL`, `CHECK (reason IN ('missing_required_field','wrong_type','value_out_of_range','unknown_event_type','unsupported_schema_version','undeclared_field','invalid_uuid','invalid_timestamp','duplicate_event'))`); idempotent scripts.
+- [X] T002 [P] Generate Pydantic V2 models from the accepted contract
+- [X] T003 [P] Write the bronze schema init scripts (`CREATE SCHEMA IF NOT EXISTS bronze, silver, gold`), `db/init/002_bronze.sql` creating `bronze.events` (insert-only; columns per data-model.md E3: `id BIGSERIAL PK`, `source TEXT NOT NULL`, `event_id UUID NOT NULL`, `schema_version TEXT`, `event_type TEXT`, `event_ts TIMESTAMPTZ NOT NULL`, `arrival_ts TIMESTAMPTZ NOT NULL`, `payload JSONB NOT NULL`, `ingested_at TIMESTAMPTZ DEFAULT now()`, with `CONSTRAINT bronze_events_unique UNIQUE (source, event_id)`) and `bronze.rejections` (data-model.md E4: `original_message JSONB`, `reason TEXT NOT NULL`, `received_ts TIMESTAMPTZ NOT NULL`, `CHECK (reason IN ('missing_required_field','wrong_type','value_out_of_range','unknown_event_type','unsupported_schema_version','undeclared_field','invalid_uuid','invalid_timestamp','duplicate_event'))`); idempotent scripts.
 
 **Checkpoint**: Foundation ready — contract models generated and bronze schema defined; user story implementation can now begin.
 
@@ -55,13 +55,13 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T004 [P] [US1] Write `tests/unit/test_reference_build.py`: assert two rebuilds are byte-identical; total size < 1 MB; `segments.csv` has exactly 17 direction-1 rows; `congestion_factor.csv` has 24 rows with the 0.43–0.56 band as a sanity warning (values kept as computed, per R7); `SOURCES.md` has one line per file; `stops.csv` uses real `P-<objectid>` ids; a missing required raw source fails the build with a named message.
+- [X] T004 [P] [US1] Write `tests/unit/test_reference_build.py`: assert two rebuilds are byte-identical; total size < 1 MB; `segments.csv` has exactly 17 direction-1 rows; `congestion_factor.csv` has 24 rows with the 0.43–0.56 band as a sanity warning (values kept as computed, per R7); `SOURCES.md` has one line per file; `stops.csv` uses real `P-<objectid>` ids; a missing required raw source fails the build with a named message.
 
 ### Implementation for User Story 1
 
-- [ ] T005 [US1] Implement `src/reference/build.py`: deterministic `data/raw/` → `data/reference/` build — `segments.csv` (17 rows from `plata/tramos_c6008_s1_osm.csv`), `stops.csv` (real C6-008 stops with `stop_id = "P-<objectid>"` from `paradas_alimentadoras.geojson` filtered `ruta == "C6-008"` + direction 1, projected distance-along + `segment_id`, per R6), `train_arrivals.csv` (line-A Prado weekday arrivals from the 2025 GTFS, per R8), `congestion_factor.csv` (`mean(SIMM VELOCIDAD) ÷ length-weighted corridor free-flow speed` per hour, no tuning constant, per R7), `demand_params.csv` (Metro line A hourly shape + basin-6 feeder share, per R9). Fixed sort orders and rounding; no wall-clock dependence.
-- [ ] T006 [US1] Implement `src/reference/sources.py` and wire `data/reference/SOURCES.md` generation (one line per file: source URL, license, download date, transformation) into the build; add the `make reference` target; make the build fail with a clear message naming a missing raw source.
-- [ ] T007 [US1] Update `contracts/turn1-events/examples/{valid,invalid}/*.json` stop_id values (currently `S-001`/`S-003`/`S-007`) to the real `P-<objectid>` ids from `data/reference/stops.csv`, and update the examples pointers in `contracts/turn1-events/README.md`. No schema version change (`stop_id` is a string; per R6). Requires data-owner sign-off (CODEOWNERS) per the data-profile review.
+- [X] T005 [US1] Implement `src/reference/build.py`: deterministic `data/raw/` → `data/reference/` build — `segments.csv` (17 rows from `plata/tramos_c6008_s1_osm.csv`), `stops.csv` (real C6-008 stops with `stop_id = "P-<objectid>"` from `paradas_alimentadoras.geojson` filtered `ruta == "C6-008"` + direction 1, projected distance-along + `segment_id`, per R6), `train_arrivals.csv` (line-A Prado weekday arrivals from the 2025 GTFS, per R8), `congestion_factor.csv` (`mean(SIMM VELOCIDAD) ÷ length-weighted corridor free-flow speed` per hour, no tuning constant, per R7), `demand_params.csv` (Metro line A hourly shape + basin-6 feeder share, per R9). Fixed sort orders and rounding; no wall-clock dependence.
+- [X] T006 [US1] Implement `src/reference/sources.py` and wire `data/reference/SOURCES.md` generation
+- [X] T007 [US1] Update `contracts/turn1-events/examples/{valid,invalid}/*.json` stop_id values
 
 **Checkpoint**: User Story 1 fully functional and testable independently — reference data is reproducible, complete, and grounded in the real corridor.
 
@@ -141,7 +141,7 @@
 
 **Purpose**: Spec/contract traceability and end-to-end validation across all stories
 
-- [ ] T024 Update `specs/001-base-simulator/spec.md` Assumptions line: replace *"Peak hour means the most congested hour per the congestion factor (lowest real/free ratio)"* with the data-owner decision — the calibration peak hour is FIXED at **17:00** (line A PM peak, Afluencia 2025), because the computed SIMM factor (mean VELOCIDAD ÷ length-weighted free-flow speed = 0.50–0.62) is lowest at 23:00 only due to thin night samples; SC-006 is checked at 17:00 (~22.8 min, within 25 min ±20 %). Align the matching peak-hour note in `specs/001-base-simulator/research.md` (R14) so the two stay consistent (one decision, both docs).
+- [X] T024 Update `specs/001-base-simulator/spec.md` Assumptions line: replace *"Peak hour means the most congested hour per the congestion factor (lowest real/free ratio)"* with the data-owner decision — the calibration peak hour is FIXED at **17:00** (line A PM peak, Afluencia 2025), because the computed SIMM factor (mean VELOCIDAD ÷ length-weighted free-flow speed = 0.50–0.62) is lowest at 23:00 only due to thin night samples; SC-006 is checked at 17:00 (~22.8 min, within 25 min ±20 %). Align the matching peak-hour note in `specs/001-base-simulator/research.md` (R14) so the two stay consistent (one decision, both docs).
 - [ ] T025 [P] Run the `specs/001-base-simulator/quickstart.md` end-to-end validation (V1 reference reproducible, V2 isolation, V3 ingestion validates/rejects/dedupes, V4 simulator deterministic + 17:00 trip) and confirm `make test` coverage > 80 %; verify no deferred turn-2/turn-3 norms were implemented (turn-scope check per the data profile).
 
 ---
