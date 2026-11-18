@@ -1,6 +1,6 @@
 ---
 inclusion: fileMatch
-fileMatchPattern: ["tests/**/*data*", "tests/**/*ingest*", "tests/**/*contract*", "tests/**/*rules*", "tests/**/*simulat*", "tests/fixtures/**"]
+fileMatchPattern: ["tests/**", "contracts/turn1-events/examples/**"]
 ---
 
 # Data profile — Testing

@@ -1,6 +1,6 @@
 ---
 inclusion: fileMatch
-fileMatchPattern: ["contracts/**", "ingestion/**", "rules/**", "simulator/**", "**/*ingest*.py", "**/*contract*.py"]
+fileMatchPattern: ["contracts/**", "db/**", "**/ingestion/**", "**/reference/**", "**/rules/**", "**/simulator/**", "data/reference/**"]
 ---
 
 # Data profile — Development (ingestion, contract and quality rules)
