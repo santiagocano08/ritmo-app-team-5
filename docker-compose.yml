@@ -61,9 +61,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: >
-      sh -c "python -m src.simulator.main --seed ${SIM_SEED:-42} --duration ${SIM_DURATION_S:-3600}
-             | python -m src.ingestion.run"
+    # Single line: a folded (>) scalar keeps the newline before "|", which breaks the pipe.
+    command: ["sh", "-c", "python -m src.simulator.main --seed ${SIM_SEED:-42} --duration ${SIM_DURATION_S:-3600} --pace ${SIM_PACE_S:-1} | python -m src.ingestion.run"]
     environment:
       DATABASE_URL: ${DATABASE_URL}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
