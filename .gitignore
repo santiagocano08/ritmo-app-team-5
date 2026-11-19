@@ -17,6 +17,7 @@ Thumbs.db
 # Environment & secrets (never commit)
 .env
 .env.*
+!.env.example
 *.pem
 *.key
 
