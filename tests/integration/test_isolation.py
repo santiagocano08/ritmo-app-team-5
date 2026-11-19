@@ -20,6 +20,7 @@ restarts the API so subsequent tests in the same session are unaffected.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import time
 
@@ -51,6 +52,9 @@ def _container_running(service: str) -> bool:
 @pytest.fixture(scope="module", autouse=False)
 def api_stopped_then_restored():
     """Stop the API container before the test, restart it after."""
+    # Needs the docker CLI on the host (not available inside the tests container)
+    if shutil.which("docker") is None:
+        pytest.skip("docker CLI not available — run this test from the host")
     # Pre-condition: api must be running
     if not _container_running("api"):
         pytest.skip("API service is not running — skipping isolation test")

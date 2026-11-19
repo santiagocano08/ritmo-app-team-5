@@ -1,48 +1,46 @@
 # ---------------------------------------------------------------------------
-# PulsoFlota — single Python image for all services (api, ingestion).
-# Base: python:3.12-slim (already pulled locally).
-# Non-root execution: UID 10001 (turn-1 no-cost security baseline; full
-# container hardening deferred to turn 2 per docs/turns-ritmo.md §3.3).
+# PulsoFlota — one Python image for all services (api, ingestion), two targets:
+#   prod (default): runtime dependencies only, installed from uv.lock
+#   dev:            prod + dev extras (pytest, ...) for the `tests` service
+# Dependencies come from uv.lock (uv sync --frozen), so local runs, CI and every
+# environment get exactly the same versions. No compiler in the image:
+# psycopg[binary] ships wheels. Non-root UID 10001 (turn-1 baseline).
 # ---------------------------------------------------------------------------
 
-FROM python:3.12-slim
+FROM python:3.12-slim AS base
 
-# -- system deps --------------------------------------------------------------
-# gcc is needed for psycopg[binary] wheel; removed after install to keep image
-# lean.  Also install curl for the healthcheck probe.
+COPY --from=ghcr.io/astral-sh/uv:0.9.5 /uv /usr/local/bin/uv
+
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    PATH="/opt/venv/bin:${PATH}" \
+    PYTHONPATH=/app \
+    PYTHONUNBUFFERED=1
+
+# curl is only for the api healthcheck probe.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends gcc libpq-dev curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# -- non-root user (UID 10001) ------------------------------------------------
-RUN groupadd --gid 10001 appgroup \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10001 appgroup \
     && useradd --uid 10001 --gid appgroup --no-create-home --shell /sbin/nologin appuser
 
-# -- working directory --------------------------------------------------------
 WORKDIR /app
+COPY pyproject.toml uv.lock ./
 
-# -- install Python deps first (cached layer) ---------------------------------
-COPY pyproject.toml ./
-# Install pip-based deps (no uv in container; uv is a dev tool).
-# Install in a venv owned by appuser.
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir \
-        "psycopg[binary]>=3.1,<4" \
-        "pydantic>=2.5,<3" \
-        "fastapi>=0.110,<1" \
-        "uvicorn[standard]>=0.27,<1" \
-        "openpyxl>=3.1,<4"
-
-# -- copy application source --------------------------------------------------
+# --- dev: runtime + dev extras, used by `docker compose --profile tools run tests`
+FROM base AS dev
+RUN uv sync --frozen --no-install-project --extra dev
 COPY src/ ./src/
 COPY data/reference/ ./data/reference/
-
-# -- hand ownership to appuser ------------------------------------------------
 RUN chown -R appuser:appgroup /app
-
 USER appuser
 
-# -- default: run the API (overridden by docker-compose for ingestion) --------
-# The api service sets CMD in docker-compose.yml; the ingestion service
-# overrides it with the simulator | ingestion pipe.
+# --- prod (default, last stage): runtime dependencies only
+FROM base AS prod
+RUN uv sync --frozen --no-install-project --no-dev
+COPY src/ ./src/
+COPY data/reference/ ./data/reference/
+RUN chown -R appuser:appgroup /app
+USER appuser
 CMD ["python", "-m", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]

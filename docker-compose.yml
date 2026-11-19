@@ -10,9 +10,12 @@
 # Stopping 'api' does NOT stop 'ingestion': they are separate services with
 # no depends_on relationship from ingestion to api.
 #
-# Secrets: DB credentials are injected via environment variables at runtime.
-# No secrets are hard-coded here or in .env files committed to the repo
-# (.env is git-ignored per the constitution's no-cost security baseline).
+# Secrets: ALL credentials come from environment variables.  Copy .env.example
+# to .env and set POSTGRES_PASSWORD before starting.  No secrets are
+# hard-coded here or in any committed file (.env is git-ignored).
+#
+# If POSTGRES_PASSWORD is not set the stack will fail to start cleanly
+# (postgres refuses to initialise without it).
 #
 # Turn-1 scope (docs/turns-ritmo.md §3.3 deferred norms):
 #   - No Redis / database-redis service (deferred to turn 3)
@@ -32,16 +35,16 @@ services:
   db:
     image: postgres:16
     environment:
-      POSTGRES_DB: pulsoflota
-      POSTGRES_USER: pulsoflota
-      POSTGRES_PASSWORD: pulsoflota_dev
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (cp .env.example .env)}
     volumes:
       - ./db/init:/docker-entrypoint-initdb.d:ro
       - db_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pulsoflota -d pulsoflota"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -52,18 +55,18 @@ services:
   # This service is intentionally independent of 'api': stopping api does NOT
   # propagate here (Principle III).  It depends only on db being healthy.
   # Entry-point: sh -c so the pipe works in a shell.
-  # SEED and DURATION are configurable via .env or environment overrides.
+  # SIM_SEED and SIM_DURATION_S are read from the environment / .env file.
   # --------------------------------------------------------------------------
   ingestion:
     build:
       context: .
       dockerfile: Dockerfile
     command: >
-      sh -c "python -m src.simulator.main --seed ${SEED:-42} --duration ${DURATION:-3600}
+      sh -c "python -m src.simulator.main --seed ${SIM_SEED:-42} --duration ${SIM_DURATION_S:-3600}
              | python -m src.ingestion.run"
     environment:
-      DATABASE_URL: postgresql://pulsoflota:pulsoflota_dev@db:5432/pulsoflota
-      LOG_LEVEL: INFO
+      DATABASE_URL: ${DATABASE_URL}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
       PYTHONPATH: /app
     depends_on:
       db:
@@ -82,23 +85,56 @@ services:
     command: >
       python -m uvicorn src.api.main:app
       --host 0.0.0.0
-      --port 8000
+      --port ${API_PORT:-8000}
       --no-access-log
     environment:
-      DATABASE_URL: postgresql://pulsoflota:pulsoflota_dev@db:5432/pulsoflota
-      LOG_LEVEL: INFO
+      DATABASE_URL: ${DATABASE_URL}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
       PYTHONPATH: /app
     depends_on:
       db:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8000}:${API_PORT:-8000}"
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8000/healthz || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:${API_PORT:-8000}/healthz || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 6
     restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # tests — runs the full pytest suite inside the app image.
+  # Profile: 'tools' — only started explicitly with:
+  #   docker compose --profile tools run --rm tests
+  # Requires DATABASE_URL to point at the running db service.
+  # --------------------------------------------------------------------------
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    profiles:
+      - tools
+    command: >
+      python -m pytest tests/ -p no:cacheprovider --cov=src --cov-report=term-missing --cov-fail-under=80
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      API_BASE_URL: http://api:${API_PORT:-8000}
+      PYTHONPATH: /app
+      COVERAGE_FILE: /tmp/.coverage
+    # tests/, contracts/ and data/ are excluded from the image (.dockerignore);
+    # mount them read-only so the suite runs on the same image that is deployed.
+    volumes:
+      - ./tests:/app/tests:ro
+      - ./contracts:/app/contracts:ro
+      - ./data:/app/data:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_healthy
 
 volumes:
   db_data:
