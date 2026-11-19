@@ -239,7 +239,11 @@ later fixture and replay depends on the corrected base case.
 
 ### What is cut if time runs out (in this order)
 
-1. **All of Phase 4**: the `refresh` service, the loop, `REFRESH_CLOCK`, SC-009 and SC-010. The
+> Update 2026-11-18 (data owner gate): CUT-1 is narrowed in `tasks.md`. The refresh loop, its
+> compose service and a short live check are no longer cuttable; only the failure test, the notify
+> integration test and the 10-minute live cadence run (SC-009 full) are.
+
+1. **All of Phase 4** (superseded by the note above): the `refresh` service, the loop, `REFRESH_CLOCK`, SC-009 and SC-010. The
    backend then calls `python -m src.pipeline.compute --as-of <UTC time>` on demand or polls gold, which
    the spec accepts (US4 "first story to cut"). `pg_notify` stays in the cycle, so the CLI still
    notifies. R3 is decided but has no consumer until Phase 4 is restored.
@@ -265,7 +269,7 @@ mandatory tests).
 | Live reference time does not match the synthetic simulator clock (R3) | Decided: `REFRESH_CLOCK=data` for the demo, `wall` for real telemetry. The cycle takes `as_of_ts` as an argument; tests and replays use fixed times; the clock choice is isolated in Phase 4. |
 | A full recompute is slower than 5 s on a long-running stack | `duration_ms` is logged per cycle; FR-039 skips late ticks; incremental silver recorded as evolution. A workshop restart with `down -v` resets volume. |
 | Crafted bronze does not reproduce fixture headways exactly | SC-002 compares order, states, quality, status, `sources_down` and counts, not headway values; builders use constant speeds and staggered starts so classes are unambiguous. |
-| `c1_bunching` fixture defect (B-102 `gap` at 752 s) | Excluded from SC-002 until the data owner fixes it (spec Assumptions). |
+| `c1_bunching` fixture defect (B-102 `gap` at 752 s) | Fixed 2026-11-18 by the data owner (B-102 `headway_ahead_s` 752 → 960, Phase 0 task T075); `c1_bunching` is now in SC-002. |
 
 ## Complexity Tracking
 
