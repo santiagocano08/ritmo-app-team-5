@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0.0",
+  "inst_id": "cccc0003-0000-4000-8000-000000000031",
+  "rec_id": "cccc0003-0000-4000-8000-000000000030",
+  "bus_id": "B-101",
+  "text": "Hold at stop P-887 (Cll 58 con Cra. 39) for 90 seconds before departing.",
+  "status": "executed",
+  "ts_by_status": {
+    "sent":     "2026-11-24T08:10:12Z",
+    "received": "2026-11-24T08:10:18Z",
+    "executed": "2026-11-24T08:11:52Z"
+  }
+}

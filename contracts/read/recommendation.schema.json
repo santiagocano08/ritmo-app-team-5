@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "recommendation.schema.json",
+  "title": "Recommendation (v1.0.0)",
+  "description": "A regulation recommendation produced by the backend decision engine. Data persists it in the gold layer. The dispatcher must approve before any on-road action is taken (Principle IV). Screen US-05. See ADR-0003.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "rec_id", "case", "action", "reason",
+    "ewt_saving_s", "horizon_s", "data_quality", "expires_ts",
+    "conflicts_with", "rank", "status", "lineage"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1.0.0"],
+      "description": "Read contract version (SemVer). Turn 1 produces only 1.0.0."
+    },
+    "rec_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID v4 uniquely identifying this recommendation."
+    },
+    "case": {
+      "type": "string",
+      "enum": ["C1", "C2", "C5", "D1"],
+      "description": "Regulation case. C1: bunching → hold. C2: gap → adjust departure. C5: breakdown → reserve dispatch. D1: source outage → information only, no alert."
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "bus_id", "stop_id"],
+      "description": "The specific action proposed.",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["hold", "adjust_departure", "reserve_dispatch"],
+          "description": "Action type. hold: keep bus at stop for duration_s. adjust_departure: depart stop early by duration_s. reserve_dispatch: dispatch a reserve bus from the depot."
+        },
+        "bus_id": {
+          "type": "string",
+          "enum": ["B-101", "B-102", "B-103", "B-104", "B-105", "B-106", "B-107"],
+          "description": "Target bus for the action."
+        },
+        "stop_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stop where the action should be executed."
+        },
+        "duration_s": {
+          "type": ["number", "null"],
+          "description": "Duration in seconds. hold: 0..90 s (positive delay at stop). adjust_departure: -600..600 s (negative = depart earlier, positive = depart later). reserve_dispatch: always null."
+        }
+      }
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable explanation of why this recommendation was generated. Frontend displays this to the dispatcher."
+    },
+    "ewt_saving_s": {
+      "type": "number",
+      "description": "Projected reduction in Excess Wait Time in seconds if the action is applied. Positive = improvement."
+    },
+    "horizon_s": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Time horizon in seconds over which the ewt_saving_s projection is computed."
+    },
+    "data_quality": {
+      "type": "string",
+      "enum": ["live", "estimated"],
+      "description": "Data quality of the snapshot used to generate this recommendation."
+    },
+    "expires_ts": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp after which this recommendation is no longer actionable. Status transitions to 'expired' automatically."
+    },
+    "conflicts_with": {
+      "type": "array",
+      "description": "List of rec_id values that are mutually exclusive with this recommendation. Backend detects conflicts.",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      }
+    },
+    "rank": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3,
+      "description": "Priority rank among concurrent recommendations. 1 = highest priority."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["proposed", "applied", "discarded", "expired"],
+      "description": "Lifecycle status. proposed: awaiting dispatcher decision. applied: dispatcher approved (command_event written). discarded: dispatcher rejected. expired: past expires_ts with no decision."
+    },
+    "lineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model_version", "rule_version", "snapshot_id"],
+      "description": "Traceability fields linking this recommendation to the data and rules that produced it.",
+      "properties": {
+        "model_version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Version of the M1/M2 baseline models used (SemVer string)."
+        },
+        "rule_version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Version of the decision rules applied (SemVer string). Matches the rules_version on gold rows."
+        },
+        "snapshot_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUID v4 of the corridor_now snapshot that triggered this recommendation."
+        }
+      }
+    }
+  },
+  "if": {
+    "properties": {
+      "action": {
+        "properties": { "type": { "const": "hold" } }
+      }
+    }
+  },
+  "then": {
+    "properties": {
+      "action": {
+        "properties": {
+          "duration_s": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 90
+          }
+        }
+      }
+    }
+  },
+  "else": {
+    "if": {
+      "properties": {
+        "action": {
+          "properties": { "type": { "const": "adjust_departure" } }
+        }
+      }
+    },
+    "then": {
+      "properties": {
+        "action": {
+          "properties": {
+            "duration_s": {
+              "type": "number",
+              "minimum": -600,
+              "maximum": 600
+            }
+          }
+        }
+      }
+    },
+    "else": {
+      "properties": {
+        "action": {
+          "properties": {
+            "duration_s": { "type": "null" }
+          }
+        }
+      }
+    }
+  }
+}

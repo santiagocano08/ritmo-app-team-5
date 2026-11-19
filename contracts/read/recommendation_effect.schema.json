@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "recommendation_effect.schema.json",
+  "title": "Recommendation Effect (v1.0.0)",
+  "description": "Before/after measurement of a recommendation's impact on headway and EWT. Produced by the data layer (gold view) after the horizon window closes. Screen US-11. See ADR-0003.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "rec_id", "headway_before_s", "headway_after_s",
+    "headway_planned_s", "ewt_expected_s", "ewt_observed_s", "result"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1.0.0"],
+      "description": "Read contract version (SemVer). Turn 1 produces only 1.0.0."
+    },
+    "rec_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID v4 of the recommendation this effect measurement belongs to."
+    },
+    "headway_before_s": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "description": "Observed headway in seconds at the target stop immediately before the action was applied. Null if not enough data."
+    },
+    "headway_after_s": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "description": "Observed headway in seconds at the target stop after the action horizon elapsed. Null if not enough data."
+    },
+    "headway_planned_s": {
+      "type": "number",
+      "minimum": 1,
+      "description": "Planned headway in seconds for this time window. Turn 1 peak value: 600 s."
+    },
+    "ewt_expected_s": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "description": "EWT reduction projected by the recommendation engine at proposal time, in seconds. Null if D1 (information-only case)."
+    },
+    "ewt_observed_s": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "description": "Actual EWT observed at the target stop after the horizon window, in seconds. Null if not enough data."
+    },
+    "result": {
+      "type": "string",
+      "enum": ["worked", "partial", "did_not_work", "no_data"],
+      "description": "Effect assessment. 'worked': EWT improved by at least 30 s (ewt_expected_s - ewt_observed_s >= 30); hypothesis threshold to validate with the dispatcher. 'partial': EWT improved but by less than 30 s (0 < improvement < 30 s), or headway improved but EWT did not. 'did_not_work': neither headway nor EWT improved. 'no_data': insufficient observations after the horizon."
+    }
+  }
+}

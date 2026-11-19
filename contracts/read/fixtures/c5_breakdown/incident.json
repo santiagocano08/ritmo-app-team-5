@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0.0",
+  "inc_id": "dddd0004-0000-4000-8000-000000000040",
+  "type": "bus_breakdown",
+  "target_id": "B-104",
+  "duration_s": null,
+  "since": "2026-11-24T08:18:30Z",
+  "until": null,
+  "reported_by": "script"
+}

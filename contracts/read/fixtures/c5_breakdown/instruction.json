@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0.0",
+  "inst_id": "dddd0004-0000-4000-8000-000000000042",
+  "rec_id": "dddd0004-0000-4000-8000-000000000041",
+  "bus_id": "B-106",
+  "text": "Depart from P-883 (Cra.51 con Cll.59) immediately as a reserve replacement for B-104.",
+  "status": "received",
+  "ts_by_status": {
+    "sent":     "2026-11-24T08:20:35Z",
+    "received": "2026-11-24T08:20:48Z"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0.0",
+  "rec_id": "bbbb0002-0000-4000-8000-000000000020",
+  "case": "D1",
+  "action": {
+    "type": "reserve_dispatch",
+    "bus_id": "B-103",
+    "stop_id": "P-889",
+    "duration_s": null
+  },
+  "reason": "B-103 has not reported for 2 min 30 s. Position is estimated. No alert raised. Monitoring only.",
+  "ewt_saving_s": 0,
+  "horizon_s": 300,
+  "data_quality": "estimated",
+  "expires_ts": "2026-11-24T08:09:00Z",
+  "conflicts_with": [],
+  "rank": 3,
+  "status": "proposed",
+  "lineage": {
+    "model_version": "1.0.0",
+    "rule_version": "1.0.0",
+    "snapshot_id": "bbbb0002-0000-4000-8000-000000000002"
+  }
+}

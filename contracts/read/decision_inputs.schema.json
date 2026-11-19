@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "decision_inputs.schema.json",
+  "title": "Decision Inputs (v1.0.0)",
+  "description": "Internal snapshot fed to the backend decision engine. Extends the corridor_now fleet state with M1 travel-time forecasts, M2 demand forecast, resources and active incidents. INTERNAL: never sent to the frontend directly. Screen US-05. See ADR-0003.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "snapshot_id", "as_of_ts", "corridor_id", "direction",
+    "buses", "summary", "travel_time_forecast", "demand_15min",
+    "resources", "action_cost", "active_incidents", "enabled_stops"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1.0.0"],
+      "description": "Read contract version (SemVer). Turn 1 produces only 1.0.0."
+    },
+    "snapshot_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID v4 identifying this snapshot. Matches corridor_now.snapshot_id for the same cycle."
+    },
+    "as_of_ts": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp when this snapshot was assembled."
+    },
+    "corridor_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Corridor identifier. Turn 1: 'C6-008'."
+    },
+    "direction": {
+      "type": "integer",
+      "enum": [1],
+      "description": "Travel direction. Turn 1 supports direction 1 only."
+    },
+    "buses": {
+      "type": "array",
+      "description": "Same bus entries as corridor_now.buses, ordered by distance_along_m descending (leader first).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "bus_id", "direction", "prev_stop_id", "next_stop_id",
+          "distance_along_m", "headway_ahead_s", "headway_planned_s",
+          "bus_state", "data_quality", "ts"
+        ],
+        "properties": {
+          "bus_id": {
+            "type": "string",
+            "enum": ["B-101", "B-102", "B-103", "B-104", "B-105", "B-106", "B-107"]
+          },
+          "direction": { "type": "integer", "enum": [1] },
+          "prev_stop_id": { "type": "string", "minLength": 1 },
+          "next_stop_id": { "type": "string", "minLength": 1 },
+          "distance_along_m": { "type": "number", "minimum": 0, "maximum": 5119.4 },
+          "headway_ahead_s": { "type": ["number", "null"], "minimum": 0 },
+          "headway_planned_s": { "type": "number", "minimum": 1 },
+          "bus_state": {
+            "type": "string",
+            "enum": ["leader", "regular", "bunched", "gap", "broken_down"]
+          },
+          "data_quality": { "type": "string", "enum": ["live", "estimated"] },
+          "ts": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["buses_in_service", "n_bunched", "n_gaps"],
+      "properties": {
+        "buses_in_service": { "type": "integer", "minimum": 0 },
+        "n_bunched": { "type": "integer", "minimum": 0 },
+        "n_gaps": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "travel_time_forecast": {
+      "type": "array",
+      "description": "M1 baseline travel-time forecast per segment. One entry per segment id (1-17).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["segment_id", "forecast_travel_s"],
+        "properties": {
+          "segment_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 17,
+            "description": "Segment identifier matching data/reference/segments.csv."
+          },
+          "forecast_travel_s": {
+            "type": "number",
+            "minimum": 0,
+            "description": "M1 baseline predicted travel time for this segment in seconds."
+          }
+        }
+      },
+      "minItems": 1,
+      "maxItems": 17
+    },
+    "demand_15min": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["window_start_ts", "window_end_ts", "arrivals_forecast"],
+      "description": "M2 baseline demand forecast for the next 15-minute window at Prado station (P-883).",
+      "properties": {
+        "window_start_ts": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC start of the 15-minute window."
+        },
+        "window_end_ts": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC end of the 15-minute window."
+        },
+        "arrivals_forecast": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Forecast number of rider arrivals at P-883 in this window."
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reserve_free", "drivers_free"],
+      "description": "Available reserve resources.",
+      "properties": {
+        "reserve_free": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["B-106", "B-107"]
+          },
+          "description": "Reserve bus ids available for dispatch."
+        },
+        "drivers_free": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of drivers available to operate a reserve bus."
+        }
+      }
+    },
+    "action_cost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hold_penalty_s", "early_departure_penalty_s"],
+      "description": "Cost parameters used by the decision engine for this window.",
+      "properties": {
+        "hold_penalty_s": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Additional wait time imposed on boarding passengers when a bus is held, in seconds."
+        },
+        "early_departure_penalty_s": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Additional wait time for passengers who miss an early departure, in seconds."
+        }
+      }
+    },
+    "active_incidents": {
+      "type": "array",
+      "description": "List of inc_id strings referencing currently active incident objects.",
+      "items": {
+        "type": "string",
+        "format": "uuid",
+        "description": "inc_id of an active incident."
+      }
+    },
+    "enabled_stops": {
+      "type": "array",
+      "description": "Stop ids where regulation actions (hold, adjust_departure) are permitted in this window.",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1
+    }
+  }
+}

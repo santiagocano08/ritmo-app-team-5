@@ -1,0 +1,74 @@
+{
+  "schema_version": "1.0.0",
+  "snapshot_id": "dddd0004-0000-4000-8000-000000000004",
+  "as_of_ts": "2026-11-24T08:20:00Z",
+  "corridor_id": "C6-008",
+  "direction": 1,
+  "buses": [
+    {
+      "bus_id": "B-105",
+      "direction": 1,
+      "prev_stop_id": "P-896",
+      "next_stop_id": "P-897",
+      "distance_along_m": 4520.0,
+      "headway_ahead_s": null,
+      "headway_planned_s": 600,
+      "bus_state": "leader",
+      "data_quality": "live",
+      "ts": "2026-11-24T08:19:55Z"
+    },
+    {
+      "bus_id": "B-103",
+      "direction": 1,
+      "prev_stop_id": "P-892",
+      "next_stop_id": "P-893",
+      "distance_along_m": 3650.0,
+      "headway_ahead_s": 1200,
+      "headway_planned_s": 600,
+      "bus_state": "gap",
+      "data_quality": "live",
+      "ts": "2026-11-24T08:19:55Z"
+    },
+    {
+      "bus_id": "B-104",
+      "direction": 1,
+      "prev_stop_id": "P-891",
+      "next_stop_id": "P-892",
+      "distance_along_m": 3240.5,
+      "headway_ahead_s": null,
+      "headway_planned_s": 600,
+      "bus_state": "broken_down",
+      "data_quality": "live",
+      "ts": "2026-11-24T08:19:55Z"
+    },
+    {
+      "bus_id": "B-102",
+      "direction": 1,
+      "prev_stop_id": "P-890",
+      "next_stop_id": "P-891",
+      "distance_along_m": 3100.0,
+      "headway_ahead_s": 597,
+      "headway_planned_s": 600,
+      "bus_state": "regular",
+      "data_quality": "live",
+      "ts": "2026-11-24T08:19:55Z"
+    },
+    {
+      "bus_id": "B-101",
+      "direction": 1,
+      "prev_stop_id": "P-888",
+      "next_stop_id": "P-889",
+      "distance_along_m": 2650.0,
+      "headway_ahead_s": 598,
+      "headway_planned_s": 600,
+      "bus_state": "regular",
+      "data_quality": "live",
+      "ts": "2026-11-24T08:19:55Z"
+    }
+  ],
+  "summary": {
+    "buses_in_service": 4,
+    "n_bunched": 0,
+    "n_gaps": 1
+  }
+}
