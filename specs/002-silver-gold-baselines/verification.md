@@ -91,3 +91,53 @@ Rework count: 4 (2 and 4 only show up inside the container; 1 and 3 are test-aut
   5,119.4 m corridor; headway classes are unambiguous, headway values are not compared (SC-002).
 - The live compose stack was not recreated. The new init scripts only apply on a fresh volume
   (`docker compose down -v && docker compose up -d --build`); tests use throwaway databases.
+
+---
+
+## Phase 1 — Silver current state (US1), T025–T033
+
+| Item | Value |
+|---|---|
+| Start | 2026-11-19T12:53:55Z |
+| End | 2026-11-19T13:02:22Z (whole-suite run finished 13:00:59Z) |
+| Branch | `feature/002-silver-gold-baselines`, on top of `777b59e` |
+
+Note: the Docker daemon was stopped at the start of the phase, so the stack was not up as announced. I started Docker Desktop; the `db`, `api` and `ingestion` containers came back healthy on their own before any test ran.
+
+### Test-first evidence
+
+Before `src/pipeline/silver.py` and the SQL files existed, the three integration files failed at collection with `ModuleNotFoundError: No module named 'src.pipeline.silver'`. `test_no_bronze_writes.py::test_silver_sql_files_are_part_of_the_scan` failed because the silver SQL files were absent (12 of its 13 tests passed, as they exercise the detector). After the implementation: 77 passed.
+
+### Commands and results
+
+| Command | Result |
+|---|---|
+| `uv run pytest tests/unit/test_no_bronze_writes.py tests/integration/test_silver.py tests/integration/test_silver_visits_traversals.py tests/integration/test_rebuild.py --no-cov -q` (host) | **77 passed, 0 failed** (13 + 26 + 31 + 7) |
+| `docker compose --profile tools build tests` then `docker compose --profile tools run --rm tests` (CI-ready command, Andon check, whole suite) | exit 0; **260 passed, 0 failed, 3 skipped**; coverage 90.60 % (gate 80 %) |
+| `uv run pytest -q` (host, whole suite, includes the 3 docker-CLI tests) | **263 passed, 0 failed**; coverage 90.60 % |
+
+Per-file counts (host): `test_no_bronze_writes.py` 13, `test_silver.py` 26 (incl. the 5 parametrized Estimated ages), `test_silver_visits_traversals.py` 31, `test_rebuild.py` 7; the four files sum to 77.
+
+The whole suite (001 + 002, unit + integration + contract) is green, so the line was not stopped. Before the phase: 183 passed + 3 skipped in the container. After: 260 passed + 3 skipped (+77).
+
+Throwaway databases: none left on the server (`pg_database`: `postgres`, `pulsoflota`, `template0`, `template1`).
+
+### Rework (tests that failed for an unexpected reason and were fixed)
+
+| # | Test | Cause | Fix |
+|---|---|---|---|
+| 1 | `test_silver.py::test_reserve_bus_is_reserve_when_off_corridor_and_in_service_when_dispatched` | I used bus id `B-109`, which the 001 boundary rejects (not a valid bus id) | Used `B-101` with a finished trip for the `off_corridor` case. Test bug. |
+| 2 | `test_silver_visits_traversals.py::test_incident_rows_use_event_id_and_the_half_open_interval` | I used `reported_by="dispatcher-01"`; the contract enum is `dispatcher` or `script` | Value changed to `dispatcher`. Test bug. |
+| 3 | `test_rebuild.py::test_rebuild_source_does_not_use_truncate` | Plain substring `truncate` also matched the word in the docstring of `silver.py` | Check changed to a regex for a `TRUNCATE <schema>.<table>` statement. Test bug. |
+
+Rework count: 3, all test-authoring mistakes. No product rule or threshold was changed to make a test pass.
+
+### Decisions taken during the phase
+
+- The 120 s threshold is `ESTIMATED_AFTER_S` in `src/rules/__init__.py` and reaches the SQL only as the `estimated_after_s` parameter. It is a rule constant, not an environment setting, so `.env.example` has no new entry.
+- SQL parameters use psycopg named placeholders (`%(as_of_ts)s`, `%(max_bronze_id)s`, `%(estimated_after_s)s`) instead of the `$name` style in the task text.
+- `rebuild_silver(conn, as_of_ts, max_bronze_id)` does not commit; the caller (the cycle, in Phase 2) owns the transaction. A test checks that a failing rebuild leaves the previous silver after rollback.
+- `silver.bus_current_state` and `segment_traversals` read `silver.incidents`, so the build order is position_history, incidents, bus_current_state, stop_visits, segment_traversals.
+- Segment id = `stop_seq` of the departure stop (segment *k* = seq *k* → *k+1*, as in data-model S5). The `segment_id` column of `stops.csv` is not used.
+- Test support only: `tests/integration/conftest.py` (function-scoped `silver_conn`, clears bronze and silver in the throwaway database only) and `tests/fixtures/silver_support.py`.
+- No change under `contracts/`, `docs/adr/`, `db/init/`, the simulator, the ingestion code, `.kiro/`, `.specify/` or the checklists. No new setting, so `.env.example` is unchanged.
