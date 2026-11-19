@@ -21,8 +21,6 @@ RESERVE = ("B-106", "B-107")  # not dispatched in turn 1
 OPERATOR = "OP-01"
 SOURCE = "simulator"
 SIGMA = 0.20  # lognormal travel-time noise (mean-preserving)
-START_HEADWAY_S = 300  # initial spacing between in-service buses
-LAYOVER_S = 300  # pause at the terminal before the next direction-1 trip
 WALK_MIN_S, WALK_MAX_S = 60, 180  # train -> stop walk
 # ASSUMPTION (declared in data/reference/SOURCES.md): share of direction-1 daily
 # riders who arrive at Prado by Metro train (batches); the rest are street riders

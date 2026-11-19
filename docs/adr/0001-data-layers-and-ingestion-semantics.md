@@ -117,3 +117,5 @@ Decided by the data owner at the contract and data architecture gate, 2026-11-17
   aggregate was derived from), not a full bronze range.
 - **Duplicates go to `bronze.rejections` with reason `duplicate_event`** (wording confirmed).
 - **Bronze retention: none in turn 1** (no retention policy; deferred to turn 3).
+
+Addendum 2026-11-18: a fourth schema, `config`, holds static configuration and reference tables. It holds no derived data and no secrets.

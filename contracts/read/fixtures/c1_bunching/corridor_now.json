@@ -35,7 +35,7 @@
       "prev_stop_id": "P-887",
       "next_stop_id": "P-888",
       "distance_along_m": 2500.0,
-      "headway_ahead_s": 752,
+      "headway_ahead_s": 960,
       "headway_planned_s": 600,
       "bus_state": "gap",
       "data_quality": "live",

@@ -1,4 +1,4 @@
-.PHONY: generate reference up down test lint clean
+.PHONY: generate generate-read reference up down test lint clean
 
 # Regenerate Pydantic V2 models from the accepted turn-1 contract schemas.
 # The generated file is a build artifact — never hand-edited.
@@ -17,6 +17,29 @@ generate:
 	  --enum-field-as-literal one \
 	  --use-field-description \
 	  --disable-timestamp
+
+# Regenerate the Pydantic V2 models of the three gold read objects (research R9).
+# One module per schema under src/pulsoflota/models/read/. Never hand-edited;
+# running it twice must leave `git diff` empty.
+READ_SCHEMAS := source_status corridor_now decision_inputs
+generate-read:
+	mkdir -p src/pulsoflota/models/read
+	touch src/pulsoflota/models/read/__init__.py
+	for name in $(READ_SCHEMAS); do \
+	  datamodel-codegen \
+	    --input contracts/read/$$name.schema.json \
+	    --input-file-type jsonschema \
+	    --output src/pulsoflota/models/read/$$name.py \
+	    --output-model-type pydantic_v2.BaseModel \
+	    --use-annotated \
+	    --use-double-quotes \
+	    --target-python-version 3.12 \
+	    --use-title-as-name \
+	    --strict-nullable \
+	    --enum-field-as-literal one \
+	    --use-field-description \
+	    --disable-timestamp || exit 1; \
+	done
 
 # Build curated reference data from data/raw/ -> data/reference/
 reference:

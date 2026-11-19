@@ -14,13 +14,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Iterator
 
+from src.pulsoflota.config import get_sim_planned_headway_s
 from src.simulator.model import (
     CAPACITY,
     IN_SERVICE,
-    LAYOVER_S,
     OPERATOR,
     SOURCE,
-    START_HEADWAY_S,
     STEP_S,
     TRAIN_SHARE,
     WALK_MAX_S,
@@ -42,6 +41,7 @@ SIM_DATE = (2026, 11, 24)
 class Bus:
     bus_id: str
     start_at: int
+    first_start: int = 0  # scheduled start of trip 1; later trips follow `cycle` (R14)
     trip_n: int = 1
     phase: str = "waiting"  # waiting | dwell | driving | layover
     phase_end: int = 0
@@ -64,7 +64,11 @@ def run(seed: int, duration: int, start_hour: int = 17, demand_scale: float = 1.
     base = datetime(*SIM_DATE, start_hour, tzinfo=LOCAL_TZ)
     start_s = start_hour * 3600
     last = len(ref.stops) - 1
-    buses = [Bus(b, i * START_HEADWAY_S) for i, b in enumerate(IN_SERVICE)]
+    # R14: buses start one planned headway apart; each bus is re-dispatched from P-883
+    # every `cycle` seconds (the terminal layover stands in for the unsimulated return leg).
+    planned_s = get_sim_planned_headway_s()
+    cycle = len(IN_SERVICE) * planned_s
+    buses = [Bus(b, i * planned_s, first_start=i * planned_s) for i, b in enumerate(IN_SERVICE)]
     queues = [deque() for _ in ref.stops]
     train_times = [s for s, _ in ref.train_secs]
     pend: list[tuple[int, int, int, Rider]] = []  # heap of (ts, seq, stop_idx, rider)
@@ -148,7 +152,8 @@ def run(seed: int, duration: int, start_hour: int = 17, demand_scale: float = 1.
                 boarded, alighted, rejected, occ_in = b.pending
                 out.append(env("stop_departure", t, _stop_payload(b, ref, boarded, alighted, rejected, len(b.load))))
                 if b.idx == last:
-                    b.phase, b.phase_end = "layover", t + LAYOVER_S
+                    # R14: next trip leaves P-883 at its scheduled time, or now if already late
+                    b.phase, b.phase_end = "layover", max(t, b.first_start + b.trip_n * cycle)
                 else:
                     b.phase, b.next_idx = "driving", b.idx + 1
             out.append(env("bus_position", t, _position_payload(b, ref)))

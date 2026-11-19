@@ -66,6 +66,7 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      SIM_PLANNED_HEADWAY_S: ${SIM_PLANNED_HEADWAY_S:-600}
       PYTHONPATH: /app
     depends_on:
       db:
@@ -129,6 +130,13 @@ services:
       - ./tests:/app/tests:ro
       - ./contracts:/app/contracts:ro
       - ./data:/app/data:ro
+      # Phase 0 (002): read-only inputs for the throwaway-DB fixture (R10) and the
+      # config/compose/ADR/spec checks of T002, T008 and T016.
+      - ./db:/app/db:ro
+      - ./specs:/app/specs:ro
+      - ./docs/adr:/app/docs/adr:ro
+      - ./docker-compose.yml:/app/docker-compose.yml:ro
+      - ./.env.example:/app/.env.example:ro
     depends_on:
       db:
         condition: service_healthy

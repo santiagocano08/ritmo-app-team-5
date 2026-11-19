@@ -29,3 +29,24 @@ def db_conn(db_dsn):
     import psycopg
     with psycopg.connect(db_dsn, autocommit=False) as conn:
         yield conn
+
+
+@pytest.fixture(scope="session")
+def db_template(db_dsn):
+    """Template database built once per session from db/init/*.sql + reference tables (R10)."""
+    from tests.db_helpers import build_template, drop_database
+
+    name = build_template(db_dsn)
+    try:
+        yield name
+    finally:
+        drop_database(db_dsn, name)
+
+
+@pytest.fixture(scope="module")
+def module_db_dsn(db_dsn, db_template):
+    """DSN of a database private to the test module, dropped at teardown (R10)."""
+    from tests.db_helpers import throwaway_database
+
+    with throwaway_database(db_dsn, db_template) as dsn:
+        yield dsn
