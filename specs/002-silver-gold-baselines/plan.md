@@ -229,9 +229,9 @@ planning estimates, not measurements.
 |---|---|---|---|---|
 | 0 | **Foundations**: **simulator base-case fix (R14, first)**, read models, dev deps, DDL + seed (`config` schema), ADR-0001 addendum, reference loader, test DB fixture, bronze builders | ~20 % | seeded 2-hour base run: median headway at P-883 = 600 s ± 60 s and none below 300 s; updated 001 simulator tests green; fixtures valid under JSON Schema; DDL/seed test green ([quickstart §0](quickstart.md#phase-0--foundations)) | a clean base case and the base every later test needs |
 | 1 | **Silver current state** (US1, P1) | ~25 % | US1 scenarios 1–6 green, Estimated boundary, rebuild equality, bronze untouched | trustworthy per-bus state; Estimated rule |
-| 2 | **Gold `source_status` / `corridor_now` + service metric + `compute` CLI** (US2, P2) | ~25 % | SC-002 on 4 fixtures, SC-003, SC-004, SC-007, SC-008, schema validation, negative headway clamped to 0 | what the console reads; on-demand snapshots |
+| 2 | **Gold `source_status` / `corridor_now` + service metric + `compute` CLI** (US2, P2) | ~25 % | SC-002 on 5 fixtures (`c1_bunching` fixed by T075), SC-003, SC-004, SC-007, SC-008, schema validation, negative headway clamped to 0 | what the console reads; on-demand snapshots |
 | 3 | **M1/M2 + `decision_inputs`** (US3, P3) | ~20 % | SC-006 oracles (M2 half-away rounding, R12 sample rule), `decision_inputs` schema-valid and equal to `corridor_now`, SC-001 60-min replay, SC-005 | complete inputs for the decision engine |
-| 4 | **Refresh loop + NOTIFY + compose service** (US4, P4) | ~10 % | no-overlap and failure tests, clock-selector test, notify test, SC-009 live run, SC-010 | push without polling |
+| 4 | **Refresh loop + NOTIFY + compose service** (US4, P4) | ~10 % | no-overlap, failed-cycle and clock-selector unit tests, compose test, short live check, SC-010; (CUT-1) failure, notify and 10-minute SC-009 tests | push without polling |
 
 Within each phase: write the failing tests, implement, run the phase check, then continue. Inside
 Phase 0 the order is fixed: the R14 acceptance test and the simulator fix come first, because every
@@ -239,24 +239,26 @@ later fixture and replay depends on the corrected base case.
 
 ### What is cut if time runs out (in this order)
 
-> Update 2026-11-18 (data owner gate): CUT-1 is narrowed in `tasks.md`. The refresh loop, its
-> compose service and a short live check are no longer cuttable; only the failure test, the notify
-> integration test and the 10-minute live cadence run (SC-009 full) are.
+> Update 2026-11-18 (data owner gate): CUT-1 is narrowed in `tasks.md`.
+> `tasks.md` is authoritative for the cut list.
 
-1. **All of Phase 4** (superseded by the note above): the `refresh` service, the loop, `REFRESH_CLOCK`, SC-009 and SC-010. The
-   backend then calls `python -m src.pipeline.compute --as-of <UTC time>` on demand or polls gold, which
-   the spec accepts (US4 "first story to cut"). `pg_notify` stays in the cycle, so the CLI still
-   notifies. R3 is decided but has no consumer until Phase 4 is restored.
+1. **CUT-1, only the expensive Phase 4 checks** (`tasks.md` wins): `test_refresh_failure.py` (T066),
+   `test_notify.py` (T067), the 10-minute live cadence test (T068) and the 10-minute part of T071.
+   The loop (T064, T065, T069, T070: `refresh` service, `REFRESH_CLOCK`, failed-cycle case in T064)
+   and the short T071 check (a notification within 15 s, first-minute cadence about 5 s, SC-010)
+   are not cuttable, because without the loop nobody recomputes gold in the live demo.
+   `pg_notify` stays in the cycle.
 2. **SC-001 at full density**: run the 60-minute replay at `--step 60` instead of `--step 5` (60
    snapshots instead of 720), keep it marked `slow`, and record the reduced density in
    `verification.md`.
-3. **M2 observed path tests beyond one case**: keep the reference fallback (always active in the
-   workshop, because there are fewer than 5 days of history) fully tested, and keep one crafted
-   5-day observed case.
+3. **M2 observed path tests beyond one case** (CUT-3, T054): the R12 sample-rule edge cases. Keep
+   the reference fallback (always active in the workshop, because there are fewer than 5 days of
+   history) fully tested, one crafted 5-day observed case, and the x.5 rounding case per path (T053).
 
-Not cuttable: Phases 0–2 (including the R14 simulator fix), the M1 and M2 reference fallbacks,
-`decision_inputs` schema validity, idempotency and lineage tests (Principles II and V, data profile
-mandatory tests).
+Not cuttable: Phases 0–3 except CUT-2 and CUT-3 (including the R14 simulator fix, the T075 fixture
+fix, the M1 and M2 reference fallbacks, `decision_inputs` schema validity, idempotency and lineage
+tests; Principles II and V, data profile mandatory tests), plus T064, T065, T069, T070 and the short
+check of T071. That is the minimum delivery.
 
 ## Risks
 

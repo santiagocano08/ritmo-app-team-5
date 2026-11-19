@@ -110,6 +110,11 @@ simulator stamps synthetic event times (2026-11-24 from 17:00 local, 5× faster 
 - In `data` mode the clock stops when all buses go silent, so the "all buses silent" case cannot turn
   Estimated in a live demo. This is accepted: the Estimated rule is covered by tests with fixed
   reference times (SC-003), and the D1 demo silences one bus, not all.
+- **Declared limitation (R3/R5, 2026-11-18)**: in `REFRESH_CLOCK=data` mode, if the whole feed
+  stops, `as_of_ts` freezes, the snapshot key `(as_of_ts, rules_version, max_bronze_id)` repeats
+  (R5 inserts nothing and sends no `NOTIFY`), and buses do not turn Estimated. Single-bus outages
+  (D1) work because the other buses advance the clock. `wall` mode detects a whole-feed outage.
+  No design change.
 - If bronze has no bus report yet, `data` mode has no maximum to read. The cycle then falls back to
   the wall clock for that tick, which yields `no_data` as FR-018 requires. Planning assumption, to
   be pinned by a unit test.
@@ -217,9 +222,10 @@ FR-038.
 - **Traversal flags** (FR-014): `travelled_while_estimated` if any two consecutive bus reports of
   that bus inside `[t_departure(i), t_arrival(i+1)]` (both ends included) are more than 120 s apart.
   `broken_down` if a `bus_breakdown` incident for that bus overlaps the interval.
-- **Local time** (FR-026): SQL uses `AT TIME ZONE 'America/Bogota'`. Python uses the fixed UTC−5
-  offset already used by the simulator (`LOCAL_TZ`). Colombia has no daylight saving, so the two
-  agree. The slim image may lack system tzdata, so Python does not use `zoneinfo`.
+- **Local time** (FR-026): SQL and Python both use the fixed UTC−5 offset already used by the
+  simulator (`LOCAL_TZ`); SQL: `extract(hour from (t AT TIME ZONE 'UTC' - interval '5 hours'))`, not
+  `AT TIME ZONE 'America/Bogota'` (T032). Colombia has no daylight saving, so this is exact. The
+  slim image may lack system tzdata, so Python does not use `zoneinfo`.
 
 **Rationale**: these choices follow the spec's wording and edge cases and the 001 simulator's real
 event sequence, and they keep each rule testable in isolation.

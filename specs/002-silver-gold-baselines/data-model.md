@@ -176,7 +176,7 @@ A row exists only when both events exist.
 | `departure_ts` | TIMESTAMPTZ | `stop_departure` at stop *k* |
 | `arrival_ts` | TIMESTAMPTZ | `stop_arrival` at stop *k+1*, same trip |
 | `travel_s` | NUMERIC | `arrival_ts − departure_ts` |
-| `hour_band` | SMALLINT 0..23 | local hour (America/Bogotá) of `departure_ts` (FR-026) |
+| `hour_band` | SMALLINT 0..23 | local hour (fixed UTC−5 offset, no time-zone database) of `departure_ts` (FR-026) |
 | `travelled_while_estimated` | BOOLEAN | any consecutive bus-report gap > 120 s within `[departure_ts, arrival_ts]` |
 | `broken_down` | BOOLEAN | a `bus_breakdown` incident for the bus overlaps the interval |
 

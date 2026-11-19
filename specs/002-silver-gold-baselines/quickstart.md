@@ -66,7 +66,7 @@ the simulator.
 
 | Check | Test | Expected |
 |---|---|---|
-| SC-002 fixture scenarios | `tests/integration/test_gold_fixtures.py` | crafted bronze for `normal`, `d1_source_outage`, `c2_gap`, `c5_breakdown` → bus order, `bus_state`, `data_quality`, `status`, `sources_down`, summary counts equal the fixture. `c1_bunching` is excluded until its fixture is fixed (spec Assumptions). |
+| SC-002 fixture scenarios | `tests/integration/test_gold_fixtures.py` | crafted bronze for `normal`, `c1_bunching`, `d1_source_outage`, `c2_gap`, `c5_breakdown` (5 fixtures) → bus order, `bus_state`, `data_quality`, `status`, `sources_down`, summary counts equal the fixture. `c1_bunching` uses the fixture fixed by T075 (B-102 `headway_ahead_s` 960). |
 | FR-011 / edge cases | `tests/unit/test_classify.py` | Estimated bus and its follower `regular`; two consecutive Estimated buses; thresholds exactly 300 s and 900 s → `regular`; equal distance → 0 and `bunched`; broken-down leader; single bus |
 | Headway interpolation | `tests/unit/test_headway.py` | known histories give the expected pass time; a negative difference is clamped to 0 (R8, DECIDED), and the follower is `bunched` unless FR-011 forces `regular` |
 | SC-007 metric | `tests/unit/test_service_metric.py` | {300, 900} → 375 / 75; 4 × 600 → 300 / 0; no headway → not computable |
@@ -96,15 +96,18 @@ snapshot_id = '<id>'` returns a schema-shaped object. The simulator's event time
 | SC-001 60-minute replay | `tests/integration/test_replay_60min.py` (marked `slow`) | seed 42, 3,600 s simulated, piped through `ingest` into a test DB; `compute --from/--to --step 5 --no-notify` → 100 % of the three objects valid |
 | SC-005 full rebuild | `tests/integration/test_rebuild.py` | after a replay, drop and recreate silver and gold, recompute at the last `as_of_ts` → silver, M1/M2 and that snapshot are identical |
 
-## Phase 4 — Refresh loop with NOTIFY (US4, cuttable)
+## Phase 4 — Refresh loop with NOTIFY (US4; the loop is not cuttable, only its expensive checks)
+
+Minimum delivery: Phases 0–3 plus T064, T065, T069, T070 and the short T071 check. Rows marked
+(CUT-1) can be dropped: failure test, notify test, 10-minute cadence run.
 
 | Check | Test / command | Expected |
 |---|---|---|
-| No overlap, late tick skipped | `tests/unit/test_refresh_loop.py` (injected clock and a slow fake cycle) | no concurrent cycles; the tick during the slow cycle is skipped |
-| Failed cycle | `tests/integration/test_refresh_failure.py` | forced error → no snapshot row, no notification, one JSON error line without a traceback; the next cycle succeeds |
-| Notify after readable | `tests/integration/test_notify.py` | a listener receives exactly one payload per new snapshot; the payload validates against `contracts/gold_snapshot_notify.schema.json`; the snapshot is readable on receipt |
+| No overlap, late tick skipped, failed cycle | `tests/unit/test_refresh_loop.py` (injected clock and a slow fake cycle) | no concurrent cycles; the tick during the slow cycle is skipped; a fake cycle that raises once is logged and the next tick runs normally (FR-040) |
+| Failed cycle (CUT-1) | `tests/integration/test_refresh_failure.py` | forced error → no snapshot row, no notification, one JSON error line without a traceback; the next cycle succeeds |
+| Notify after readable (CUT-1) | `tests/integration/test_notify.py` | a listener receives exactly one payload per new snapshot; the payload validates against `contracts/gold_snapshot_notify.schema.json`; the snapshot is readable on receipt |
 | Clock selector (R3) | `tests/unit/test_refresh_loop.py` | `data`: `as_of_ts` = max `event_ts` of non-backend bus reports (backend events ignored; wall clock used while there are none); `wall`: current UTC from the injected clock; unset: `wall` |
-| SC-009 live cadence | `tests/integration/test_refresh_live.py` (marked `live`, run with the stack up and `REFRESH_CLOCK=data`) | ≥ 95 % of the intervals between consecutive notifications are 5 s ± 1 s over 10 minutes |
+| SC-009 live cadence (CUT-1; the short T071 check keeps an informal first-minute smoke of about 5 s) | `tests/integration/test_refresh_live.py` (marked `live`, run with the stack up and `REFRESH_CLOCK=data`) | ≥ 95 % of the intervals between consecutive notifications are 5 s ± 1 s over 10 minutes |
 | SC-010 isolation | host commands below | the bronze count keeps growing with `refresh` stopped |
 
 ```bash

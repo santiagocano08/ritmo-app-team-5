@@ -4,7 +4,7 @@ Both run the same cycle function (`src/pipeline/cycle.py`). It takes `as_of_ts` 
 (FR-004), runs the one-transaction cycle (research R4–R6) and returns the `snapshot_id`, or nothing
 when the snapshot already existed.
 
-## `python -m src.pipeline.compute` (Phase 2; it stays even if Phase 4 is cut)
+## `python -m src.pipeline.compute` (Phase 2; always delivered)
 
 | Argument | Meaning |
 |---|---|
@@ -16,7 +16,7 @@ Reads `DATABASE_URL` and `LOG_LEVEL` from the environment, like the 001 entry po
 JSON line per snapshot (`snapshot_id`, `as_of_ts`, `max_bronze_id`, `status`). Exit code 0 on
 success; non-zero after the first failed cycle, which leaves nothing published.
 
-## `refresh` compose service (Phase 4, cuttable)
+## `refresh` compose service (Phase 4; the loop is not cuttable, only its expensive checks, see `tasks.md` CUT-1)
 
 | Setting | Source | Default | Meaning |
 |---|---|---|---|
