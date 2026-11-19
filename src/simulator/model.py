@@ -24,11 +24,10 @@ SIGMA = 0.20  # lognormal travel-time noise (mean-preserving)
 START_HEADWAY_S = 300  # initial spacing between in-service buses
 LAYOVER_S = 300  # pause at the terminal before the next direction-1 trip
 WALK_MIN_S, WALK_MAX_S = 60, 180  # train -> stop walk
-# Demand volume anchors (declared simulation parameters, not reference data):
-# daily riders at Prado reached through the Metro, and daily street riders on the
-# rest of the corridor, before the hourly shape and the basin-6 feeder share.
-PRADO_DAILY_RIDERS = 30000
-STREET_DAILY_RIDERS = 20000
+# ASSUMPTION (declared in data/reference/SOURCES.md): share of direction-1 daily
+# riders who arrive at Prado by Metro train (batches); the rest are street riders
+# at the other stops. The daily volume itself is derived in demand_volume.csv.
+TRAIN_SHARE = 0.80
 
 
 @dataclass(frozen=True)
@@ -60,6 +59,7 @@ class Reference:
     congestion: dict[int, float]
     shape: dict[int, float]
     feeder_share: float
+    daily_riders_dir1: float = 0.0
     trains_per_hour: dict[int, int] = field(default_factory=dict)
 
 
@@ -82,6 +82,7 @@ def load_reference(directory: Path = REFERENCE_DIR) -> Reference:
             trains.append((sec, r["train_trip_id"]))
     trains.sort()
     demand = _rows(directory / "demand_params.csv")
+    volume = _rows(directory / "demand_volume.csv")
     per_hour: dict[int, int] = {}
     for sec, _ in trains:
         per_hour[sec // 3600] = per_hour.get(sec // 3600, 0) + 1
@@ -92,6 +93,7 @@ def load_reference(directory: Path = REFERENCE_DIR) -> Reference:
         congestion={int(r["hour"]): float(r["congestion_factor"]) for r in _rows(directory / "congestion_factor.csv")},
         shape={int(r["hour"]): float(r["metro_line_a_shape"]) for r in demand},
         feeder_share=float(demand[0]["feeder_share_basin6"]),
+        daily_riders_dir1=float(volume[0]["daily_riders_dir1"]),
         trains_per_hour=per_hour,
     )
 

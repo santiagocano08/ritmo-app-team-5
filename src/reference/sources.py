@@ -57,6 +57,25 @@ REGISTRY: list[SourceEntry] = [
         ),
     ),
     SourceEntry(
+        output_file="demand_volume.csv",
+        raw_file="medata/pasajeros_movilizados_mensual_metro_de_medellin.csv + metro_capas/paradas_alimentadoras.geojson",
+        source_url="MeData (Alcaldía de Medellín); Metro de Medellín GIS layers",
+        license="Uso interno / Internal use",
+        download_date="2026-11-17",
+        transformation=(
+            "Direction-1 daily riders (data-owner decision, triangulation step A). "
+            "daily_trips_both_dirs = mean_monthly(METRO_CUENCA_6 over 2019) / 30 "
+            "x (stops of routes serving Prado / stops of basin 6) "
+            "x (C6-008 stops / stops of routes serving Prado); daily_riders_dir1 = daily_trips_both_dirs / 2. "
+            "Stop counts from paradas_alimentadoras.geojson: basin-6 = ruta starts with 'C6' (1191); "
+            "Prado = linea or itinerario mentions 'Prado' (343); C6-008 = ruta == 'C6-008' (35). "
+            "ASSUMPTION (simulator, not derived from data): of the direction-1 daily riders, 80 % arrive at "
+            "Prado in Metro train batches (GTFS) and 20 % as street riders at the other stops; "
+            "distributed over the day with the Metro Line A hourly shape of demand_params.csv. "
+            "The basin-6 feeder share is already inside this volume and is not applied again."
+        ),
+    ),
+    SourceEntry(
         output_file="segments.csv",
         raw_file="plata/tramos_c6008_s1_osm.csv",
         source_url="OpenStreetMap + PLATA (Proyecto de Levantamiento de Atributos de Transporte Alimentador) — provided by Área Metropolitana del Valle de Aburrá",

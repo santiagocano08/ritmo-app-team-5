@@ -40,3 +40,11 @@ def test_departure_occupancy_is_arrival_minus_alighted_plus_boarded() -> None:
         elif e["event_type"] == "stop_departure":
             a = arr[(p["bus_id"], p["stop_id"], p["trip_id"])]
             assert p["occupancy"] == a["occupancy"] - a["alighted"] + a["boarded"]
+
+
+def test_base_case_17h_demand_is_low_and_buses_do_not_fill() -> None:
+    events = list(run(42, 3600, start_hour=17))
+    arrivals = [e for e in events if e["event_type"] == "rider_arrival"]
+    assert 40 <= len(arrivals) <= 110
+    assert max(e["payload"]["occupancy"] for e in events if "occupancy" in e["payload"]) < 40
+    assert sum(e["payload"]["rejected"] for e in events if e["event_type"] == "stop_arrival") == 0

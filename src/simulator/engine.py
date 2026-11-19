@@ -19,11 +19,10 @@ from src.simulator.model import (
     IN_SERVICE,
     LAYOVER_S,
     OPERATOR,
-    PRADO_DAILY_RIDERS,
     SOURCE,
     START_HEADWAY_S,
     STEP_S,
-    STREET_DAILY_RIDERS,
+    TRAIN_SHARE,
     WALK_MAX_S,
     WALK_MIN_S,
     Profile,
@@ -105,7 +104,7 @@ def run(seed: int, duration: int, start_hour: int = 17, demand_scale: float = 1.
         for k in range(lo, hi):
             sec, trip = ref.train_secs[k]
             h = sec // 3600
-            mean = (PRADO_DAILY_RIDERS * ref.shape[h] * ref.feeder_share * demand_scale
+            mean = (ref.daily_riders_dir1 * TRAIN_SHARE * ref.shape[h] * demand_scale
                     / max(ref.trains_per_hour.get(h, 1), 1))
             for _ in range(int(mean * rng.uniform(0.7, 1.3) + 0.5)):
                 walk = rng.randint(WALK_MIN_S, WALK_MAX_S)
@@ -114,7 +113,7 @@ def run(seed: int, duration: int, start_hour: int = 17, demand_scale: float = 1.
                 heapq.heappush(pend, (sec - start_s + walk, seq, 0, Rider(dest, sec - start_s + walk, "train", trip)))
 
         # 2. Street drip at the non-Prado, non-terminal stops
-        rate = (STREET_DAILY_RIDERS * ref.shape[hour] * ref.feeder_share * demand_scale / n_street)
+        rate = (ref.daily_riders_dir1 * (1 - TRAIN_SHARE) * ref.shape[hour] * demand_scale / n_street)
         p = rate * STEP_S / 3600.0
         for i in range(1, last):
             if rng.random() < p:

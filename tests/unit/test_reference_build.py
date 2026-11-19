@@ -306,3 +306,18 @@ class TestMissingRawSource:
             f"Build failure message does not name the missing source.\n"
             f"stdout: {result.stdout}\nstderr: {result.stderr}"
         )
+
+
+class TestDemandVolume:
+    """Data fix: direction-1 daily demand derived from raw data (triangulation step A)."""
+
+    def test_direction1_daily_riders_in_expected_range(self, tmp_path):
+        out = tmp_path / "build"
+        out.mkdir()
+        _run_build(out)
+        rows = list(csv.DictReader((out / "demand_volume.csv").open(encoding="utf-8")))
+        assert len(rows) == 1
+        assert 600 <= float(rows[0]["daily_riders_dir1"]) <= 670
+        assert (rows[0]["stops_basin6"], rows[0]["stops_prado"], rows[0]["stops_c6008"]) == (
+            "1191", "343", "35")
+        assert "demand_volume.csv" in (out / "SOURCES.md").read_text()

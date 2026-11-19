@@ -518,6 +518,52 @@ def build_demand_params(raw_dir: Path, output_dir: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# 5b. demand_volume.csv — derived direction-1 daily riders (triangulation step A)
+#   daily_trips_both_dirs = mean_monthly(METRO_CUENCA_6, 2019) / 30
+#                           x (stops of routes serving Prado / stops of basin 6)
+#                           x (C6-008 stops / stops of routes serving Prado)
+#   daily_riders_dir1 = daily_trips_both_dirs / 2
+# ---------------------------------------------------------------------------
+
+def build_demand_volume(raw_dir: Path, output_dir: Path) -> None:
+    medata_path = raw_dir / "medata" / "pasajeros_movilizados_mensual_metro_de_medellin.csv"
+    stops_path = raw_dir / "metro_capas" / "paradas_alimentadoras.geojson"
+    _require_file(medata_path)
+    _require_file(stops_path)
+
+    with open(medata_path, newline="", encoding="utf-8") as f:
+        c6_2019 = [
+            int(r["pas_valor"])
+            for r in csv.DictReader(f)
+            if r["pas_lineametro"] == "METRO_CUENCA_6" and r["pas_periodo"].startswith("2019")
+        ]
+    if len(c6_2019) != 12:
+        raise RuntimeError(
+            f"Required raw source not found: MeData 2019 METRO_CUENCA_6 — expected 12 months, got {len(c6_2019)}"
+        )
+
+    with open(stops_path, encoding="utf-8") as f:
+        props = [ft["properties"] for ft in json.load(f)["features"]]
+    stops_basin6 = sum(1 for p in props if str(p.get("ruta") or "").startswith("C6"))
+    stops_prado = sum(
+        1 for p in props
+        if "prado" in f"{p.get('linea') or ''} {p.get('itinerario') or ''}".lower()
+    )
+    stops_c6008 = sum(1 for p in props if p.get("ruta") == "C6-008")
+    if not (stops_basin6 and stops_prado and stops_c6008):
+        raise RuntimeError("paradas_alimentadoras.geojson: stop counts must be non-zero")
+
+    mean_monthly = sum(c6_2019) / 12
+    both = mean_monthly / 30 * (stops_prado / stops_basin6) * (stops_c6008 / stops_prado)
+    with open(output_dir / "demand_volume.csv", "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f, lineterminator="\n")
+        w.writerow(["mean_monthly_cuenca6_2019", "stops_basin6", "stops_prado", "stops_c6008",
+                    "daily_trips_both_dirs", "daily_riders_dir1"])
+        w.writerow([f"{mean_monthly:.1f}", stops_basin6, stops_prado, stops_c6008,
+                    f"{both:.2f}", f"{both / 2:.2f}"])
+
+
+# ---------------------------------------------------------------------------
 # 6. SOURCES.md (FR-007)
 # ---------------------------------------------------------------------------
 
@@ -566,6 +612,10 @@ def build(raw_dir: Path | None = None, output_dir: Path | None = None) -> None:
     # 5. Demand params
     print("  Building demand_params.csv ...", file=sys.stderr)
     build_demand_params(raw_dir, output_dir)
+
+    # 5b. Demand volume
+    print("  Building demand_volume.csv ...", file=sys.stderr)
+    build_demand_volume(raw_dir, output_dir)
 
     # 6. SOURCES.md
     print("  Writing SOURCES.md ...", file=sys.stderr)

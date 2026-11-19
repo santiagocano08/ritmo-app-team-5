@@ -18,6 +18,14 @@ One entry per output file.  Each records source URL, license, download date and 
 - **Download date**: 2026-11-17
 - **Transformation**: Metro Line A hourly shape: sum of LÍNEA A ridership per hour across all 2025 days from Afluencia_Metro_2025.xlsx, normalized to sum = 1.0. Basin-6 feeder share: sum(METRO_CUENCA_6) / sum(METRO_LINEA_A) for calendar year 2019 (12 months 201901–201912) from MeData monthly series. 2019 chosen as the last pre-pandemic year with 12 complete months of data (data-owner decision: not the last 12 months, which are pandemic-affected).
 
+## demand_volume.csv
+
+- **Raw source**: `medata/pasajeros_movilizados_mensual_metro_de_medellin.csv + metro_capas/paradas_alimentadoras.geojson`
+- **Source URL / origin**: MeData (Alcaldía de Medellín); Metro de Medellín GIS layers
+- **License**: Uso interno / Internal use
+- **Download date**: 2026-11-17
+- **Transformation**: Direction-1 daily riders (data-owner decision, triangulation step A). daily_trips_both_dirs = mean_monthly(METRO_CUENCA_6 over 2019) / 30 x (stops of routes serving Prado / stops of basin 6) x (C6-008 stops / stops of routes serving Prado); daily_riders_dir1 = daily_trips_both_dirs / 2. Stop counts from paradas_alimentadoras.geojson: basin-6 = ruta starts with 'C6' (1191); Prado = linea or itinerario mentions 'Prado' (343); C6-008 = ruta == 'C6-008' (35). ASSUMPTION (simulator, not derived from data): of the direction-1 daily riders, 80 % arrive at Prado in Metro train batches (GTFS) and 20 % as street riders at the other stops; distributed over the day with the Metro Line A hourly shape of demand_params.csv. The basin-6 feeder share is already inside this volume and is not applied again.
+
 ## segments.csv
 
 - **Raw source**: `plata/tramos_c6008_s1_osm.csv`
