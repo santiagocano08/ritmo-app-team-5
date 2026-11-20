@@ -231,3 +231,162 @@ Three test-authoring mistakes, no rule or threshold changed to get green.
 - **`decision_inputs`** is built from the `model_dump` of the same `corridor_now` object, so `buses` and `summary` cannot differ.
 - **Test support**: new `config_reset` fixture in `tests/integration/conftest.py` restores the seeded `config` tables after tests that change them (the module database is shared). The new T057 test was appended to `tests/integration/test_rebuild.py`.
 - No new setting, so `.env.example` is unchanged. No change under `contracts/`, `docs/adr/`, `db/init/`, the simulator, ingestion, `.kiro/`, `.specify/`, checklists, or the silver/gold console rules.
+
+## Phase 4 — Refresh cycle (US4), T064–T071
+
+| | |
+|---|---|
+| Start | 2026-11-20T13:08:33Z |
+| End (T071 short and long checks done) | 2026-11-20T13:40:30Z (rework included; the 10-minute live run takes 10 of these minutes) |
+| Tasks | T064–T071, all marked `[x]` in `tasks.md`. **CUT-1 not taken**: T066, T067, T068 and the 10-minute part of T071 are done. |
+
+DataOps addition (data owner, 2026-11-20): the `refresh` service has a freshness healthcheck,
+`python -m src.refresh.health`. It reports unhealthy when no gold snapshot was committed in the last
+`REFRESH_HEALTH_MAX_AGE_S` seconds of wall-clock time (default 30, in `.env.example` and compose).
+The commit wall time is stored in a new log table `gold.snapshot_commits (snapshot_id, committed_at)`.
+An `AFTER INSERT` trigger on `gold.snapshots` fills it inside the cycle transaction, so a rolled-back
+cycle leaves no row. Both are added idempotently in `db/init/005_gold.sql`. `gold.snapshots` itself
+is unchanged; see Rework #2 for the reason.
+
+### Test-first evidence
+
+| Command | Result before the implementation |
+|---|---|
+| `uv run pytest tests/unit/test_refresh_loop.py tests/unit/test_compose_refresh.py tests/integration/test_refresh_health.py -q --no-cov` | 2 collection errors (`ImportError: cannot import name 'run' / 'health' from 'src.refresh'`), the expected failure. `test_compose_refresh.py` was collected and would fail on the missing `refresh` key. |
+
+T066 and T067 were written after `run.py` existed (they need the loop to run). Their first run
+found a test fault, not a code fault (Rework #1).
+
+### Commands and results (T071)
+
+| Command | Result |
+|---|---|
+| `uv run pytest tests/unit/test_refresh_loop.py tests/unit/test_compose_refresh.py tests/integration/test_refresh_health.py tests/unit/test_env_example.py -q --no-cov` | **33 passed** (after Rework #3) |
+| `uv run pytest tests/integration/test_refresh_failure.py tests/integration/test_notify.py -q --no-cov` | **2 passed** (after Rework #1) |
+| `uv run pytest tests/integration/test_refresh_health.py tests/integration/test_rebuild.py tests/integration/test_schema_init.py -q --no-cov` (after Rework #2) | **35 passed** |
+| `docker compose down -v && docker compose up -d --build` (fresh volume, run twice: once before and once after Rework #2) | 4 services up; `refresh` `(healthy)` about 40 s after start |
+| Short check: listener on `gold_snapshot` for 70 s (each payload validated against `contracts/gold_snapshot_notify.schema.json`), second fresh-volume run | first notification after **0.3 s** of listening; 15 notifications, all valid; intervals **5.0 s × 14**. First fresh-volume run: first after 3.9 s, 14 notifications, intervals 4.9–5.1 s. |
+| SC-010: `docker compose stop refresh`, count `bronze.events`, `sleep 120`, count, `docker compose start refresh` | first run: **473 → 1,108**; second run (fresh volume): **442 → 1,069**. Bronze keeps growing while `refresh` is stopped. |
+| Long check SC-009: `uv run pytest tests/integration/test_refresh_live.py -m live -q --no-cov -s` (stack up, `REFRESH_CLOCK=data`), 13:15:00Z–13:25:54Z | **1 passed** (600.7 s). 102 notifications, 101 intervals, min 4.96 s, max 5.08 s, **101/101 within 5 s ± 1 s**. Every notification was readable in `gold.corridor_now` on receipt. |
+| Healthcheck turns unhealthy on a whole-feed stop (declared M3 limitation): `docker compose stop ingestion`, wait 65 s, `docker compose ps refresh` | `refresh` went **healthy → unhealthy**; health log: `unhealthy: no snapshot in the last 30 s`. The loop kept running and logging `refresh_cycle` lines with the frozen `as_of_ts` (R5 no-op, no NOTIFY). `ingestion` was started again afterwards. |
+| Also observed, not staged: after the first long check the simulator reached its 3,600 s duration (`ingestion finished: {'accepted': 3851}`), and `refresh` was reported `(unhealthy)` for the same reason. 3,851 matches the T007 recount. | |
+
+Cycle log line, as T069 requires (one JSON line per cycle, no traceback):
+`{"as_of_ts": "2026-11-24T22:06:10+00:00", "duration_ms": 54, "event": "refresh_cycle", "max_bronze_id": 386, "snapshot_id": "147e0b2e-...", "status": "live"}`.
+`src.pipeline.cycle` also logs its own `cycle_done` line. Skipped cycles log `status: "skipped"`, failures
+log `status: "error"` with `error_class` and `correlation_id`.
+
+### Rework
+
+| # | What | Cause | Fix |
+|---|---|---|---|
+| 1 | `test_refresh_failure.py`: the recovery cycle raised `run_cycle needs an idle, non-autocommit connection` | test fault: the test's own `SELECT count(*)` left the shared connection in a transaction before the second cycle | `gold_conn.rollback()` after the count. Code unchanged; the loop always gives `run_cycle` an idle connection (`resolve_as_of` rolls back its read). |
+| 2 | Whole suite in the image: `test_rebuild.py::test_dropping_silver_and_gold_and_recomputing_gives_the_same_snapshot` failed | my first healthcheck design added a `committed_at` column to `gold.snapshots`. Wall time differs after a rebuild, so SC-005 (identical gold contents) broke. The test is right. | Commit time moved to the log table `gold.snapshot_commits` filled by a trigger; `gold.snapshots` has its original four columns again (a test asserts this). The rebuild test was not changed. Stack recreated from a fresh volume and T071 short check and SC-010 redone. |
+| 3 | `test_refresh_loop.py`: 2 clock-selector tests failed with `AttributeError: 'FakeConn' object has no attribute 'rollback'` | test double incomplete | added `rollback()` to the fake connection |
+| 4 | First image run collected 4 errors (`cannot import name 'run' from 'src.refresh'`) | stale `tests` image: `src/` is copied in at build time | `docker compose --profile tools build tests` before each image run (same as Phase 3) |
+| 5 | Image run hung on `test_refresh_live.py` | the `tests` service runs `pytest tests/` without `-m`, so the 10-minute live test started | the live test now skips unless `-m live` is selected. The CI command is unchanged. |
+
+### Decisions taken during the phase
+
+- **Healthcheck storage**: a separate log table plus trigger, not a column (Rework #2). No FK to
+  `gold.snapshots`, because it is a log and it must not block the rebuild path. It keeps rows after
+  gold is dropped, so a rebuild does not make the service look healthy or unhealthy on its own.
+  `committed_at` is `clock_timestamp()` at insert, inside the cycle transaction. A cycle lasts about
+  50–150 ms, so it is at most that far from the commit.
+- **Healthcheck failures print no detail**: any exception (DB down, bad setting) prints
+  `unhealthy: check failed` and exits 1. Healthcheck timing: `interval 10s`, `timeout 5s`,
+  `retries 3`, `start_period 40s`.
+- **`REFRESH_INTERVAL_S`** accepts any positive number (float); invalid values stop the process at
+  start with a generic message. **`REFRESH_CLOCK`** accepts `wall`/`data` in any case; anything else
+  stops the process.
+- **`data` clock query** reads `max(event_ts)` of `bus_position`, `stop_arrival` and `stop_departure`
+  with `source <> 'backend'`, the same report set as `silver_bus_current_state.sql`. It does not
+  filter `id <= M`: `M` is taken inside the cycle afterwards, so the clock can be a few events ahead
+  of `M`. The cycle then filters `event_ts <= as_of_ts` and `id <= M` as usual, so the snapshot is
+  consistent. The next tick catches up.
+- **Connect retry**: 30 attempts × 2 s at start; if the connection is lost later, the loop reconnects on
+  the next tick. Any other cycle exception is caught by the loop (`loop_error` line with the class only).
+- **Live test** (`test_refresh_live.py`) listens on the compose database and never writes to it.
+  Duration via `LIVE_CADENCE_DURATION_S` (default 600), a test-only knob, not a service setting.
+
+## Phase 5 — Polish (T072–T074)
+
+| | |
+|---|---|
+| Start | 2026-11-20T13:41:24Z |
+| End | 2026-11-20T13:55Z |
+
+### Commands and results
+
+| Command | Result |
+|---|---|
+| T072: `docker compose --profile tools build tests && docker compose --profile tools run --rm tests` (the CI-ready command), first run | 421 passed, 4 skipped, 0 failed, coverage 91.89 %; `src/rules/headway.py` 98 % (line 69 missing) |
+| Added `test_headway_is_zero_without_history_and_without_a_position_time_for_the_bus_ahead` to `tests/unit/test_headway.py` (the only uncovered rule branch: no history and no position time for the bus ahead → 0) | `src/rules/headway.py` 100 % |
+| **Final Andon run**, CI-ready command, 13:44:56Z–13:47:36Z | **422 passed, 4 skipped, 0 failed**, coverage **91.97 %** (113 s) |
+| **Final Andon run**, host: `uv run pytest tests -q -m "not slow and not live" -rs` | **424 passed, 2 deselected, 0 failed**, coverage 91.97 % (179 s) |
+| Slow replay, run once and last: `uv run pytest tests/integration/test_replay_60min.py -m slow -q --no-cov` | **1 passed** (46.5 s), 720 snapshots (`--step 5`, full density) |
+
+The counts match: 422 + 4 skipped = 426 = 424 + 2 deselected. The 4 image skips are the 3 isolation
+tests that need the docker CLI (as in earlier phases) and the live test (Rework #5). The slow
+replay passes in the image too: it is not deselected there.
+
+Coverage of this feature's code (final run): `src/rules/*` **100 %** (`classify`, `headway`,
+`service_metric`, `snapshot_id`, `timebands`); `src/pipeline/gold.py` 100 %, `silver.py` 100 %,
+`reference.py` 100 %, `cycle.py` 96 %, `compute.py` 91 %; `src/refresh/health.py` 94 %,
+`src/refresh/run.py` 84 % (lines 134–151, `main()`, run only in the container and checked there by
+T071). Total 92 %.
+
+### Guard checks (T073)
+
+Base for the guard diff: `cd7a350` (last commit before the 002 work). `main` and `origin/main` do
+not contain 001, so a diff against them lists all 001 files and proves nothing.
+
+| Check | Result |
+|---|---|
+| `git diff --stat cd7a350 -- contracts/` (committed) and `git status` (working tree) | exactly one change: `contracts/read/fixtures/c1_bunching/corridor_now.json`, `headway_ahead_s` 752 → 960 (T075). No schema changed. |
+| `git diff --stat cd7a350 -- db/init/001_schemas.sql db/init/002_bronze.sql src/ingestion` | empty |
+| Bronze writers | none added: `src/refresh` only reads `bronze.events` |
+| `git diff HEAD -- docs/adr src/simulator src/rules .kiro .specify` | empty in Phase 4–5 (the only rule-file change is the new test in `tests/unit/test_headway.py`) |
+| Deferred items (R15): Redis, PostGIS, direction 2, endpoints, injectors | none: `grep` over `src/refresh`, `db/init/005_gold.sql`, `docker-compose.yml` finds none |
+
+### Phase 4–5 change set (uncommitted)
+
+Modified: `.env.example`, `db/init/005_gold.sql`, `docker-compose.yml`, `tests/unit/test_headway.py`,
+`specs/002-silver-gold-baselines/tasks.md`, this file. New: `src/refresh/run.py`, `src/refresh/health.py`,
+`tests/unit/test_refresh_loop.py`, `tests/unit/test_compose_refresh.py`,
+`tests/integration/test_refresh_health.py`, `tests/integration/test_refresh_failure.py`,
+`tests/integration/test_notify.py`, `tests/integration/test_refresh_live.py`.
+
+## Feature summary (T074)
+
+### Results per success criterion
+
+| SC | Evidence | Result |
+|---|---|---|
+| SC-001 | 60-minute replay, 720 snapshots, all three read objects schema-valid (Phase 3, rerun in Phase 5) | pass, full density |
+| SC-002 | gold fixture tests for `normal`, `d1_source_outage`, `c2_gap`, `c5_breakdown` and `c1_bunching` (after T075) | pass |
+| SC-003 | D1 Estimated tests (Phases 1–2) | pass |
+| SC-004 | idempotency tests (Phase 2) | pass |
+| SC-005 | rebuild tests (Phases 2–3; protected the design in Phase 4, Rework #2) | pass |
+| SC-006 | M1/M2 baseline tests (Phase 3) | pass |
+| SC-007 | service-metric unit tests (Phase 2) | pass |
+| SC-008 | lineage and `decision_inputs` tests (Phases 2–3) | pass |
+| SC-009 | 10-minute live run: 101/101 intervals within 5 s ± 1 s, all notifications readable | pass |
+| SC-010 | bronze 473 → 1,108 and 442 → 1,069 with `refresh` stopped for 120 s | pass |
+| SC-011 | total coverage 91.97 %, `src/rules/` 100 % | pass |
+
+### Other items
+
+- **Event recount (T007)**: the 1-hour seed-42 run produces **3,851** events after the R14 fix (3,986
+  before). The live stack in Phase 4 confirmed it: `ingestion finished: {'accepted': 3851}`.
+- **Cut list**: no cut taken. CUT-1 (failure, notify and 10-minute live checks) done; CUT-2 not
+  taken (the replay runs at `--step 5`, 720 snapshots); CUT-3 not taken (R12 edge cases implemented).
+- **T075 fixture correction**: `contracts/read/fixtures/c1_bunching/corridor_now.json`
+  `headway_ahead_s` 752 → 960, the only change under `contracts/`. `c1_bunching` is therefore part of
+  SC-002.
+- **Declared limitation, now visible**: in `REFRESH_CLOCK=data` mode a whole-feed stop freezes
+  `as_of_ts` (R3/R5). No new snapshot is created, so the `refresh` healthcheck turns unhealthy within
+  about 30 s plus the check interval. That is the pipeline's freshness signal (DataOps).
+- **CI**: one command runs the full verification unchanged: `docker compose --profile tools run --rm tests`
+  (build the `tests` image first when `src/` changed). No CI workflow was added; that is coordinated
+  with the team's DevOps owner.

@@ -12,6 +12,29 @@ CREATE TABLE IF NOT EXISTS gold.snapshots (
     CONSTRAINT gold_snapshots_key UNIQUE (as_of_ts, rules_version, max_bronze_id)
 );
 
+-- Commit log of snapshots (operational, not gold content): the wall-clock time each snapshot row
+-- was written, inside its cycle transaction, so a rolled-back cycle leaves no row. Read by the
+-- refresh healthcheck (freshness). Kept outside gold.snapshots so the gold content stays
+-- deterministic for identical inputs (SC-005). No FK: it is a log, and it survives rebuilds.
+CREATE TABLE IF NOT EXISTS gold.snapshot_commits (
+    snapshot_id   UUID        PRIMARY KEY,
+    committed_at  TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS gold_snapshot_commits_ts_idx ON gold.snapshot_commits (committed_at);
+
+CREATE OR REPLACE FUNCTION gold.log_snapshot_commit() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO gold.snapshot_commits (snapshot_id, committed_at)
+    VALUES (NEW.snapshot_id, clock_timestamp())
+    ON CONFLICT (snapshot_id) DO UPDATE SET committed_at = EXCLUDED.committed_at;
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE TRIGGER gold_snapshots_log_commit
+    AFTER INSERT ON gold.snapshots
+    FOR EACH ROW EXECUTE FUNCTION gold.log_snapshot_commit();
+
 -- G2: read objects stored exactly as their JSON Schema defines them.
 CREATE TABLE IF NOT EXISTS gold.source_status (
     snapshot_id    UUID   PRIMARY KEY REFERENCES gold.snapshots (snapshot_id),

@@ -97,3 +97,8 @@ def test_single_operational_bus_has_no_headway() -> None:
 
 def test_no_buses_gives_no_headways() -> None:
     assert compute_headways([]) == {}
+
+
+def test_headway_is_zero_without_history_and_without_a_position_time_for_the_bus_ahead() -> None:
+    # T072: the last uncovered rule branch (no pass time can be found at all).
+    assert headway_s(100.0, t(50), 300.0, (), None) == 0.0
