@@ -204,7 +204,7 @@ def c2_gap() -> Timeline:
     """B-101 and B-105 trail with a gap (fixture order B-104, B-103, B-102, B-101, B-105)."""
     starts = {"B-104": 0, "B-103": 596, "B-102": 596 + 598, "B-101": 596 + 598 + 1082,
               "B-105": 596 + 598 + 1082 + 1308}
-    as_of = 3500
+    as_of = 3600  # B-105 starts at 3,584 s: the reference time must fall after it, or it never reports
     return Timeline("c2_gap", _staggered("c2_gap", starts, as_of).events, iso(as_of))
 
 

@@ -205,6 +205,17 @@ FR-038.
 - **On the corridor / in service**: the current trip has no `stop_arrival` at the terminus stop (the
   last row of `stops.csv`, P-900). A bus on the corridor appears in `corridor_now`, and when it is
   Estimated it appears in `sources_down`. A bus that never reported has no row.
+- **Waiting at the first stop** (decided 2026-11-20 by the data owner): the 001 simulator reports
+  `bus_position` at 0 m with a `trip_id` while a bus waits at P-883 for its scheduled departure, at the
+  start of a run and during the terminal layover before trip *n+1*. A bus is on the corridor for its
+  current trip from its `stop_departure` at the first stop (P-883) until its `stop_arrival` at P-900.
+  Before departing it is *waiting*: `on_corridor = false`, `waiting = true`, status `off_corridor`
+  (`reserve` for a roster reserve bus), so it is not in `corridor_now.buses`, is not a "bus ahead", and
+  does not count in `summary`, `n_bunched`, `n_gaps` or the service metric. Waiting means: not finished,
+  no first-stop departure on the current trip, and the latest position of that trip is at the first stop
+  (or the trip has no position yet and has a `stop_arrival` at the first stop). Its reports still count
+  as reports, so a silent waiting bus is Estimated and appears in `sources_down`. Implemented by the
+  `waiting` column of `silver.bus_current_state`.
 - **Operational status** (FR-009): `broken_down` if a `bus_breakdown` incident targets it at
   `as_of_ts`. Otherwise `in_service` if it is on the corridor. Otherwise `reserve` if it is in the
   reserve roster. Otherwise it is off the corridor (between trips or finished).

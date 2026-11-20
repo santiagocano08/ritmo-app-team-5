@@ -18,3 +18,13 @@ def silver_conn(module_db_dsn):
             conn.execute(f"DELETE FROM silver.{table}")  # noqa: S608 - fixed names
         conn.commit()
         yield conn
+
+
+@pytest.fixture
+def gold_conn(module_db_dsn):
+    """Like `silver_conn`, and the gold tables are empty too (throwaway database only)."""
+    from tests.fixtures.gold_support import clear_all
+
+    with psycopg.connect(module_db_dsn) as conn:
+        clear_all(conn)
+        yield conn

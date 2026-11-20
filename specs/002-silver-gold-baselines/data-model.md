@@ -141,7 +141,8 @@ One row per bus that has at least one bus report.
 | `prev_stop_id`, `next_stop_id` | TEXT NULL | R7 rule over `config.ref_stops` |
 | `last_report_ts` | TIMESTAMPTZ | max `event_ts` of bus reports → `sources_down.since` |
 | `data_quality` | TEXT CHECK IN (`live`,`estimated`) | `estimated` ⇔ `as_of_ts − last_report_ts > 120 s` (strict) |
-| `on_corridor` | BOOLEAN | current trip has no `stop_arrival` at the terminus stop |
+| `on_corridor` | BOOLEAN | current trip has no `stop_arrival` at the terminus stop and the bus is not waiting |
+| `waiting` | BOOLEAN | waiting at the first stop for its departure (R7, 2026-11-20); never `on_corridor` |
 | `operational_status` | TEXT CHECK IN (`in_service`,`reserve`,`broken_down`,`off_corridor`) | R7 precedence |
 | `as_of_ts` | TIMESTAMPTZ | cycle reference time |
 

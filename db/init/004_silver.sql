@@ -38,10 +38,14 @@ CREATE TABLE IF NOT EXISTS silver.bus_current_state (
     last_report_ts     TIMESTAMPTZ NOT NULL,
     data_quality       TEXT        NOT NULL CHECK (data_quality IN ('live', 'estimated')),
     on_corridor        BOOLEAN     NOT NULL,
+    waiting            BOOLEAN     NOT NULL DEFAULT false,
     operational_status TEXT        NOT NULL
         CHECK (operational_status IN ('in_service', 'reserve', 'broken_down', 'off_corridor')),
     as_of_ts           TIMESTAMPTZ NOT NULL
 );
+
+-- Waiting buses (research R7, 2026-11-20): column added after the first release of this table.
+ALTER TABLE silver.bus_current_state ADD COLUMN IF NOT EXISTS waiting BOOLEAN NOT NULL DEFAULT false;
 
 -- S4: paired arrival and departure at a stop (FR-012).
 CREATE TABLE IF NOT EXISTS silver.stop_visits (

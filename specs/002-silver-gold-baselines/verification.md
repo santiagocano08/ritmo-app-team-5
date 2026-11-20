@@ -141,3 +141,51 @@ Rework count: 3, all test-authoring mistakes. No product rule or threshold was c
 - Segment id = `stop_seq` of the departure stop (segment *k* = seq *k* → *k+1*, as in data-model S5). The `segment_id` column of `stops.csv` is not used.
 - Test support only: `tests/integration/conftest.py` (function-scoped `silver_conn`, clears bronze and silver in the throwaway database only) and `tests/fixtures/silver_support.py`.
 - No change under `contracts/`, `docs/adr/`, `db/init/`, the simulator, the ingestion code, `.kiro/`, `.specify/` or the checklists. No new setting, so `.env.example` is unchanged.
+
+## Phase 2 — Gold console views (US2), T034–T050
+
+| Item | Value |
+|---|---|
+| Start | 2026-11-19T13:10Z (08:10 local, UTC−5) |
+| Interrupted run 1 | model timeout, 08:10–12:06 local = 13:10–17:06Z on 2026-11-19. Tests, rules and the CLI of T034–T049 were written in this run (files dated 08:12–08:15 local). |
+| Interrupted run 2 | network error, 21:04–23:09 local on 2026-11-19 = 02:04–04:09Z on 2026-11-20. `tests/fixtures/gold_support.py` and the transaction-contract rework come from this run. |
+| Closing run | 2026-11-20, about 12:15Z to 12:30Z: waiting-bus fix, whole-suite runs, live check, bookkeeping. |
+| Branch | `feature/002-silver-gold-baselines`, nothing committed |
+
+The times of the two interrupted runs are the ones reported by the data owner. I read them as local time (UTC−5) because the file modification times of the code written in those runs match.
+
+### Commands and results (T050)
+
+| Command | Result |
+|---|---|
+| `pytest tests/integration/test_waiting_buses.py` before the fix | 3 failed, 1 passed (the 4th passes trivially before the fix). |
+| Same file after the fix, plus `test_real_run_acceptance.py` | 5 passed in 6.8 s. |
+| `test_real_run_acceptance.py` with the waiting rule disabled (temporary edit, reverted) | failed: `n_bunched == 3`. The test catches the defect. |
+| `pytest -q` (host, whole suite, `DATABASE_URL` pointing at `localhost`) | **335 passed, 0 failed**, coverage 92.23 % (2 min 36 s). 330 before the fix + 5 new. |
+| `docker compose --profile tools build tests`, then `docker compose --profile tools run --rm tests` | build exit 0; **332 passed, 3 skipped, 0 failed**, coverage 92.23 % (68.8 s). 327 + 3 skipped before the fix + 5 new. |
+| `docker compose down -v && docker compose up -d --build`; health loop of at most 120 s | `db` and `api` healthy and `ingestion` up about 18 s after the build. |
+| `docker compose exec -T ingestion python -m src.pipeline.compute --as-of 2026-11-24T22:10:00Z` (bronze held events up to 22:09:57Z) | printed `snapshot_id 1d9fe96f-980d-4c17-a49a-76fba7d5ed13`, `max_bronze_id 645`, status `live`. |
+| `SELECT doc FROM gold.corridor_now WHERE snapshot_id = '1d9fe96f-…'` | one bus: B-101, `leader`, 2,640.5 m, prev P-888, next P-889, `live`, `headway_ahead_s` null; summary `buses_in_service 1`, `n_bunched 0`, `n_gaps 0`. `source_status`: `live`, `sources_down []`. |
+| `silver.bus_current_state` at that snapshot | B-101 `on_corridor` true; B-102..B-105 `waiting` true, `off_corridor`. |
+
+At minute 10 the only bus on the corridor is B-101: B-102 is at P-883 and has not departed yet (its scheduled start is 600 s), which is the correct reading after the fix. Before it, the same data gave 3 `bunched` buses.
+
+### Acceptance on a real run (seed 42, 3,600 s)
+
+`test_real_run_acceptance.py` ingests the whole simulator run through `src.ingestion.bronze.ingest` into a throwaway database and runs `run_cycle` at minutes 5, 10, …, 60 (12 snapshots). Result: `n_bunched == 0` and `n_gaps == 0` in every snapshot, and **11 non-null headways, minimum 485.7 s, maximum 700.0 s** (all inside 300–900 s). Runtime about 4–5 s, so the test is not marked `slow`.
+
+### Rework
+
+| # | What | Cause | Fix |
+|---|---|---|---|
+| 1 | Transaction contract of the cycle | `run_cycle` must own its transaction (REPEATABLE READ). Tests and `gold_support.cycle` held an open read transaction. | `cycle` in `gold_support.py` ends the test's own transaction first; `run_cycle` rejects a non-idle or autocommit connection. |
+| 2 | `c2_gap` builder | The reference time (`as_of`) fell before B-105 started at 3,584 s, so B-105 never reported. | `as_of` moved to 3,600 s (comment in the builder). Test data bug. |
+| 3 | Waiting buses (found by the independent verifier) | The simulator reports `bus_position` at 0 m for buses waiting at P-883. Silver and gold treated them as on the corridor: 3 `bunched` buses at minute 10 and false gaps of 900–3,000 s. The crafted builders never include waiting buses. | New rule, decided 2026-11-20 by the data owner (R7): on the corridor only from `stop_departure` at P-883 to `stop_arrival` at P-900. New `waiting` column; `on_corridor` excludes waiting buses; `sources_down` still includes silent waiting buses. Tests first: `test_waiting_buses.py`, `test_real_run_acceptance.py`. |
+
+### Decisions taken in the closing run
+
+- **Waiting definition.** A bus is waiting when its current trip is not finished, has no `stop_departure` at P-883, and the latest position of that trip is at the first stop (0 m), or the trip has no position yet and has a `stop_arrival` at P-883. The extra condition on position keeps the crafted builders valid: `Builder.drive` emits positions from 0 m without a `stop_departure`, and a bus that has moved past 0 m is on the corridor. The real simulator always emits the departure. No builder was changed.
+- **New column.** `silver.bus_current_state.waiting` (`db/init/004_silver.sql`, `CREATE TABLE` plus `ADD COLUMN IF NOT EXISTS`). It is needed so a silent waiting bus stays in `sources_down` while a bus that finished its trip does not. `data-model.md` S3 has one new row; research R7 has the new paragraph. Nothing else in spec or plan changed. Phase 1 said `db/init/` was untouched; this is the first change there after T018.
+- **Status of a waiting bus** is `off_corridor` (or `reserve` for a roster reserve bus), the existing values, so the CHECK constraint is unchanged.
+- `sources_down` is now built from every state row that is on the corridor or waiting, so a bus on the corridor that has stop events but no position also appears there when Estimated.
+- No change under `contracts/`, `docs/adr/` or the simulator. No thresholds added: the planned headway and the 120 s rule still come from config and `ESTIMATED_AFTER_S`.
