@@ -65,6 +65,7 @@ def run_cycle(conn: psycopg.Connection, as_of_ts: datetime, notify: bool = True)
             return None
         max_id = conn.execute("SELECT coalesce(max(id), 0) FROM bronze.events").fetchone()[0]
         rebuild_silver(conn, as_of, max_id)
+        gold.rebuild_baselines(conn, as_of, max_id)
         snap = gold.build_snapshot(conn, as_of, max_id)
         if snap.created and notify:
             conn.execute("SELECT pg_notify(%s, %s)", (CHANNEL, json.dumps({"snapshot_id": str(snap.snapshot_id)})))

@@ -119,3 +119,52 @@ def test_the_rebuild_is_atomic_a_failure_leaves_the_previous_silver(silver_conn)
     else:  # pragma: no cover
         raise AssertionError("expected the rebuild to fail")
     assert dump(silver_conn) == before
+
+
+# -- T057: SC-005 after a replay (US3) ---------------------------------------------------
+def test_dropping_silver_and_gold_and_recomputing_gives_the_same_snapshot(gold_conn, module_db_dsn, monkeypatch) -> None:
+    """After a replay, drop silver and gold, recompute at the last as_of: same silver, M1/M2, snapshot, id."""
+    from src.ingestion.bronze import ingest
+    from src.pipeline.compute import main
+    from src.simulator.engine import run
+    from tests.db_helpers import INIT_DIR
+    from tests.fixtures.gold_support import cycle
+
+    for event in run(42, 1800):
+        assert ingest(gold_conn, event).accepted
+    gold_conn.commit()
+    monkeypatch.setenv("DATABASE_URL", module_db_dsn)
+    assert main(["--from", "2026-11-24T22:01:00Z", "--to", "2026-11-24T22:30:00Z", "--step", "60",
+                 "--no-notify"]) == 0
+
+    gold_tables = ("snapshots", "source_status", "corridor_now", "decision_inputs", "service_metric")
+    baselines = ("m1_baseline", "m2_baseline")
+
+    def last_state() -> dict:
+        snap = gold_conn.execute("SELECT snapshot_id FROM gold.snapshots ORDER BY as_of_ts DESC LIMIT 1").fetchone()[0]
+        out = {"silver": dump(gold_conn)}
+        for t in gold_tables:
+            key = "snapshot_id"
+            out[t] = [tuple(repr(v) for v in r) for r in gold_conn.execute(
+                f"SELECT * FROM gold.{t} WHERE {key} = %s ORDER BY 1", (snap,)).fetchall()]  # noqa: S608
+        for t in baselines:
+            out[t] = [tuple(repr(v) for v in r) for r in gold_conn.execute(
+                f"SELECT * FROM gold.{t} ORDER BY 1, 2").fetchall()]  # noqa: S608
+        return out
+
+    before = last_state()
+    assert all(before[t] for t in gold_tables + baselines)
+    last_as_of_s = 30 * 60
+
+    gold_conn.commit()
+    for t in baselines + tuple(reversed(gold_tables)):
+        gold_conn.execute(f"DROP TABLE gold.{t}")  # noqa: S608 - fixed names
+    for t in SILVER_TABLES:
+        gold_conn.execute(f"DROP TABLE silver.{t}")  # noqa: S608 - fixed names
+    gold_conn.execute((INIT_DIR / "004_silver.sql").read_text(encoding="utf-8"))
+    gold_conn.execute((INIT_DIR / "005_gold.sql").read_text(encoding="utf-8"))
+    gold_conn.commit()
+
+    result = cycle(gold_conn, last_as_of_s)
+    assert result is not None and result.created
+    assert last_state() == before

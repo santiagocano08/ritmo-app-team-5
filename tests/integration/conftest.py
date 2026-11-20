@@ -28,3 +28,19 @@ def gold_conn(module_db_dsn):
     with psycopg.connect(module_db_dsn) as conn:
         clear_all(conn)
         yield conn
+
+
+@pytest.fixture
+def config_reset(module_db_dsn):
+    """Restore the seeded `config` tables after a test that changed them (module database is shared)."""
+    yield
+    from src.pipeline.reference import load_reference
+    from tests.db_helpers import INIT_DIR
+
+    with psycopg.connect(module_db_dsn) as conn:
+        conn.rollback()
+        for table in ("corridor_settings", "fleet_roster", "enabled_stops"):
+            conn.execute(f"DELETE FROM config.{table}")  # noqa: S608 - fixed names
+        conn.execute((INIT_DIR / "003_config.sql").read_text(encoding="utf-8"))
+        conn.commit()
+        load_reference(conn)

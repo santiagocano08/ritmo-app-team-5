@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from uuid import UUID
 
 import psycopg
@@ -15,12 +16,16 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from src.pulsoflota.models.read.corridor_now import CorridorNowV100
+from src.pulsoflota.models.read.decision_inputs import DecisionInputsV100
 from src.pulsoflota.models.read.source_status import SourceStatusV100
 from src.rules import RULES_VERSION
 from src.rules.classify import classify_buses, corridor_status, summarize
 from src.rules.headway import BusObs, compute_headways, order_buses
 from src.rules.service_metric import service_metric
 from src.rules.snapshot_id import snapshot_id as make_snapshot_id
+from src.rules.timebands import local_hour_band, m2_band, next_window
+
+SQL_DIR = Path(__file__).resolve().parents[1] / "rules" / "sql"
 
 SCHEMA_VERSION = "1.0.0"
 
@@ -34,6 +39,19 @@ class SnapshotResult:
 
 def _utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
+
+
+def rebuild_baselines(conn: psycopg.Connection, as_of_ts: datetime, max_bronze_id: int) -> None:
+    """Replace `gold.m1_baseline` and `gold.m2_baseline` for this cycle (FR-027..FR-031).
+
+    Runs after the silver rebuild, in the caller's transaction. The thresholds (minimum sample
+    count, M2 stop) are read from `config` by the SQL, never from literals here.
+    """
+    params = {"as_of_ts": _utc(as_of_ts), "max_bronze_id": max_bronze_id, "rules_version": RULES_VERSION}
+    with conn.cursor() as cur:
+        for table, sql_file in (("m1_baseline", "gold_m1_baseline.sql"), ("m2_baseline", "gold_m2_baseline.sql")):
+            cur.execute(f"DELETE FROM gold.{table}")  # noqa: S608 - fixed table names
+            cur.execute((SQL_DIR / sql_file).read_text(encoding="utf-8"), params)
 
 
 def build_snapshot(conn: psycopg.Connection, as_of_ts: datetime, max_bronze_id: int) -> SnapshotResult:
@@ -54,7 +72,8 @@ def build_snapshot(conn: psycopg.Connection, as_of_ts: datetime, max_bronze_id: 
             return SnapshotResult(sid, existing["status"] if existing else "no_data", False)
 
         settings = cur.execute(
-            "SELECT corridor_id, direction, headway_planned_s FROM config.corridor_settings").fetchone()
+            "SELECT corridor_id, direction, headway_planned_s, drivers_free, hold_penalty_s, "
+            "early_departure_penalty_s FROM config.corridor_settings").fetchone()
         planned = float(settings["headway_planned_s"])
         state_rows = cur.execute(
             "SELECT bus_id, distance_along_m, position_ts, prev_stop_id, next_stop_id, last_report_ts, "
@@ -107,6 +126,9 @@ def build_snapshot(conn: psycopg.Connection, as_of_ts: datetime, max_bronze_id: 
 
         metric = service_metric([h.seconds for h in headways.values() if h.seconds is not None], planned)
 
+        decision_inputs = _decision_inputs(cur, sid, as_of, settings, corridor_now,
+                                           {r["bus_id"] for r in on_corridor})
+
         lineage = (RULES_VERSION, max_bronze_id)
         cur.execute(
             "INSERT INTO gold.source_status (snapshot_id, status, doc, rules_version, max_bronze_id) "
@@ -117,8 +139,44 @@ def build_snapshot(conn: psycopg.Connection, as_of_ts: datetime, max_bronze_id: 
             "VALUES (%s, %s, %s, %s)",
             (sid, Jsonb(corridor_now.model_dump(mode="json")), *lineage))
         cur.execute(
+            "INSERT INTO gold.decision_inputs (snapshot_id, doc, rules_version, max_bronze_id) "
+            "VALUES (%s, %s, %s, %s)",
+            (sid, Jsonb(decision_inputs.model_dump(mode="json")), *lineage))
+        cur.execute(
             "INSERT INTO gold.service_metric (snapshot_id, n_headways, mean_wait_s, scheduled_wait_s, ewt_s, "
             "computable, rules_version, max_bronze_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
             (sid, metric.n_headways, metric.mean_wait_s, metric.scheduled_wait_s, metric.ewt_s,
              metric.computable, *lineage))
     return SnapshotResult(sid, status, True)
+
+
+def _decision_inputs(cur, sid: UUID, as_of: datetime, settings: dict, corridor_now: CorridorNowV100,
+                     on_corridor_ids: set[str]) -> DecisionInputsV100:
+    """Build the decision_inputs object (FR-032..FR-035). `buses` and `summary` are taken from the
+    very `corridor_now` object of this snapshot, so the two cannot differ."""
+    shared = corridor_now.model_dump(mode="json")
+    forecast = cur.execute(
+        "SELECT segment_id, forecast_travel_s FROM gold.m1_baseline WHERE hour_band = %s ORDER BY segment_id",
+        (local_hour_band(as_of),)).fetchall()
+    window_start, window_end = next_window(as_of)
+    demand = cur.execute("SELECT arrivals_forecast FROM gold.m2_baseline WHERE band = %s",
+                         (m2_band(window_start),)).fetchone()
+    reserve = [r["bus_id"] for r in cur.execute(
+        "SELECT bus_id FROM config.fleet_roster WHERE role = 'reserve' ORDER BY bus_id").fetchall()
+        if r["bus_id"] not in on_corridor_ids]
+    incidents = [r["inc_id"] for r in cur.execute(
+        "SELECT inc_id FROM silver.incidents WHERE start_ts <= %s AND end_ts > %s ORDER BY inc_id",
+        (as_of, as_of)).fetchall()]
+    stops = [r["stop_id"] for r in cur.execute("SELECT stop_id FROM config.enabled_stops ORDER BY stop_id").fetchall()]
+    return DecisionInputsV100.model_validate({
+        "schema_version": SCHEMA_VERSION, "snapshot_id": sid, "as_of_ts": as_of,
+        "corridor_id": settings["corridor_id"], "direction": settings["direction"],
+        "buses": shared["buses"], "summary": shared["summary"],
+        "travel_time_forecast": [{"segment_id": r["segment_id"], "forecast_travel_s": float(r["forecast_travel_s"])}
+                                 for r in forecast],
+        "demand_15min": {"window_start_ts": window_start, "window_end_ts": window_end,
+                         "arrivals_forecast": demand["arrivals_forecast"]},
+        "resources": {"reserve_free": reserve, "drivers_free": settings["drivers_free"]},
+        "action_cost": {"hold_penalty_s": float(settings["hold_penalty_s"]),
+                        "early_departure_penalty_s": float(settings["early_departure_penalty_s"])},
+        "active_incidents": incidents, "enabled_stops": stops})

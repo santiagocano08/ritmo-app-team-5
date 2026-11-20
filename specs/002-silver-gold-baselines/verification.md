@@ -189,3 +189,45 @@ At minute 10 the only bus on the corridor is B-101: B-102 is at P-883 and has no
 - **Status of a waiting bus** is `off_corridor` (or `reserve` for a roster reserve bus), the existing values, so the CHECK constraint is unchanged.
 - `sources_down` is now built from every state row that is on the corridor or waiting, so a bus on the corridor that has stop events but no position also appears there when Estimated.
 - No change under `contracts/`, `docs/adr/` or the simulator. No thresholds added: the planned headway and the 120 s rule still come from config and `ESTIMATED_AFTER_S`.
+
+## Phase 3 — M1/M2 baselines and decision inputs (US3), T051–T063 and T076
+
+| Item | Value |
+|---|---|
+| Start | 2026-11-20T12:36Z |
+| End | 2026-11-20T12:58Z (about 22 min, one uninterrupted run) |
+| Branch | `feature/002-silver-gold-baselines`, nothing committed |
+
+### Commands and results
+
+| Command | Result |
+|---|---|
+| `pytest tests/unit/test_timebands.py` before `src/rules/timebands.py` existed | collection error (`ImportError`), the expected failure |
+| `pytest tests/integration/test_baselines.py test_decision_inputs.py test_rebuild.py::<T057>` before the implementation | 9 + 17 failed (`KeyError` on missing baseline rows, `NoneType` for the missing `decision_inputs` row) |
+| Same files after the implementation, plus `test_timebands.py`, `test_timebands_sql.py`, whole `test_rebuild.py` | **63 passed**, 0 failed |
+| `uv run pytest tests -q -m "not slow"` (host, whole suite 001 + 002, unit + integration + contract) | **391 passed**, 1 deselected, 0 failed, coverage 92.54 % (178 s) |
+| `uv run pytest tests/integration/test_replay_60min.py -m slow` (720 snapshots, `REPLAY_STEP_S = 5`, full density) | **1 passed** (47 s). 720 `source_status`, 720 `corridor_now`, 720 `decision_inputs` objects validate against their schemas; `buses` and `summary` equal `corridor_now` in all 720. |
+| `docker compose --profile tools build tests`, then `docker compose --profile tools run --rm tests` (the CI-ready command) | build exit 0; **389 passed, 3 skipped, 0 failed**, coverage 92.54 % (117 s). 389 + 3 = 392 = 391 + the slow test. The 3 skips are the same ones as in Phase 2. |
+| Coverage of the new rule code | `src/rules/timebands.py` 100 %, `src/pipeline/gold.py` 100 %, `src/pipeline/cycle.py` 96 % |
+
+No cut item was taken: CUT-2 (replay density) and CUT-3 (R12 edge cases) are both implemented in full.
+
+### Rework
+
+Three test-authoring mistakes, no rule or threshold changed to get green.
+
+| # | What | Cause | Fix |
+|---|---|---|---|
+| 1 | `test_decision_inputs.py` failed at collection with `NameError: pytest` | my import edit did not match the text | added the import |
+| 2 | M1 observed tests got 2 samples instead of 5 or 6 | test data: traversals spaced 1,000 s apart ran past 23:00Z, so most fell into local hour 18, not 17 | spacing 300 s from t = 0 (all in hour 17) |
+| 3 | `test_decision_inputs.py` incident test: ingest rejected an event | test data: `segment_accident` is not an `incident_type` of the contract (`bus_breakdown`, `stop_closed`, `other`) | used `stop_closed` at `P-885` |
+
+### Decisions taken during the phase
+
+- **Baselines replaced every cycle** (`DELETE` + `INSERT` in the cycle's transaction, before the snapshot is built), also for a no-op recompute. At the same `(as_of_ts, M)` the values are identical; a replay at an older time overwrites them with that time's values, as G5/G6 say ("replaced each cycle").
+- **M2 rider count** counts every `rider_arrival` at the M2 stop up to `as_of_ts` and `M`, with no source filter (FR-030 says "rider_arrival events"; only the simulator emits them). R12's "simulator running" test does exclude `backend` bus positions.
+- **`reserve_free`** = roster reserve buses that are not on the corridor in silver (the G3 wording; FR-033 says "not on an active trip"). A reserve bus that is waiting at P-883 or has finished its trip is free.
+- **`active_incidents`** = silver incidents with `start_ts <= as_of_ts < end_ts`, ordered by `inc_id`; `duration_min = 0` is therefore never active (R7). `enabled_stops` ordered by `stop_id`.
+- **`decision_inputs`** is built from the `model_dump` of the same `corridor_now` object, so `buses` and `summary` cannot differ.
+- **Test support**: new `config_reset` fixture in `tests/integration/conftest.py` restores the seeded `config` tables after tests that change them (the module database is shared). The new T057 test was appended to `tests/integration/test_rebuild.py`.
+- No new setting, so `.env.example` is unchanged. No change under `contracts/`, `docs/adr/`, `db/init/`, the simulator, ingestion, `.kiro/`, `.specify/`, checklists, or the silver/gold console rules.
