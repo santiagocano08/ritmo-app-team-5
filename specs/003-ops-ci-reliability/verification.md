@@ -252,3 +252,80 @@ Changed: `.env.example`, `docker-compose.yml` (ingestion env var and healthcheck
 - The first existing-volume attempt was invalid: my zsh variable holding the psql command was not word-split, so `DROP SCHEMA` never ran. Repeated with a shell function.
 - The first "start to healthy" measurement followed a container restart and was contaminated by the replay described above; it was repeated on a fresh stack.
 - The ADR addendum wording is mine (data owner to confirm, CODEOWNERS `/docs/adr/`): "Addendum 2026-11-21: a fifth schema, `ops`, holds read-only views over bronze for operations (ingestion freshness). It holds no tables and no secrets."
+
+## Phase 4: documentation and drill rerun (T039 to T055)
+
+Times are UTC, 2026-11-21. The first Phase 4 command was not timestamped; the drill started at 12:18:49Z and
+the last suite finished at 12:31:44Z.
+
+### Red run (T042)
+
+`uv run pytest tests/unit/test_ops_docs.py tests/unit/test_drill_baseline.py tests/unit/test_drill_script.py -q --no-cov`
+before any implementation: 19 failed, 1 passed (the branch-protection test). Reasons: "doc not found" for the
+four new documents, "baseline file not found" for `docs/ops/drill-baseline/`, "script not found" for
+`scripts/drill/run_drill.sh`. No import or syntax errors.
+
+### Drill rerun (T050), one valid run
+
+- Command: `bash scripts/drill/run_drill.sh` (project `pulsoflota-drill`, own volume). Start 12:18:49Z, end
+  12:24:22Z (333 s). The default stack (ports 5432 and 8000) stayed up and was not touched; the script's port
+  guard passed with the drill ports 55432 and 58000 (non-default, the script's defaults).
+- Marks (s): F1 52 and 83, F2 109 and 139, F3 229, END 320, CLEANED 333. Baseline: 51, 82, 107, 138, 228, 318, 329.
+- One run only; it was valid (stack started, all eight marks written, project removed at the end, nothing left
+  running under `pulsoflota-drill`).
+- Raw files stay in `drill-out/` (ignored, never staged). `.drill-input/` was not read by the script and not changed.
+
+### Numbers (T051), read with the fixed rule (helper functions of `tests/unit/test_ops_docs.py`)
+
+| Item | Value |
+|---|---|
+| Bronze rows before F2 (t = 106 s) / after F2 (t = 144 s) / at F3 mark / end | 508 / 698 (backlog stored, order kept) / 1144 / 1154 |
+| `RestartCount`, `StartedAt` of ingestion across F2 | 0, `12:18:56.59Z` before and after (unchanged) |
+| `RestartCount` after F3 | 1, `StartedAt` `12:22:39.79Z` (F3 kills the process; the container restarts and replays) |
+| `db_retry` lines / `db_recovered` | 8 lines (attempts 1 to 8, waits 1, 2, 4, then 5 s), one `db_recovered` with `outage_s` 32.093 |
+| Credentials in retry lines | none: every line has only `ts`, `level`, `event`, `attempt`, `wait_s`, `elapsed_s`, `reason`, `sqlstate` |
+| Lag after F2 (last sample strictly before the F3 mark, t = 228 s) | 1 s (baseline 120 s) |
+| F3 lag (last sample, t = 320 s) | 90 s (baseline 209 s) |
+| Duplicates / contract rejections | 468 at the end of the run counting the whole drill (458 at t = 320 s) / 0 |
+| Real rejection rate | 0 % (0 / (1154 + 0)) |
+| `unhealthy` transitions (`health_events.log`) | ingestion `unhealthy` 12:20:43.6Z, `healthy` 12:21:15.9Z (F2); `unhealthy` 12:22:55.9Z, not recovered at the end of observation (F3) |
+| Bronze integrity | `1154,1154` (`count(*)` equals `count(distinct event_id)`) |
+
+Two readings stated as they are: the F3 lag only fell because F2 no longer leaves a lag before F3 (209 - 120 = 89 s
+in the baseline against 90 - 1 = 89 s now); F3 still restarts and replays.
+
+### Documents (T043 to T049, T052, T053)
+
+`docs/ops/drill-baseline/` (data rows of `metrics.csv` byte for byte equal to the original, checked with
+`diff` and by test), `post-mortem-2026-11-18-drill.md`, `runbook-ingestion-refresh-unhealthy.md`,
+`sli-slo-proposal.md` (headed PROPOSAL, measured stale times filled in), `drill-rerun.md` (no TBD).
+
+### Green runs (T055), one at a time
+
+1. `uv run pytest tests/unit/test_ops_docs.py tests/unit/test_drill_baseline.py tests/unit/test_drill_script.py tests/unit/test_drill_feed_control.py -q --no-cov`: 26 passed.
+2. Host suite `uv run pytest` (12:25:35Z to 12:29:35Z, 239.5 s): **563 passed, 3 skipped, 0 failed**, coverage 94.91 %.
+3. Andon `docker compose --profile tools build tests && docker compose --profile tools run --rm tests` (12:29:39Z to 12:31:44Z, 121.8 s): **559 passed, 7 skipped, 0 failed**, coverage 94.91 %. The extra 4 skips are the host-only tests (`live` and the `.drill-input` comparison).
+4. ADR: Phase 4 changes nothing under `docs/adr` (`git diff --numstat HEAD -- docs/adr` is empty). The single ADR change of the feature is the Phase 3 commit `3aaa315`: `2 0` (one content line plus one blank separator, 002 precedent), nothing removed.
+5. Untouched check: `git diff HEAD` shows no change to `contracts/`, `src/`, `.github/`, `docker-compose.yml`, `Dockerfile`, `docs/adr`, `.github/CODEOWNERS`. Changed or new files are only those listed in the report. No `.drill-input/` or `drill-out/` in `git status` (both ignored).
+
+### Rework and decisions
+
+- `.gitignore` ignores `*.log`, which silently excluded `docs/ops/drill-baseline/events.log` from `git status`. Added the exception `!docs/ops/drill-baseline/*.log` and `drill-out/`.
+- The script uses non-default ports (55432 and 58000) and aborts only when those are taken, so it can run next to the default stack (data owner instruction); T041's "another stack running" is covered by that port check.
+- T054 (independent walk-through of the runbook) not done: it needs a person who did not run the drill. Cut-list item; SC-010 is covered by the content test only.
+
+### SC-001 to SC-011 evidence map
+
+| SC | Evidence |
+|---|---|
+| SC-001 | Phase 1 verification (T009), PR #9, #10 probes (T010, P2 red) |
+| SC-002 | Baseline (T001), Phase 1 addendum, every phase suite run; this phase 94.91 % |
+| SC-003 | T008 (33 passed, 18 fixtures) and probe P3 (PR #11) |
+| SC-004 | Phase 2 live outage test (T023) and this drill: F2 no restart, 8 retries, recovery 32.1 s, rows grow, 1154 of 1154 |
+| SC-005 | Phase 2 log-schema tests and the rerun `retry_lines.log` (no credentials) |
+| SC-006 | Phase 2 tally tests; rerun: 468 duplicates reported apart, 0 rejections |
+| SC-007 | Phase 3 live check (T037) |
+| SC-008 | Phase 3 live feed test (T037); rerun `unhealthy` transitions |
+| SC-009 | `docs/ops/drill-rerun.md` and the numbers above |
+| SC-010 | `tests/unit/test_ops_docs.py`; walk-through (T054) not done |
+| SC-011 | Suites above; ADR diff in item 4 |

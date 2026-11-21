@@ -52,3 +52,8 @@ htmlcov/
 
 # Raw source data (large, re-downloadable; see data/reference/SOURCES.md)
 data/raw/
+
+# Drill output (feature 003): raw samples of scripts/drill/run_drill.sh, local only
+drill-out/
+# Drill baseline evidence (feature 003) is committed even though it is a .log file
+!docs/ops/drill-baseline/*.log
