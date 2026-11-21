@@ -1,6 +1,18 @@
 <!--
 Sync Impact Report (temporary draft — remove before merge)
 ====================================================================
+- Proposed amendment 1.1.0 → 1.2.0 (MINOR, compatible stack change), 2026-11-21,
+  PR `constitutional-amendment`, ADR-0004 (status: Proposed; pending the unanimous
+  sign-off of the Turn Owner, the Architect and the Dispatcher Representative).
+  Adds a React + Vite + Tailwind CSS single-page application as an allowed option
+  for the dispatcher console, next to Streamlit / Dash and HTML5/Jinja2. Python
+  3.12+ stays the language of the backend, ingestion and data pipeline; the SPA
+  is the only JavaScript/TypeScript component. Supply-chain and Gate 2 norms name
+  the JavaScript equivalents (`npm audit`, lockfile integrity hashes, `npm ci`),
+  and the coverage threshold of Gate 2 explicitly covers the console code.
+  Core Principles are unchanged. Updated: AGENTS.md, .kiro/steering/frontend-web.md,
+  security.md, testing-quality-gates.md, deployment-containers.md, docs/turns-ritmo.md.
+  Templates and agents: no changes required.
 - Proposed amendment 1.0.0 → 1.1.0 (MINOR), 2026-11-17, PR `constitutional-amendment`:
   adds "Phased Adoption" under Governance and a note at the top of "Technical and
   Security Constraints". Core Principles are unchanged. New referenced document:
@@ -94,9 +106,16 @@ Sync Impact Report (temporary draft — remove before merge)
 
 **Mandatory technology stack.**
 
-- Language: Python 3.12+.
+- Language: Python 3.12+ for the API, ingestion and data pipeline. A React
+  console (next item) is written in JavaScript/TypeScript; it is the only
+  non-Python component.
 - API: FastAPI or Flask.
-- Dispatcher console: Streamlit / Dash or HTML5/Jinja2 with WebSockets.
+- Dispatcher console: one of
+  - Streamlit / Dash;
+  - HTML5/Jinja2 with WebSockets;
+  - a React + Vite + Tailwind CSS single-page application that consumes the
+    backend only through its REST/WebSocket API (no direct database access)
+    and is served as built static files. Authorization stays in the backend.
 - Persistence: PostgreSQL with the PostGIS extension (or SQLite for packaged
   development/testing environments).
 - Real time and cache: Redis (Pub/Sub for live telemetry events and in-memory
@@ -134,7 +153,9 @@ governing norm.
   NOT be exposed in production without authentication.
 - **Supply chain:** CI/CD MUST run software composition analysis (SCA) on every
   PR, block merges on High or Critical vulnerabilities (CVSS ≥ 7.0) and pin
-  dependencies to exact versions with SHA-256 hashes.
+  dependencies to exact versions with SHA-256 hashes. For JavaScript
+  dependencies, the committed `package-lock.json` (exact versions with npm
+  `integrity` hashes) installed with `npm ci` satisfies this norm.
 - **Cryptography and secrets:** external communication MUST use TLS 1.3
   (minimum TLS 1.2 with PFS cipher suites); the IoT fleet MUST authenticate with
   mTLS and one x509 certificate per unit. Passwords MUST be hashed with Argon2id
@@ -210,7 +231,8 @@ next stage or deployed to production without passing:
   `ESLint`) and Pydantic schema validation. Pass: 0 Critical/High SAST findings
   and a validated contract schema.
 - **Gate 2 — Integration and Supply Chain** (CI): SCA scan (`pip-audit`,
-  `Trivy`) and unit/integration test suites. Pass: coverage > 80 % and 0 known
+  `npm audit` for the React console, `Trivy`) and unit/integration test suites.
+  The coverage threshold applies to the console code as well. Pass: coverage > 80 % and 0 known
   dependency vulnerabilities.
 - **Gate 3 — Data Gate (DataOps)** (at ingestion runtime): message contract
   tests, HMAC validation and anomaly detection. Pass: packet rejection rate
@@ -259,4 +281,4 @@ next stage or deployed to production without passing:
   `.kiro/steering/*.md` files operationalize it by context. For security detail,
   see `.kiro/steering/security.md`.
 
-**Version**: 1.1.0 | **Ratified**: 2026-11-17 | **Last Amended**: 2026-11-17
+**Version**: 1.2.0 | **Ratified**: 2026-11-17 | **Last Amended**: 2026-11-21

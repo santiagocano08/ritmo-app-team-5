@@ -49,6 +49,10 @@ At least three services:
 
 - Pin exact version + SHA-256 hash.
 - SCA scan (`Trivy` for images) in CI; block CVEs with CVSS ≥ 7.0.
+- React console (ADR-0004): multi-stage build. A Node stage runs `npm ci` and
+  `vite build`; the final stage serves only the static `dist/` output from a
+  non-root web server image (UID 10001) with the security headers. No Node
+  runtime, source or `node_modules` in the final image.
 
 ## References
 

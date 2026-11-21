@@ -1,16 +1,34 @@
 ---
 inclusion: auto
 name: frontend-web
-description: When working on the dispatcher web console (Streamlit/Dash/HTML5+WebSockets) - interactive map, headway and congestion visualization, Human-in-the-Loop UI and contingency mode.
+description: When working on the dispatcher web console (Streamlit/Dash/HTML5+WebSockets or React+Vite+Tailwind) - interactive map, headway and congestion visualization, Human-in-the-Loop UI and contingency mode.
 ---
 
 # Dispatcher Web Console — PulsoFlota
 
 ## Stack
 
-- Streamlit / Dash or HTML5/Jinja2 with WebSockets.
+- Streamlit / Dash, HTML5/Jinja2 with WebSockets, or a React + Vite + Tailwind
+  CSS single-page application (ADR-0004).
 - `pulsoflota-web` modular monolith: supervisory console, metric calculation and
   interactive map. It belongs to the **Adaptive Lane** (see `ritmo-workflow.md`).
+
+### React + Vite + Tailwind console
+
+- The SPA reads and writes only through the backend REST/WebSocket API. It never
+  connects to PostgreSQL or Redis, and it never computes the service metric
+  itself: P(board ≤ t), EWT and headway come from the backend.
+- Contract-First (Principle II): TypeScript types for API payloads are generated
+  from the backend OpenAPI document or from `contracts/read/*.schema.json`, not
+  written by hand. Fixtures in `contracts/read/fixtures/` drive component tests
+  and the mock mode used before an endpoint exists.
+- Hiding a button is not access control: every approval or command is
+  authorized again in the backend.
+- Build output is static files. The serving container runs as non-root
+  (UID 10001) and sends the mandatory security headers (see `security.md`).
+- Tests: Vitest + Testing Library; coverage > 80 % applies to the console code.
+- Lint: ESLint (Gate 1). Dependencies: committed `package-lock.json`,
+  installed with `npm ci`; `npm audit` in Gate 2 (see `security.md` A03).
 
 ## Real-time interactive map
 
