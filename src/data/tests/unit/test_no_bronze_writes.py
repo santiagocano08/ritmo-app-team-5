@@ -57,3 +57,15 @@ def test_no_write_statement_targets_bronze() -> None:
     offenders = [f"{p.relative_to(ROOT)}: {m.group(0)}"
                  for p in _files() for m in WRITE.finditer(p.read_text(encoding="utf-8"))]
     assert offenders == []
+
+
+FORBIDDEN_OPS = re.compile(r"\b(?:INSERT\s+INTO|UPDATE\s+\w|DELETE\s+FROM|CREATE\s+TABLE)\b", re.IGNORECASE)
+
+
+def test_ops_view_and_health_probe_never_write_or_create_tables() -> None:
+    targets = [ROOT / "src" / "data" / "db" / "init" / "006_ops.sql", ROOT / "src" / "data" / "ingestion" / "health.py"]
+    for path in targets:
+        assert path.exists(), f"{path.name} missing"
+        code = "\n".join(line for line in path.read_text(encoding="utf-8").splitlines()
+                         if not line.lstrip().startswith(("--", "#")))
+        assert FORBIDDEN_OPS.search(code) is None, path.name

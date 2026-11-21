@@ -7,7 +7,8 @@
 # psycopg[binary] ships wheels. Non-root UID 10001 (turn-1 baseline).
 # ---------------------------------------------------------------------------
 
-FROM python:3.12-slim AS base
+# Base pinned to an exact patch version so builds are reproducible (feature 003, R17).
+FROM python:3.12.16-slim AS base
 
 COPY --from=ghcr.io/astral-sh/uv:0.9.5 /uv /usr/local/bin/uv
 
@@ -35,6 +36,11 @@ COPY src/ ./src/
 COPY data/reference/ ./data/reference/
 RUN chown -R appuser:appgroup /app
 USER appuser
+ARG REVISION=unknown
+ARG SOURCE_URL=https://github.com/santiagocano08/ritmo-app-team-5
+LABEL org.opencontainers.image.source=$SOURCE_URL \
+      org.opencontainers.image.revision=$REVISION \
+      org.opencontainers.image.title="pulsoflota"
 
 # --- prod (default, last stage): runtime dependencies only
 FROM base AS prod
@@ -43,4 +49,9 @@ COPY src/ ./src/
 COPY data/reference/ ./data/reference/
 RUN chown -R appuser:appgroup /app
 USER appuser
+ARG REVISION=unknown
+ARG SOURCE_URL=https://github.com/santiagocano08/ritmo-app-team-5
+LABEL org.opencontainers.image.source=$SOURCE_URL \
+      org.opencontainers.image.revision=$REVISION \
+      org.opencontainers.image.title="pulsoflota"
 CMD ["python", "-m", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]

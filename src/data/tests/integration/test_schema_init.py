@@ -152,3 +152,16 @@ def test_adr_0001_has_the_config_addendum() -> None:
     text = (ROOT / "docs" / "adr" / "0001-data-layers-and-ingestion-semantics.md").read_text(encoding="utf-8")
     assert ("Addendum 2026-11-18: a fourth schema, `config`, holds static configuration and "
             "reference tables. It holds no derived data and no secrets.") in text
+
+
+def test_ops_view_exists_after_init(conn) -> None:
+    assert conn.execute("SELECT 1 FROM information_schema.schemata WHERE schema_name = 'ops'").fetchone()
+    assert conn.execute("SELECT to_regclass('ops.ingestion_health')").fetchone()[0] is not None
+
+
+def test_adr_0001_has_the_ops_addendum_after_the_config_one() -> None:
+    text = (ROOT / "docs" / "adr" / "0001-data-layers-and-ingestion-semantics.md").read_text(encoding="utf-8")
+    ops = ("Addendum 2026-11-21: a fifth schema, `ops`, holds read-only views over bronze for operations "
+           "(ingestion freshness). It holds no tables and no secrets.")
+    assert ops in text
+    assert text.index("a fourth schema, `config`") < text.index(ops)

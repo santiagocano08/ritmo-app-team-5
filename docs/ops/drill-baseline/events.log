@@ -1,0 +1,8 @@
+0s 03:21:19Z START docker compose up (seed 42, pace 1 => 5x real time)
+51s 03:22:10Z F1 injected: docker compose stop api
+82s 03:22:41Z F1 end: docker compose start api
+107s 03:23:06Z F2 injected: docker compose stop db
+138s 03:23:37Z F2 end: docker compose start db
+228s 03:25:07Z F3 injected: kill -9 of the ingestion process (crash)
+318s 03:26:37Z END observation
+329s 03:26:48Z CLEANED: drill containers and volume removed

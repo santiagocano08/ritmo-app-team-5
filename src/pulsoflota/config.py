@@ -10,6 +10,7 @@ All variables are declared in .env.example (committed).  Copy that to .env
 """
 from __future__ import annotations
 
+import math
 import os
 
 
@@ -78,3 +79,31 @@ def get_sim_planned_headway_s() -> int:
             f"SIM_PLANNED_HEADWAY_S must be > 0, got: {value}"
         )
     return value
+
+
+def _positive_float(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        raise RuntimeError(f"{name} must be a number, got: {raw!r}")
+    if not math.isfinite(value) or value <= 0:
+        raise RuntimeError(f"{name} must be a finite number > 0, got: {raw!r}")
+    return value
+
+
+def get_ingestion_retry_initial_s() -> float:
+    """Seconds to wait after the first database failure (INGESTION_RETRY_INITIAL_S, default 1)."""
+    return _positive_float("INGESTION_RETRY_INITIAL_S", 1.0)
+
+
+def get_ingestion_retry_max_wait_s() -> float:
+    """Cap of the wait between attempts (INGESTION_RETRY_MAX_WAIT_S, default 5)."""
+    return _positive_float("INGESTION_RETRY_MAX_WAIT_S", 5.0)
+
+
+def get_ingestion_retry_total_s() -> float:
+    """Total retry window of one outage (INGESTION_RETRY_TOTAL_S, default 120)."""
+    return _positive_float("INGESTION_RETRY_TOTAL_S", 120.0)

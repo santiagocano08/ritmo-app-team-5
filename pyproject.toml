@@ -39,7 +39,14 @@ markers = [
 
 [tool.coverage.run]
 source = ["src"]
-omit = ["src/pulsoflota/models/*", "src/data/tests/*"]
+# build.py and sources.py are the offline ETL that builds the committed data/reference/*.csv once;
+# their tests need the git-ignored data/raw/ and skip in CI, so they would read 0 % there.
+omit = [
+    "src/pulsoflota/models/*",
+    "src/data/tests/*",
+    "src/data/reference/build.py",
+    "src/data/reference/sources.py",
+]
 
 [tool.coverage.report]
 exclude_lines = [

@@ -1,0 +1,3 @@
+/drill-api-1 restarts=0
+/drill-db-1 restarts=0
+/drill-ingestion-1 restarts=3
