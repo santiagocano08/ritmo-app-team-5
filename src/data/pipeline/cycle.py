@@ -18,6 +18,7 @@ import psycopg
 from psycopg import pq
 
 from src.data.pipeline import gold
+from src.data.pipeline.incidents import build_incidents
 from src.data.pipeline.silver import rebuild_silver
 
 CHANNEL = "gold_snapshot"
@@ -67,6 +68,8 @@ def run_cycle(conn: psycopg.Connection, as_of_ts: datetime, notify: bool = True)
         rebuild_silver(conn, as_of, max_id)
         gold.rebuild_baselines(conn, as_of, max_id)
         snap = gold.build_snapshot(conn, as_of, max_id)
+        if snap.created:
+            build_incidents(conn, snap.snapshot_id, as_of, max_id)
         if snap.created and notify:
             conn.execute("SELECT pg_notify(%s, %s)", (CHANNEL, json.dumps({"snapshot_id": str(snap.snapshot_id)})))
         conn.commit()

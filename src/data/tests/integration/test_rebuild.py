@@ -150,6 +150,8 @@ def test_dropping_silver_and_gold_and_recomputing_gives_the_same_snapshot(gold_c
         for t in baselines:
             out[t] = [tuple(repr(v) for v in r) for r in gold_conn.execute(
                 f"SELECT * FROM gold.{t} ORDER BY 1, 2").fetchall()]  # noqa: S608
+        out["incident"] = [tuple(repr(v) for v in r) for r in gold_conn.execute(
+            "SELECT * FROM gold.incident WHERE snapshot_id = %s ORDER BY 1, 2", (snap,)).fetchall()]
         return out
 
     before = last_state()
@@ -157,12 +159,16 @@ def test_dropping_silver_and_gold_and_recomputing_gives_the_same_snapshot(gold_c
     last_as_of_s = 30 * 60
 
     gold_conn.commit()
+    # 004: gold.incident references gold.snapshots, so it goes first and its init script is replayed
+    gold_conn.execute("DROP VIEW gold.incident_current")
+    gold_conn.execute("DROP TABLE gold.incident")
     for t in baselines + tuple(reversed(gold_tables)):
         gold_conn.execute(f"DROP TABLE gold.{t}")  # noqa: S608 - fixed names
     for t in SILVER_TABLES:
         gold_conn.execute(f"DROP TABLE silver.{t}")  # noqa: S608 - fixed names
     gold_conn.execute((INIT_DIR / "004_silver.sql").read_text(encoding="utf-8"))
     gold_conn.execute((INIT_DIR / "005_gold.sql").read_text(encoding="utf-8"))
+    gold_conn.execute((INIT_DIR / "007_scenarios.sql").read_text(encoding="utf-8"))
     gold_conn.commit()
 
     result = cycle(gold_conn, last_as_of_s)

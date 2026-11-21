@@ -70,3 +70,21 @@ def test_ingestion_health_setting_documented_without_secrets() -> None:
     env = _env_example()
     assert env["INGESTION_HEALTH_MAX_AGE_S"] == "15"
     assert env["INGESTION_HEALTH_MAX_AGE_S"].isdigit()
+
+
+def test_scenario_settings_documented_and_enable_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """004: the scenario file and the truth path are optional; the documented defaults are empty."""
+    from src.pulsoflota.config import get_sim_scenario_file, get_sim_truth_path
+
+    env = _env_example()
+    assert env["SIM_SCENARIO_FILE"] == "" and env["SIM_TRUTH_PATH"] == ""
+    monkeypatch.setenv("SIM_SCENARIO_FILE", env["SIM_SCENARIO_FILE"])
+    monkeypatch.setenv("SIM_TRUTH_PATH", env["SIM_TRUTH_PATH"])
+    assert get_sim_scenario_file() is None and get_sim_truth_path() is None
+
+
+def test_compose_passes_scenario_settings_to_ingestion_with_empty_defaults() -> None:
+    compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+    env = compose["services"]["ingestion"]["environment"]
+    assert env["SIM_SCENARIO_FILE"] == "${SIM_SCENARIO_FILE:-}"
+    assert env["SIM_TRUTH_PATH"] == "${SIM_TRUTH_PATH:-}"

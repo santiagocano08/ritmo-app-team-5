@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest
 
 from src.data.tests.fixtures import bronze_builders as bb
+from src.data.rules import RULES_VERSION
 from src.data.tests.fixtures.gold_support import count, cycle, validator
 
 
@@ -132,8 +133,8 @@ def test_the_five_gold_rows_of_a_snapshot_share_one_id_and_lineage(gold_conn) ->
     result, _ = _run(gold_conn, bb.normal().events, 3000)
     for table in ("source_status", "corridor_now", "decision_inputs", "service_metric"):
         rows = gold_conn.execute(f"SELECT snapshot_id, rules_version, max_bronze_id FROM gold.{table}").fetchall()  # noqa: S608
-        assert rows == [(result.snapshot_id, "1.0.0", result.max_bronze_id)], table
+        assert rows == [(result.snapshot_id, RULES_VERSION, result.max_bronze_id)], table
     assert count(gold_conn, "gold.snapshots") == 1
     for table in ("m1_baseline", "m2_baseline"):
         lineage = gold_conn.execute(f"SELECT DISTINCT rules_version, max_bronze_id FROM gold.{table}").fetchall()  # noqa: S608
-        assert lineage == [("1.0.0", result.max_bronze_id)], table
+        assert lineage == [(RULES_VERSION, result.max_bronze_id)], table

@@ -107,3 +107,13 @@ def get_ingestion_retry_max_wait_s() -> float:
 def get_ingestion_retry_total_s() -> float:
     """Total retry window of one outage (INGESTION_RETRY_TOTAL_S, default 120)."""
     return _positive_float("INGESTION_RETRY_TOTAL_S", 120.0)
+
+
+def get_sim_scenario_file() -> str | None:
+    """Path of the scenario file from SIM_SCENARIO_FILE; unset or empty means no scenario (004)."""
+    return os.environ.get("SIM_SCENARIO_FILE") or None
+
+
+def get_sim_truth_path() -> str | None:
+    """Path of the scenario truth file from SIM_TRUTH_PATH; unset or empty means stderr (004)."""
+    return os.environ.get("SIM_TRUTH_PATH") or None

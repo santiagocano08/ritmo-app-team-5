@@ -19,7 +19,7 @@ TABLES = {
                "ref_congestion_factor", "ref_demand_shape", "ref_demand_volume"],
     "silver": ["position_history", "incidents", "bus_current_state", "stop_visits", "segment_traversals"],
     "gold": ["snapshots", "source_status", "corridor_now", "decision_inputs", "service_metric",
-             "m1_baseline", "m2_baseline"],
+             "m1_baseline", "m2_baseline", "incident"],
 }
 GOLD_TABLES = TABLES["gold"]
 
@@ -40,6 +40,12 @@ def test_all_tables_exist(conn) -> None:
         for name in names:
             assert conn.execute("SELECT to_regclass(%s)", (f"{schema}.{name}",)).fetchone()[0] is not None, \
                 f"{schema}.{name} missing"
+
+
+def test_incident_current_view_exists(conn) -> None:
+    """004: the view over the newest snapshot of gold.incident (init script 007)."""
+    assert conn.execute("SELECT to_regclass('gold.incident_current')").fetchone()[0] is not None
+    assert conn.execute("SELECT relkind FROM pg_class WHERE oid = 'gold.incident_current'::regclass").fetchone()[0] == "v"
 
 
 def test_corridor_settings_seed(conn) -> None:

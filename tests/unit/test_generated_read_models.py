@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-NAMES = ["source_status", "corridor_now", "decision_inputs"]
+NAMES = ["source_status", "corridor_now", "decision_inputs", "incident"]
 
 
 def _model_root(module):
