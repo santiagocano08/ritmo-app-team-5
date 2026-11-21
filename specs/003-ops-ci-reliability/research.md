@@ -491,6 +491,62 @@ already in the dev extra and locked in `uv.lock`. `pyproject.toml` and `uv.lock`
 
 ---
 
+## R16 — Publishing the image to GHCR (FR-029; plan-level addition 2026-11-21)
+
+**Decision**: a fourth job `publish` in `ci.yml`, written with the plain `docker` CLI on `ubuntu-latest`,
+so no new third-party action is added (A03: fewer actions to pin).
+
+- `if: github.event_name == 'push' && github.ref == 'refs/heads/main'` and `needs: [test, contract, build]`.
+  The workflow already triggers on `pull_request`, so the `if` is what keeps pull requests out.
+- Job-level `permissions: contents: read, packages: write`; the workflow level stays `contents: read`.
+- Login: `echo "$TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin`, with
+  `TOKEN: ${{ github.token }}` set in the step `env`. `github.token` is the built-in `GITHUB_TOKEN`; it
+  is not a `secrets.` reference, so the Phase 1 rule "no `secrets.` anywhere" still holds and no
+  repository secret is created.
+- Image name from `github.repository` lowercased in the shell (`${GITHUB_REPOSITORY,,}`), because GHCR
+  rejects uppercase: `ghcr.io/<owner>/<repo>`.
+- Build: `docker build --target prod --build-arg REVISION=${{ github.sha }} -t "$IMAGE:${{ github.sha }}"
+  -t "$IMAGE:main" .`, then `docker push --all-tags "$IMAGE"`. Tags: full commit SHA and `main` only.
+- The job is not a required check (it does not exist on pull requests).
+
+**Why not alternatives**: `docker/login-action` + `build-push-action` (three extra actions, more
+supply-chain surface, no benefit for one image); a personal access token (a new secret, forbidden here);
+a `latest` tag (floating, not asked for).
+
+**Limits**: the first publish cannot be shown before #4, #6 and #9 reach `main`. The repository owner may
+have to allow Actions to write packages; new GHCR packages are private by default. Acceptance is the
+structure test (SC-012) plus a local `docker build --target prod` (SC-013); nothing is pushed locally.
+
+---
+
+## R17 — Pinned base images and OCI labels (FR-030; plan-level addition 2026-11-21)
+
+**Chosen versions** (checked 2026-11-21 with `docker image inspect` on the locally pulled images and
+`docker manifest inspect` on the exact tags, both exist):
+
+| Image | Floating tag today | Local image reports | Pinned tag |
+|---|---|---|---|
+| Python base (`Dockerfile`) | `python:3.12-slim` | `PYTHON_VERSION=3.12.16`, linux/arm64 | `python:3.12.16-slim` |
+| PostgreSQL (`docker-compose.yml`) | `postgres:16` | `PG_VERSION=16.11-1.pgdg13+1` | `postgres:16.11` |
+| uv (`Dockerfile`) | already exact | n/a | `ghcr.io/astral-sh/uv:0.9.5` (unchanged) |
+
+Same minor and major as before, so the existing `db_data` volume and the dependency lock stay valid.
+Pins are by tag (exact patch), not by SHA-256 digest: digests differ per architecture and the owner asked
+for exact patch versions. Digest pinning and Trivy are deferred to turn 2 (A03, R13). Bumping a pin is a
+one-line reviewed change.
+
+**OCI labels** on the final stages (`dev` and `prod`), after the dependency layers so a new commit SHA
+does not invalidate them: `ARG REVISION=unknown` and `ARG SOURCE_URL` (default the repository URL),
+`LABEL org.opencontainers.image.source=$SOURCE_URL`, `org.opencontainers.image.revision=$REVISION`,
+`org.opencontainers.image.title="pulsoflota"`. CI passes `REVISION=${{ github.sha }}` (and
+`SOURCE_URL=${{ github.server_url }}/${{ github.repository }}`) only in `publish`; `test` and `build` use
+the defaults, so the local stack and the CI-ready command are unchanged in behavior.
+
+**Test inputs**: the `tests` container does not see `Dockerfile`, so a read-only mount
+`./Dockerfile:/app/Dockerfile:ro` is added to the `tests` service (same pattern as `docker-compose.yml`).
+
+---
+
 ## Gate decisions (2026-11-20, data owner)
 
 Answers to the two open questions of `plan.md`. Where they conflict with R6, R10 to R12 above, this

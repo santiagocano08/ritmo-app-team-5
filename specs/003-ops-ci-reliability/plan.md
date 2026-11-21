@@ -79,6 +79,43 @@ only on `db`.
 | SLI/SLO proposal | fresh probes ÷ probes; proposed 99 % over 28 days, error budget 403 min; marked as a proposal; final target chosen from the rerun | R11 |
 | Drill rerun | `scripts/drill/run_drill.sh`; same faults, windows and metric columns as the original drill (English header `t_s,events,max_event_ts,ingestion_lag_s,duplicates,other_rejections,ingestion,api,db`; fixed lag-reading rule, baseline 120 s and 209 s), sample every 2 s; F3 kills the exact-argv ingestion process; baseline data in `docs/ops/drill-baseline/`; table in `docs/ops/drill-rerun.md` | R12 + Gate decisions |
 
+## Plan-level additions (added 2026-11-21 by the data owner)
+
+Two requirements approved by the data owner on 2026-11-21 after the spec was approved. They are
+recorded here, **not in `spec.md`** (the approved spec `2bb565f` is unchanged). They extend the CI
+story (US1) and run as **Phase 1b**, after Phase 1 and before Phase 3. Research: R16, R17.
+
+- **FR-029 (publish the image)**: CI MUST have a `publish` job in `.github/workflows/ci.yml` that
+  (a) runs only on `push` to `main` (never on `pull_request`), (b) runs only after `test`, `contract`
+  and `build` succeed (`needs: [test, contract, build]`), (c) builds the `prod` target of the existing
+  `Dockerfile` and pushes it to GitHub Container Registry as `ghcr.io/<owner>/<repo>` (lowercase,
+  derived from `github.repository`) with two tags: the full commit SHA and `main`, (d) authenticates
+  only with the built-in `GITHUB_TOKEN` and has job-level `permissions: contents: read, packages: write`
+  while the workflow level stays `contents: read`, and (e) adds no repository secret.
+- **FR-030 (pinned bases and OCI labels)**: the base images MUST be pinned to exact patch versions:
+  `python:3.12-slim` in `Dockerfile` becomes `python:3.12.16-slim` and `postgres:16` in
+  `docker-compose.yml` becomes `postgres:16.11` (both checked on 2026-11-21, R17). The image MUST carry
+  the OCI labels `org.opencontainers.image.source`, `org.opencontainers.image.revision` (from a build
+  argument that CI fills with the commit SHA) and `org.opencontainers.image.title`. The `uv` image stays
+  at `0.9.5`. The local stack and the CI-ready command keep their behavior.
+- **SC-012**: the workflow structure test proves the `publish` job's trigger condition, `needs`,
+  permissions (job and workflow level), image name derivation, tags and the absence of `secrets.`
+  references, and the `test`, `contract` and `build` jobs are unchanged.
+- **SC-013**: a test proves every `FROM` in `Dockerfile` and every non-build `image:` in
+  `docker-compose.yml` uses an exact version (no floating tag such as `16` or `3.12-slim`, no `latest`),
+  and that the three OCI labels exist; a local `docker build --target prod --build-arg ...` produces an
+  image whose labels carry the values passed.
+
+**Acceptance limits.** The first real publish cannot be demonstrated before the stacked pull requests
+#4, #6 and #9 reach `main`, so acceptance of FR-029 is the workflow structure test (SC-012) plus a
+local dry-run build of the `prod` target (SC-013). Nothing is pushed to the registry from a developer
+machine. On the first publish the repository owner may have to allow Actions to write packages
+(Settings → Actions → General → Workflow permissions, or the package's "Manage Actions access"); a new
+GHCR package is private by default, and the owner decides its visibility. Both are manual owner steps.
+
+**Out of scope (evolution, turn 2, A03)**: pinning by SHA-256 digest, pinning actions by SHA, Trivy
+scan of the image before push, image signing. The `publish` job is not a required status check.
+
 ## Constitution Check
 
 *GATE: evaluated before Phase 0; re-checked after Phase 1 design (below).*
@@ -195,8 +232,14 @@ src/data/tests/unit/test_no_bronze_writes.py           # scan also covers 006_op
 tests/unit/test_env_example.py                         # three retry variables (Phase 2) + the health variable (Phase 3)
 ```
 
+Added by Phase 1b (2026-11-21): `tests/unit/test_container_pins.py` (new); modified `Dockerfile`
+(pinned base, `ARG REVISION`, OCI labels), `docker-compose.yml` (`postgres:16.11`; read-only
+`./Dockerfile` mount in `tests`), `.github/workflows/ci.yml` (`publish` job) and
+`tests/unit/test_ci_workflow.py`.
+
 Not touched: `contracts/`, `src/data/ingestion/bronze.py` and `validate.py` (the duplicate marker
-already exists as `IngestResult.reason`), `src/data/refresh/`, `.dockerignore`, `Dockerfile`,
+already exists as `IngestResult.reason`), `src/data/refresh/`, `.dockerignore`, `Dockerfile` (except
+Phase 1b: base pin, `ARG REVISION`, labels, no change to stages or commands),
 `pyproject.toml`, `uv.lock`, `.github/CODEOWNERS` (see open question 2).
 
 **Structure Decision**: keep the existing layout (`src/data/ingestion/` for ingestion code,
@@ -225,6 +268,23 @@ Goal: FR-001 to FR-008, SC-001 to SC-003.
 
 Exit: local Andon green; workflow structure test green; first remote run green (all three jobs).
 Commit message: `ci: run tests, contract fixtures and compose build on every PR`.
+
+### Phase 1b — Publish the image and pin base images (US1 addition, FR-029, FR-030, SC-012, SC-013)
+
+Added 2026-11-21 by the data owner; runs after Phase 1 and before Phase 3. About 30 to 45 min.
+
+1. Red: extend `tests/unit/test_ci_workflow.py` (publish job: trigger condition, `needs`, permissions,
+   tags, image name, no secrets; the three original jobs unchanged) and create
+   `tests/unit/test_container_pins.py` (exact base versions, OCI labels). The `tests` service gets a
+   read-only mount of `Dockerfile`.
+2. Implement: pin `python:3.12.16-slim` and `postgres:16.11`, add `ARG REVISION` and the labels to
+   `Dockerfile`, add the `publish` job to `ci.yml` (plain `docker` CLI, no new third-party action).
+3. Green and verify: host suite, the CI-ready command, local `docker build --target prod` with
+   `--build-arg`, label check, Untouched check.
+
+Exit: structure and pin tests green; local `prod` build shows the labels; Andon green. The remote run
+of `publish` is **not** an exit condition (acceptance limits above).
+Commit message: `ci: publish the prod image to GHCR on main and pin base images`.
 
 ### Phase 2 — Ingestion survives a database outage (US2, P2)
 
@@ -292,6 +352,9 @@ Commit message: `docs(ops): post-mortem, runbook, SLI/SLO proposal and drill rer
 | 10 | A hung connect could stall the loop | window overrun | 3 s connect timeout per attempt; window measured on a monotonic clock |
 | 11 | A non-retryable database error (for example `53100` disk full) exits the process | restart loop | intended loud failure; not hidden by retry (R2) |
 | 12 | The rerun and the live verification steps on the real repo stack could delete the developer's volume or collide on ports | data loss on a dev machine | own Compose project name `pulsoflota-drill` for the drill and `pulsoflota-verify` for live tests and verification (no `down -v` on the default project), port guard in the drill script (research "Gate decisions") |
+| 13 | `publish` cannot run before #4, #6 and #9 reach `main`; the repository may not allow Actions to write packages | first publish could fail for settings, not code | acceptance by structure test plus local `prod` dry-run; owner step documented (Plan-level additions); the job is not a required check, so a failure never blocks a merge |
+| 14 | Pinned base tags (`python:3.12.16-slim`, `postgres:16.11`) stop receiving fixes | stale base until someone bumps it | exact tags are the A03 intent; bump is a reviewed one-line change; digest pinning and Trivy are turn 2 (R17) |
+| 15 | The `tests` service now mounts `Dockerfile` | one more read-only mount | read-only, same pattern as `docker-compose.yml`; command unchanged |
 
 ## Open questions
 

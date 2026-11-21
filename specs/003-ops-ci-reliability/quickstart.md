@@ -71,6 +71,28 @@ Phase 1 is done when the local Andon run is green and the green probe is green o
 
 ---
 
+## Phase 1b — Publish and pin (US1 addition, FR-029, FR-030; added 2026-11-21)
+
+**Red first**: `tests/unit/test_ci_workflow.py` (publish job) and `tests/unit/test_container_pins.py`
+(exact base versions, OCI labels). Expected failures: no `publish` job; `python:3.12-slim` and
+`postgres:16` are floating tags; labels missing.
+
+**Green** (one command at a time):
+
+```text
+uv run pytest tests/unit/test_ci_workflow.py tests/unit/test_container_pins.py -q --no-cov
+docker build --target prod --build-arg REVISION=dryrun0000 --build-arg SOURCE_URL=https://github.com/OWNER/REPO -t pulsoflota-prod-dryrun .
+docker image inspect pulsoflota-prod-dryrun --format '{{json .Config.Labels}}'
+docker image rm pulsoflota-prod-dryrun
+```
+
+Expected: tests pass; the build exits 0; the labels show `source`, `revision=dryrun0000` and
+`title=pulsoflota`. Then the host suite, the Andon command and `docker compose --profile tools build`
+(unchanged behavior). Nothing is pushed. The remote `publish` run appears only after #4, #6 and #9 reach
+`main`, and may need the owner to allow Actions to write packages (plan, "Plan-level additions").
+
+---
+
 ## Phase 2 — Ingestion resilience (US2, FR-009 to FR-015)
 
 **Red first** (unit, no database): retry policy defaults and invalid values; backoff sequence 1, 2, 4,

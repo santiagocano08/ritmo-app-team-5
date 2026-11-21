@@ -6,7 +6,7 @@
 
 **Tests**: ON (project default; the spec and constitution do not opt out, and FR-028 requires a failing test or check before every behavior change).
 
-**Organization**: the four phases of the plan, in order: CI (US1) → resilience (US2) → freshness (US3) → docs and drill rerun. Each phase ends with a verification task and can be committed on its own. There are no separate Setup or Foundational phases: no new service, dependency, table or contract is added (research R15), so nothing blocks the stories except the order below.
+**Organization**: the four phases of the plan, plus Phase 1b (added 2026-11-21 by the data owner, plan-level), in order: CI (US1) → publish and pin (Phase 1b, US1) → resilience (US2) → freshness (US3) → docs and drill rerun. Each phase ends with a verification task and can be committed on its own. There are no separate Setup or Foundational phases: no new service, dependency, table or contract is added (research R15), so nothing blocks the stories except the order below.
 
 ## Format: `- [ ] T### [P?] [US?] Description with file paths (FR/SC ids)`
 
@@ -60,6 +60,43 @@
   - ✂ P6 `ci-probe/broken-build`: wrong `COPY` path in `Dockerfile` → `build` red (FR-004).
 
 **Checkpoint**: Phase 1 done when T009 passes and P1 is green on GitHub. T010 may finish after Phase 2 starts; it does not block it.
+
+---
+
+## Phase 1b: Publish the image and pin base images (US1 addition, FR-029, FR-030, SC-012, SC-013)
+
+**Added 2026-11-21 by the data owner as a plan-level addition** (see plan.md "Plan-level additions"; `spec.md` is unchanged). Runs after Phase 1 (committed: `832c2f1`, `cc0f1b2`, `5472fbc`) and **before Phase 3**; it does not depend on Phase 2. Task ids continue from T055 and are not in execution order: run Phase 1b in the order listed here. About 30 to 45 min.
+
+**Goal**: CI publishes the `prod` image to GHCR from `main` only, and the base images are pinned to exact patch versions with OCI labels, without changing the local stack or the CI-ready command.
+
+**Independent Test**: the structure and pin tests are green and a local `docker build --target prod --build-arg REVISION=...` shows the labels (T065). The remote `publish` run cannot be shown before #4, #6 and #9 reach `main`; the first publish may also need the repository owner to allow Actions to write packages. Acceptance is therefore the structure test plus the local dry-run (SC-012, SC-013).
+
+**Commit message**: `ci: publish the prod image to GHCR on main and pin base images`
+
+**Chosen versions** (research R17, checked 2026-11-21): `python:3.12.16-slim` and `postgres:16.11`; `uv` stays `0.9.5`.
+
+### Tests first (must fail until the implementation tasks below)
+
+- [ ] T056 [US1] Extend `tests/unit/test_ci_workflow.py` for the `publish` job, and update the Phase 1 assertion "exactly the job ids `test`, `contract`, `build`, none with `needs`" to "job ids `test`, `contract`, `build`, `publish`; only `publish` has `needs`, equal to `[test, contract, build]`". Assert: `if` is exactly `github.event_name == 'push' && github.ref == 'refs/heads/main'`; job-level `permissions` is exactly `contents: read` and `packages: write`; workflow-level `permissions` is still `contents: read`; the build step uses `--target prod`, the image name is derived from `github.repository` lowercased and starts with `ghcr.io/`, tags are `github.sha` and `main` only (no `latest`), `REVISION=${{ github.sha }}` is passed; login uses `github.token`; the text `secrets.` appears nowhere in the file; no job other than `publish` contains `docker push` or `docker login`; `test`, `contract` and `build` keep the exact commands asserted in T002 (FR-029, SC-012). Fails until T062.
+- [ ] T057 [P] [US1] Create `tests/unit/test_container_pins.py` (reads `Dockerfile` and `docker-compose.yml` from the repository root, as `test_ci_workflow.py` does): the base `FROM` matches `^python:\d+\.\d+\.\d+-slim$` (no floating tag, no `latest`; stage aliases such as `FROM base` are skipped); the `COPY --from=ghcr.io/astral-sh/uv:0.9.5` stays exact; the `db` service `image:` matches `^postgres:\d+\.\d+$` (no bare `postgres:16`); the `Dockerfile` declares `ARG REVISION` with a default, and the labels `org.opencontainers.image.source`, `org.opencontainers.image.revision` (value from `REVISION`) and `org.opencontainers.image.title` appear in both `dev` and `prod` after the `uv sync` layer; stage names, users and the `prod` `CMD` are unchanged (FR-030, SC-013). Fails until T060 and T061.
+- [ ] T058 [US1] Edit `docker-compose.yml`: add the read-only mount `./Dockerfile:/app/Dockerfile:ro` to the `tests` service (same pattern as `./docker-compose.yml`), command unchanged, so T057 can read the `Dockerfile` inside the container; add an assertion for the mount in `tests/unit/test_ci_workflow.py` (same file as T056, so after it). Run before T061, same file (FR-030, FR-002).
+- [ ] T059 [US1] Confirm red on the host: `uv run pytest tests/unit/test_ci_workflow.py tests/unit/test_container_pins.py -q --no-cov` fails for the stated reasons (no `publish` job, floating `python:3.12-slim` and `postgres:16`, labels missing), not for import or syntax errors; note the output in `verification.md` (FR-028).
+
+### Implementation
+
+- [ ] T060 [US1] Edit `Dockerfile`: change `FROM python:3.12-slim AS base` to `FROM python:3.12.16-slim AS base`, add one header comment line saying why the base is pinned, and at the end of both the `dev` and `prod` stages (after `USER appuser`, before `CMD`) add `ARG REVISION=unknown`, `ARG SOURCE_URL=https://github.com/santiagocano08/ritmo-app-team-5` and `LABEL org.opencontainers.image.source=$SOURCE_URL org.opencontainers.image.revision=$REVISION org.opencontainers.image.title="pulsoflota"`. Change no stage, command, user or copied path (FR-030, R17). Turns the `Dockerfile` part of T057 green.
+- [ ] T061 [US1] Edit `docker-compose.yml`: change the `db` service `image: postgres:16` to `image: postgres:16.11`. Same file as T058: run after it (FR-030, R17). Turns the compose part of T057 green.
+- [ ] T062 [US1] Edit `.github/workflows/ci.yml`: add the `publish` job after `build` per research R16 and `contracts/ci-workflow.md`: `needs: [test, contract, build]`, `if: github.event_name == 'push' && github.ref == 'refs/heads/main'`, job-level `permissions: contents: read, packages: write`, `timeout-minutes: 20`; steps: checkout; set `IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}` in `$GITHUB_ENV`; `docker login ghcr.io -u "${{ github.actor }}" --password-stdin` fed from `TOKEN: ${{ github.token }}` in the step `env`; `docker build --target prod --build-arg REVISION=${{ github.sha }} --build-arg SOURCE_URL=${{ github.server_url }}/${{ github.repository }} -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:main" .`; `docker push --all-tags "$IMAGE"`. Keep workflow-level `permissions: contents: read`; add a comment that `publish` is not a required check and that the first run may need the owner to allow Actions to write packages. Do not edit `test`, `contract` or `build`. No new action, no new secret (FR-029, SC-012). Turns T056 green.
+- [ ] T063 [P] [US1] Add one sentence to `docs/ops/ci-branch-protection.md`: `publish` runs only on `main`, is not a required check, and on the first publish the repository owner may have to allow Actions to write packages (Settings → Actions → General → Workflow permissions). Keep the three check names and every statement that `tests/unit/test_ops_docs.py` (T003) asserts (FR-029).
+
+### Phase 1b verification (ends the phase; commit after it passes)
+
+- [ ] T064 [US1] Verify Phase 1b, one command at a time, and record in `verification.md`: (1) `uv run pytest tests/unit/test_ci_workflow.py tests/unit/test_container_pins.py tests/unit/test_ops_docs.py -q --no-cov`; (2) host suite `uv run pytest` (0 failed, coverage above 80 %, passed count not below the end of Phase 1 plus the new tests); (3) the Andon command (same; the `tests` service now mounts `Dockerfile`); (4) `docker compose --profile tools build` exits 0 and `docker compose config` shows `postgres:16.11` for `db` (FR-030, SC-002).
+- [ ] T065 [US1] Local dry-run of the publish build, nothing pushed: `docker build --target prod --build-arg REVISION=dryrun0000 --build-arg SOURCE_URL=https://github.com/santiagocano08/ritmo-app-team-5 -t pulsoflota-prod-dryrun .`; `docker image inspect pulsoflota-prod-dryrun --format '{{json .Config.Labels}}'` shows `org.opencontainers.image.revision=dryrun0000`, `.source` and `.title=pulsoflota`; `docker run --rm --entrypoint id pulsoflota-prod-dryrun` shows uid 10001; build once more without `--build-arg` and confirm `revision=unknown`; then `docker image rm pulsoflota-prod-dryrun`. Record outputs in `verification.md` (FR-029, FR-030, SC-013).
+- [ ] T066 [US1] Run the **Untouched check** (conventions above) with this phase's allowed list: `Dockerfile`, `docker-compose.yml`, `.github/workflows/ci.yml`, `docs/ops/ci-branch-protection.md`, `tests/unit/test_ci_workflow.py`, `tests/unit/test_container_pins.py`, and the files of `specs/003-ops-ci-reliability/` (never `spec.md`). Any other changed file is reported, not accepted.
+- [ ] T067 [US1] **Human task (data owner; agents never push).** After #4, #6 and #9 reach `main`: confirm the first `publish` run is green, the package `ghcr.io/<owner>/<repo>` shows the tags `main` and the full SHA and the image labels, and record whether Actions write access for packages had to be enabled, in `verification.md`. It does not block any later phase (FR-029).
+
+**Checkpoint**: Phase 1b is done when T064 to T066 pass. T067 can finish at any later time.
 
 ---
 
@@ -180,14 +217,15 @@
 
 ## Dependencies & Execution Order
 
-- **Phases are sequential**: 1 → 2 → 3 → 4. Phase 2 and 3 do not depend on the remote probes (T010); T010 can run while Phase 2 is built.
+- **Phases are sequential**: 1 → 1b → 2 → 3 → 4 (Phase 1b, added 2026-11-21, must precede Phase 3, does not depend on Phase 2, and edits `ci.yml`, `Dockerfile` and `docker-compose.yml` only after Phase 1 is committed). Phase 2 and 3 do not depend on the remote probes (T010); T010 can run while Phase 2 is built.
 - Phase 3 reuses `test_compose_ingestion.py` and `test_env_example.py` from Phase 2 (T014, T027) and the `scripts` mount; Phase 4 reuses `test_ops_docs.py` (T003, T039), `feed_control.py` (T036) and the `docs/ops` mount (T005).
 - Within a phase: confirm-red task → implementation tasks → verification task. An implementation task never starts before its test task has failed for the stated reason.
-- `docker-compose.yml` is edited by T005, T019, T034: sequential, not parallel. `.env.example` by T019 and T034: sequential. `run.py` by T021 then T022. `test_ops_docs.py` by T003 then T039. `test_compose_ingestion.py` by T014 then T027.
+- `docker-compose.yml` is edited by T005, T058, T061, T019, T034: sequential, not parallel. `.env.example` by T019 and T034: sequential. `run.py` by T021 then T022. `test_ops_docs.py` by T003 then T039. `test_compose_ingestion.py` by T014 then T027.
 
 ## Parallel Opportunities
 
 - Phase 1: T002 ∥ T003 (different files); T007 ∥ T006.
+- Phase 1b: T056 ∥ T057 (different files); T060 ∥ T062 ∥ T063 (T058 then T061 share `docker-compose.yml`).
 - Phase 2 tests: T014 ∥ T015 ∥ T016 (T011 to T013 share files and run in order); implementation: T019 ∥ T018.
 - Phase 3 tests: T025 ∥ T026 ∥ T027 ∥ T028 ∥ T029 ∥ T030 (six different files); T036 ∥ T032 ∥ T033.
 - Phase 4 tests: T039 ∥ T040 ∥ T041; docs: T044 ∥ T045 ∥ T046 ∥ T047 ∥ T048; T053 ∥ T054 after T052.

@@ -1,6 +1,6 @@
 # Contract — CI workflow (`.github/workflows/ci.yml`)
 
-Owner: data team for the three jobs below; the DevOps owner adds further jobs. Status: Phase 1.
+Owner: data team for the three jobs below; the DevOps owner adds further jobs. Status: Phase 1; `publish` added in Phase 1b (2026-11-21, plan-level addition FR-029).
 
 ## Interface seen by GitHub
 
@@ -20,6 +20,22 @@ Owner: data team for the three jobs below; the DevOps owner adds further jobs. S
 | `test` | `docker compose --profile tools build tests && docker compose --profile tools run --rm tests` (unchanged) | a test fails or coverage < 80 % |
 | `contract` | `uv run --frozen --extra dev pytest src/data/tests/contract/test_read_fixtures.py -p no:cacheprovider --no-cov` | a fixture is invalid or has no schema, or a read schema is invalid |
 | `build` | `docker compose --profile tools build` | any service image fails to build |
+
+### `publish` (added 2026-11-21, not a required check)
+
+| Item | Value |
+|---|---|
+| Runs when | `github.event_name == 'push' && github.ref == 'refs/heads/main'`; never on pull requests |
+| `needs` | `test`, `contract`, `build` (all must succeed) |
+| Permissions | job level `contents: read`, `packages: write`; workflow level stays `contents: read` |
+| Credential | built-in token only (`github.token` in the step `env`); no repository secret |
+| Image | `ghcr.io/<github.repository lowercased>`, target `prod` of `Dockerfile` |
+| Tags | full commit SHA and `main` (no `latest`) |
+| Build args | `REVISION=${{ github.sha }}`, `SOURCE_URL` from `github.server_url`/`github.repository` |
+| Red when | login, build or push fails; it never blocks a pull request |
+
+The "Secrets: none" and "Permissions: `contents: read`" rows above describe the workflow level and stay
+true. The independence rule below applies to `test`, `contract` and `build`; only `publish` has `needs`.
 
 Rules:
 
