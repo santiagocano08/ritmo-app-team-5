@@ -8,7 +8,7 @@ function App() {
         <p className="text-sm text-slate-600">Consola del despachador · Corredor C6-008 (Prado)</p>
       </header>
       <main className="px-6 py-8">
-        <p className="text-slate-600">Las pantallas de la consola se agregan con la spec 003.</p>
+        <p className="text-slate-600">Las pantallas de la consola se agregan con la spec 003. Test deploy 01</p>
       </main>
     </div>
   )
