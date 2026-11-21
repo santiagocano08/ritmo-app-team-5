@@ -1,0 +1,238 @@
+# Tasks: Scenario Injectors, Hold Loop and Effect Table
+
+**Input**: Design documents from `/specs/004-scenario-injectors/`
+
+**Prerequisites**: plan.md (approved: spec `d7d674f`, plan `d76fd7f`, plan-gate decisions 2026-11-21), spec.md, research.md (R1–R14 and "Gate decisions"), data-model.md, contracts/, quickstart.md
+
+**Tests**: ON (project default; the spec and constitution do not opt out, and FR-030 requires a failing test or check before every behavior change).
+
+**Organization**: the four phases of the plan, in this order: injectors + incident view (US1) → hold loop (US2) → effect table (US3) → demo script. Each phase ends with a verification task and can be committed on its own. There are no separate Setup or Foundational phases: no new service, dependency or contract is added (research R13), so nothing blocks the stories except the order below.
+
+## Format: `- [ ] T### [P?] [US?] Description with file paths (FR/SC ids)`
+
+- **[P]**: can run in parallel (different files, no dependency on an unfinished task).
+- **[US1..US3]**: user story of `spec.md`. Phase 4 serves all three stories (SC-010) and carries no story label, as the docs phase did in 003.
+- **✂**: on the cut list (table at the end). Cut inside a phase, never the phase itself.
+- Paths are relative to the repository root. Agents never commit or push; the human commits each phase.
+- **Red rule**: every implementation task names the test task it turns green. A test task is only done when it has been run and seen to **fail for the stated reason** (the "Expected failure" column of `quickstart.md`), except the golden-hash test, which is written **green**.
+- **Commands**: *Andon* = `docker compose --profile tools build tests && docker compose --profile tools run --rm tests` (unchanged, CI-ready). *Host suite* = `uv run pytest` (full suite with the 80 % gate; `-m live` tests skip themselves unless `-m live` is passed). Run them **one at a time**, never together.
+- **Verify project**: every verification step and live test that starts, stops or resets a compose stack uses a dedicated project, `export COMPOSE_PROJECT_NAME=pulsoflota-verify` (the demo uses `pulsoflota-demo`, set by its script). No task runs `down -v` on the developer's default project; cleanup is `docker compose down -v` **under the dedicated project only**.
+- **Untouched check** (identical in every phase verification task): `git status --short` and `git diff --stat` show no change to `contracts/`, any line of `docs/adr/`, `src/data/db/init/002_bronze.sql` and every bronze table definition, `src/data/ingestion/bronze.py`, `src/data/ingestion/validate.py`, `.github/` (including `.github/CODEOWNERS`), `Dockerfile`, `pyproject.toml` and `uv.lock`. Init scripts `001` to `006` are unchanged; `007_scenarios.sql` is the only new init script. The only edits to existing files under `src/data/rules/` are `__init__.py` (version, Phase 1) and `sql/silver_incidents.sql` (null-duration fix, Phase 1); both need the data owner's CODEOWNERS review. Files outside the phase's own list are reported, not accepted.
+- **Plan-gate decisions** (research "Gate decisions") that these tasks follow: stand-in approval script for the demo; FR-023 "after" read at the held bus after the horizon and EWT observed clamped at 0; instruction status keyed by `rec_id` (open integration item: to be confirmed with the backend owner); `RULES_VERSION` 1.1.0.
+- **No code in this file.** Task lines say what to write and where; the code is written during implementation.
+
+---
+
+## Phase 1: Injectors and Incident View (US1, P1) 🎯 MVP
+
+**Goal**: C1, C2, C5 and D1 happen on demand and reproducibly, leave a hidden truth the pipeline never reads, and the `incident` gold object is readable; the null-duration silver failure is fixed because C5 uses incidents (FR-001 to FR-011, FR-021, FR-027, FR-028 part, SC-001 to SC-006).
+
+**Independent Test**: for each scenario run the simulator with a fixed seed, compute gold, and compare shape and meaning with the matching fixture and with the truth record (quickstart Phase 1).
+
+**Commit message**: `feat(simulator): scenario injectors C1 C2 C5 D1 and incident gold object`
+
+### Baseline and golden hash (before any engine edit)
+
+- [ ] T001 [US1] Record the baseline on this branch in a new `specs/004-scenario-injectors/verification.md` (section "Baseline"): run the Andon command and write passed/skipped/failed counts, coverage and duration (003 end state: 434 passed, 4 skipped, 91.97 %); this is the reference for "never lower" in every phase (SC-013, FR-030).
+- [ ] T002 [US1] Write `src/data/tests/unit/test_simulator_golden_hash.py`: run the simulator CLI path (`python -m src.data.simulator.main --seed S --duration 3600`) and compare the SHA-256 of stdout with the pinned values: seed 42 = `51a5e9b3063667320a6e66cab6293f84197822378783724dd664b6f6865d39e1` (3,851 lines, 1,439,431 bytes) and seed 7 = `6bd20707cf9aaccc852b6f8431e1129b759321b69f5cd06e5697c1638e0ab132`. **Run it green on the untouched engine** and record the output in `verification.md`; no edit to `src/data/simulator/engine.py` or `main.py` may precede this (FR-001, SC-001).
+
+### Tests first (must fail until the implementation tasks below)
+
+- [ ] T003 [US1] Create the scenario fixtures under `src/data/tests/fixtures/scenarios/`: `c1_bunching.json` (B-102, a stop in P-884..P-899, `extra_s` 400, `start_s` 700), `c2_gap.json` (`delay_s` in `300 < delay_s <= 600`), `c5_breakdown.json` (B-102, `start_s` about 1240, `duration_s` 240, the three-bus window of research R9), `c5_demo.json` (B-104, `start_s` 2400, `duration_s` 240), `d1_silence.json` (B-101, `start_s` 250, `duration_s` 300), `d1_duplicates.json` (`count` within `1 <= count <= 1000`), `phase1_live.json` (C1 on B-102, C5 on B-104, D1_SILENCE on B-101, D1_DUPLICATES; no two world scenarios on one bus), `empty.json` (`[]`), and one file per invalid case of AC10 under `invalid/` (unknown type, missing `start_s`, `300 < extra_s <= 600` violated, `0 < duration_s <= 300` violated, unknown bus, unknown stop, duplicate id, overlap of two world scenarios on one bus, unknown field). Deterministic, no PII (FR-001, FR-004, SC-001).
+- [ ] T004 [P] [US1] Write `src/data/tests/integration/test_silver_incident_null_duration.py` (**pre-existing 002 failure, test first**): in a throwaway database insert crafted bronze rows (as `insert_backend_commands` in `src/data/tests/fixtures/bronze_builders.py` does) with a backend `incident_report` whose payload has `"duration_min": null`, plus ordinary bus reports; run the silver rebuild and assert (a) it does not raise, (b) `silver.incidents` has the row with `end_ts = 'infinity'` (`end_ts TIMESTAMPTZ NOT NULL` and `CHECK (end_ts >= start_ts)` stay), (c) the incident is active at every `as_of_ts >= start_ts`, (d) a bus targeted by it is `broken_down`, (e) a normal incident with a duration in the same bronze keeps its `start_ts + duration_min` end. **Must fail today** with a NOT NULL violation at the `silver.incidents` insert; record the exact error in `verification.md` (FR-021, FR-026, SC-012; research R6).
+- [ ] T005 [P] [US1] Write `src/data/tests/unit/test_scenario_config.py` for `scenarios.config`: every invalid fixture of T003 fails before any event with a clear message and `extra="forbid"`; ranges verbatim from the data model: `300 < extra_s <= 600`, `300 < delay_s <= 600`, `0 < duration_s <= 300`, `duration_s >= 1` (D1_SILENCE), `1 <= count <= 1000`, `start_s` integer `>= 0`, `bus` in B-101..B-105, `stop` in P-884..P-899; overlap rule; `start_s` past the run duration accepted; `[]` and unset mean no scenario (FR-001, FR-004, AC10).
+- [ ] T006 [P] [US1] Write `src/data/tests/unit/test_scenario_injectors.py` (C1, C2, C5 part): C1 extends the dwell of the bus at the stop at the first arrival with `t >= start_s`; C2 delays the next future departure from P-883; C5 halts a `driving` bus (reports continue with `speed_kmh = 0`), emits exactly one `incident_report` (`bus_breakdown`, `target_id` = bus, `duration_min = duration_s / 60`, `reported_by = script`) and resumes after `duration_s`; no scenario means the baseline stream; no `time`, `datetime.now` or unseeded `random` in `scenarios/injectors.py` and `channel.py` (static scan) (FR-002, FR-005, FR-006, FR-007, SC-001).
+- [ ] T007 [P] [US1] Write `src/data/tests/unit/test_scenario_channel.py`: silence drops only `bus_position`, `stop_arrival` and `stop_departure` of the target bus in `[start, start + duration_s)` and nothing else (`rider_arrival` untouched); duplicates repeat exactly `count` consecutive lines with the same `source` and `event_id` and the same bytes; the world and other buses are unchanged (FR-008, FR-009, SC-005).
+- [ ] T008 [P] [US1] Write `src/data/tests/unit/test_scenario_truth.py`: one record per injector with the fields of data-model E2, fired and never-fired (`fired: false`) records, order by effective time then configuration order, C1 `follower_gap_s` and `target_reached`, D1 duplicate `event_ids`, two runs give identical records, no secrets and no event payload (FR-010, FR-011, SC-001, SC-006).
+- [ ] T009 [P] [US1] Write `src/data/tests/unit/test_no_truth_reads.py` (static guard): no module under `src/data/rules`, `src/data/pipeline`, `src/data/refresh`, `src/data/ingestion` imports `src.data.simulator.scenarios` or mentions `scenario_truth` or `SIM_TRUTH_PATH`; no SQL or DDL file mentions a truth table (FR-010, SC-006).
+- [ ] T010 [P] [US1] Write `src/data/tests/integration/test_incident_gold.py`: `gold.incident` rows validate against `contracts/read/incident.schema.json` (jsonschema with `format_checker`, `additionalProperties: false`); primary key `(snapshot_id, inc_id)`, `doc JSONB NOT NULL`; `duration_s = duration_min × 60`; active while `since <= as_of < end` and `until` null; `until` set after; open-ended incident gives `duration_s` null and `until` null (T004 case); view `gold.incident_current` returns the newest snapshot of the current rules version; reruns on the same bronze give the same rows (FR-021, FR-026, FR-027, SC-004, SC-012).
+- [ ] T011 [P] [US1] Write `src/data/tests/integration/test_scenarios_gold.py`: run `run()` with each fixture of T003 into a throwaway database, compute gold with the `compute` path and assert shape and meaning, not byte equality: C1 `n_bunched >= 1` with the follower under 300 s and the summary equal to a `corridor_now` computed independently from the same bronze (`gold_support` helpers); C2 `n_gaps >= 1` with headway above 900 s; C5 active `bus_breakdown` incident for the bus, bus `broken_down`, `headway_ahead_s = null`, `buses_in_service` excludes it by rule (not "4 of 5"), gap behind it in the three-bus window, incident closed after the duration; D1(a) bus `estimated` and in `sources_down` in the first snapshot more than 120 s after its last report (at most 125 s), no `bunched`, `gap`, `broken_down` or incident from it, back to `live`; D1(b) M `duplicate_event` rows, rejection rate unchanged, silver and gold equal to the run without duplicates; truth kind, bus and effective time match gold within one 5 s cycle; deleting or altering the truth file changes no bronze, silver or gold hash (AC9) (FR-001 to FR-010, SC-002 to SC-006).
+- [ ] T012 [P] [US1] Edit the existing tests that the phase changes: `src/data/tests/unit/test_rules_version.py` expects `"1.1.0"`; `src/data/tests/integration/test_schema_init.py` expects `gold.incident` (and the view `gold.incident_current`) after `007`; `tests/unit/test_generated_read_models.py` adds `incident` to `NAMES`; `tests/unit/test_env_example.py` expects `SIM_SCENARIO_FILE` and `SIM_TRUTH_PATH` with defaults that enable nothing (FR-004, FR-031, SC-013).
+- [ ] T013 [US1] Confirm red on the host: run each new test and record in `verification.md` the failure reason, which must be the one in the quickstart Phase 1 table (T004 NOT NULL violation, T005 to T008 and T010 to T012 missing modules or tables, T009 passes only once the package exists); T002 stays green. No test may fail with a syntax error (FR-030).
+
+### Implementation
+
+- [ ] T014 [US1] Fix the null-duration failure in `src/data/rules/sql/silver_incidents.sql`: an `incident_report` whose `duration_min` is null becomes an open-ended incident with `end_ts = 'infinity'` (a `COALESCE`-style rule on the existing `e.event_ts + (e.payload->>'duration_min')::numeric * interval '1 minute'` expression); no DDL change, `silver.incidents.end_ts` stays `NOT NULL`; update the file's header comment (research R6; data owner confirms in review). Turns T004 green; run the existing silver, bus-state and traversal integration tests to show no change (FR-021, SC-012).
+- [ ] T015 [US1] Create `src/data/simulator/scenarios/__init__.py` and `src/data/simulator/scenarios/config.py`: Pydantic V2 models with `extra="forbid"`, discriminated union on `type` (`C1`, `C2`, `C5`, `D1_SILENCE`, `D1_DUPLICATES`), the ranges of T005, loader that fails before the first event, overlap rule; add getters for `SIM_SCENARIO_FILE` and `SIM_TRUTH_PATH` to `src/pulsoflota/config.py` (flags override variables). Turns T005 green (FR-001, FR-004, FR-031).
+- [ ] T016 [P] [US1] Create `src/data/simulator/scenarios/truth.py`: `TruthSink` writing JSON lines to `SIM_TRUTH_PATH` or stderr, never-fired records appended at the end of the run, fields of data-model E2 only. Turns T008 green (FR-010, FR-011).
+- [ ] T017 [P] [US1] Create `src/data/simulator/scenarios/channel.py`: the D1 channel layer that wraps the event iterator after envelope creation (silence, duplicates), no RNG draw, no wall clock. Turns T007 green (FR-008, FR-009, FR-002).
+- [ ] T018 [US1] Create `src/data/simulator/scenarios/injectors.py` (C1, C2, C5 world hooks, C1 follower-gap measurement) and add the guarded hooks to `src/data/simulator/engine.py`: optional `hooks` argument, `None` by default, every new call under `if hooks is not None`. Run `test_simulator_golden_hash.py` after the edit: it must stay green. Turns T006 green (FR-001, FR-002, FR-005, FR-006, FR-007, SC-001).
+- [ ] T019 [US1] Edit `src/data/simulator/main.py`: `--scenario-file` and `--truth-path` flags and the two variables, validation at start (exit non-zero, no event emitted), channel wrap, truth sink wiring, truth records for never-fired scenarios. Extend `test_simulator_golden_hash.py` with the empty `[]` file case (`empty.json`, T003) and confirm both baselines are unchanged with no file and with `[]` (FR-001, FR-004, SC-001; AC1, AC10).
+- [ ] T020 [US1] Create `src/data/db/init/007_scenarios.sql` (idempotent, `IF NOT EXISTS`, three commented sections, one per phase; this task writes only the incident section): `gold.incident` with `snapshot_id UUID NOT NULL REFERENCES gold.snapshots`, `inc_id UUID NOT NULL`, `active BOOLEAN NOT NULL`, `doc JSONB NOT NULL`, `rules_version TEXT NOT NULL`, `max_bronze_id BIGINT NOT NULL`, primary key `(snapshot_id, inc_id)`, and view `gold.incident_current`. Add `incident` to `READ_SCHEMAS` in `Makefile`, run `make generate-read` to create `src/pulsoflota/models/read/incident.py` and confirm a second run leaves `git diff` empty. Set `RULES_VERSION = "1.1.0"` in `src/data/rules/__init__.py`. Turns T012 green (FR-021, FR-026, FR-027).
+- [ ] T021 [US1] Create `src/data/pipeline/incidents.py` and add its step to `src/data/pipeline/cycle.py` right after `build_snapshot`, in the same transaction: build `gold.incident` rows from `silver.incidents`, validate each doc with the generated `Incident` model; `duration_s` = minutes × 60 (null for an open-ended incident), `until` null while active. Turns T010 and T011 green; the 002 and 003 acceptance tests stay unchanged and green (FR-021, FR-026, FR-027, SC-004).
+- [ ] T022 [US1] Add `SIM_SCENARIO_FILE` and `SIM_TRUTH_PATH` to `.env.example` (unset) and to the `ingestion` service of `docker-compose.yml` as `${VAR:-}` (defaults leave the stack unchanged). Turns the T012 env test green (FR-004, FR-031, SC-013).
+- [ ] T023 [US1] Run the offline hand checks of quickstart Phase 1 and record them in `verification.md`: the two baseline hashes with no scenario file and with `[]`; the same scenario file twice gives the same stream hash and the same truth file (AC8); for C1, C5, D1 the gold values after `python -m src.data.pipeline.compute --from … --to …`; deleting the truth file between simulation and compute changes nothing (AC9) (FR-001, FR-002, FR-010, SC-001, SC-006).
+
+### Live check C2 (cut list)
+
+- [ ] T024 ✂ [US1] C2 live check under the dedicated project: `export COMPOSE_PROJECT_NAME=pulsoflota-verify && docker compose down -v`, then start `db`, `ingestion` and `refresh` with `SIM_SCENARIO_FILE=src/data/tests/fixtures/scenarios/c2_gap.json`, `SIM_SEED=42`, `REFRESH_CLOCK=data` and a fast `SIM_PACE_S`; read `gold.corridor_now` with `docker compose exec -T db psql …`: `n_gaps >= 1` with `headway_ahead_s > 900`, `n_gaps` equals the per-bus states, and the truth line in `docker compose logs ingestion` names the same bus within one 5 s cycle; finish with `docker compose down -v` (still `pulsoflota-verify`). Cut-list item 2; if cut, the unit and integration C2 tests (T006, T011) keep FR-006 and SC-003 covered (FR-006, SC-003, SC-006).
+
+### Phase 1 verification (ends the phase; commit after it passes)
+
+- [ ] T025 [US1] Verify Phase 1, one command at a time, and write the results into `verification.md`: (1) host suite `uv run pytest` → 0 failed, coverage above 80 %, passed count not below the T001 baseline plus the new tests, golden hashes green; (2) then the Andon command → same; (3) then the live check of quickstart Phase 1 under the dedicated project (never the default stack): `export COMPOSE_PROJECT_NAME=pulsoflota-verify && docker compose down -v`, start `db`, `ingestion`, `refresh` with `SIM_SCENARIO_FILE=src/data/tests/fixtures/scenarios/phase1_live.json`, `REFRESH_CLOCK=data`, fast `SIM_PACE_S`, and check with `docker compose exec -T db psql …`: a `bunched` follower (C1), an active `bus_breakdown` row in `gold.incident_current` with the bus `broken_down` (C5), B-101 `estimated` in `sources_down` with no alert (D1a), `duplicate_event` rows in `bronze.rejections` (D1b), and the truth lines in `docker compose logs ingestion`; finish with `docker compose down -v` (still `pulsoflota-verify`); the C2 part is T024; (4) run the **Untouched check** (conventions above) with this phase's allowed list: `src/data/simulator/**`, `src/data/rules/__init__.py`, `src/data/rules/sql/silver_incidents.sql`, `src/data/pipeline/{incidents,cycle}.py`, `src/data/db/init/007_scenarios.sql`, `src/pulsoflota/{config.py,models/read/incident.py}`, `Makefile`, `.env.example`, `docker-compose.yml`, the Phase 1 tests and fixtures, and `specs/004-scenario-injectors/**`; any other changed file is reported, not accepted (FR-028, FR-030, SC-001 to SC-006, SC-013).
+
+**Checkpoint**: scenarios on demand plus the incident object; hold loop and effect table are not needed.
+
+---
+
+## Phase 2: Hold Loop (US2, P2)
+
+**Goal**: an approved hold is executed by the simulated bus and observed by data as `executed` or `not_executed`; no approval, no action (FR-012 to FR-020, FR-028, SC-007, SC-008, SC-011, SC-012).
+
+**Independent Test**: with the backend absent, write crafted `decision` rows to `bronze.events` as `command_event.schema.json` says, run the simulator and the pipeline, read `gold.instruction_status`; once with compliance forced, once with non-compliance forced (quickstart Phase 2).
+
+**Commit message**: `feat(simulator): hold loop with read-only decision poller and instruction status`
+
+### Tests first (must fail until the implementation tasks below)
+
+- [ ] T026 [US2] Create `src/data/tests/fixtures/scenarios/seed_recommendations.json`: hold recommendations shaped as `contracts/read/recommendation.schema.json` v1.0.0 (a hold of 90 s on B-103 at a stop, a hold of 60 s, one entry whose `action.type` is not `hold`), and a separate in-test raw entry with `duration_s` 120 that the schema must reject (the `duration_s` 0 to 90 range is checked at load); `rec_id` UUIDs fixed, `expires_ts` in simulated time (FR-018, FR-020, SC-007).
+- [ ] T027 [P] [US2] Extend `src/data/tests/unit/test_simulator_golden_hash.py` with the Phase 2 identity case: `--holds on` against an empty bronze (throwaway database) and with `holds=None` gives the two pinned hashes (red until the flag exists) (FR-001, FR-017, SC-001).
+- [ ] T028 [P] [US2] Write `src/data/tests/unit/test_hold_rules.py` for `rules/holds.py`: `MAX_HOLD_S = 90`, `EXECUTED_TOLERANCE_S = 15`; visit matching strictly after `decided_at_sim` and not after `expires_ts`; observation at 14 s and 15 s off is `executed`, 16 s is `not_executed`; cap 90; conflict (first order by bronze id wins); breakdown wins; pending gives no status; `discard` and unknown `rec_id` give no order (FR-012, FR-013, FR-015, FR-016, SC-007).
+- [ ] T029 [P] [US2] Write `src/data/tests/unit/test_hold_compliance.py`: the draw `SHA-256("{seed}|hold|{rec_id}")` as a fraction of 1 is reproducible; probability 1 makes all non-compliant, 0 none; N = 200 distinct `rec_id` values with a fixed seed: the non-compliant count is reproducible and equals the count in the truth records (the expected 20 is reported, not asserted); the main RNG stream is untouched (FR-014, SC-008; AC7, AC8).
+- [ ] T030 [P] [US2] Write `src/data/tests/unit/test_hold_board.py` with a fake connection: unknown `rec_id` counted as `hold_order_ignored`, `discard` makes no order, the same `rec_id` twice makes one order, a hold above 90 s is refused, a database error keeps the board and does not raise, one `hold_poll_failed` and one `hold_poll_recovered` line per outage with no stack trace or secret (FR-012, FR-017, FR-018, FR-028, SC-007).
+- [ ] T031 [P] [US2] Extend `src/data/tests/unit/test_scenario_injectors.py` with the engine hold cases: total dwell, departure at `max(natural, arrival + D)`; a natural dwell longer than D is kept; non-compliance leaves with the natural dwell; no order or `holds=None` equals the baseline hash; a decision after the arrival cannot hold that visit (AC6); breakdown on the bus cancels the pending order (FR-013, FR-014, FR-016, SC-007).
+- [ ] T032 [P] [US2] Write `src/data/tests/integration/test_hold_poller.py` against a throwaway database: the session is read-only (a write attempt fails), new decisions appear in id order, `decided_at_sim` is the newest non-backend report `event_ts` with a smaller id (null when none), stopping the database does not raise or block, and a static scan finds no INSERT, UPDATE or DELETE in the poller module (FR-017, FR-028, SC-011).
+- [ ] T033 [P] [US2] Write `src/data/tests/integration/test_instruction_status.py`: rows and `ts_by_status` for executed, not executed, expired, breakdown wins; columns `rec_id UUID PRIMARY KEY`, `status TEXT NOT NULL CHECK (status IN ('executed','not_executed'))`, `ts_by_status JSONB NOT NULL` with exactly one key (`executed` or `not_executed`, an RFC 3339 UTC time); `status` and `ts_by_status` valid against `contracts/read/instruction.schema.json`; no row while pending; the table is rebuilt each cycle and the same bronze gives the same rows; nothing is written to bronze (FR-015, FR-016, FR-019, FR-026, SC-007, SC-012).
+- [ ] T034 [P] [US2] Write `src/data/tests/integration/test_hold_loop.py`: crafted `decision` rows (`source = "backend"`, UUID ids, `command_event.schema.json` shape) inserted into bronze, then simulator plus `compute`: forced compliance gives `executed` with observed dwell within ±15 s of D; forced non-compliance gives `not_executed`; `discard`, no decision and a hold of 120 s give zero holds and a stream equal to the baseline (Principle IV); a decision written after the bus departed gives `not_executed` at `expires_ts`; the same `decision` delivered twice (same `source` and `event_id`) runs once; reprocessing the same bronze leaves rows unchanged (FR-012 to FR-016, FR-020, SC-007, SC-012; AC1 to AC9).
+- [ ] T035 [P] [US2] Write `src/data/tests/integration/test_loop_isolation.py`: offline part (poller stopped and database unreachable for the retry window: the simulator keeps writing and exits only at its duration) and a `-m live` part (stop `api`, `refresh` and the poller: `bronze.events` keeps growing), the live part under `pulsoflota-verify` only (FR-017, FR-028, SC-011; Principle III).
+- [ ] T036 [P] [US2] Edit the existing tests the phase changes: `src/data/tests/integration/test_schema_init.py` expects `config.seed_recommendation` and `gold.instruction_status`; `tests/unit/test_generated_read_models.py` adds `recommendation` to `NAMES`; `tests/unit/test_env_example.py` expects `SIM_HOLDS` (`off`), `SIM_HOLD_POLL_S` (`1`), `SIM_HOLD_NONCOMPLIANCE` (`0.10`) and `SEED_RECOMMENDATIONS_PATH`; `src/data/tests/unit/test_no_bronze_writes.py` keeps its scan list (the new files fall under the scanned folders) and must pass on them (FR-017, FR-031, SC-013).
+- [ ] T037 [US2] Confirm red on the host and record each failure reason in `verification.md`, matching the quickstart Phase 2 table; the Phase 1 tests and the golden hashes stay green (FR-030).
+
+### Implementation
+
+- [ ] T038 [US2] Create `src/data/rules/holds.py` (constants `MAX_HOLD_S = 90`, `EXECUTED_TOLERANCE_S = 15`, `match_visit(...)`, `observe(...)`, pure, one definition for simulator and data) and `src/data/rules/sql/hold_orders.sql` (backend decisions `WHERE source = 'backend' AND event_type = 'decision' AND id > :last_id ORDER BY id`, with `decided_at_sim`, parameterized). Turns T028 green; `src/data/rules/` needs the data owner's review (FR-012, FR-013, FR-015, FR-016, SC-007).
+- [ ] T039 [US2] Create the seed path: `src/data/seeds/recommendations.json` (demo hold of 90 s on B-103; validated at load), `src/data/pipeline/seeds.py` (DELETE + INSERT in one transaction into `config.seed_recommendation`), the `007_scenarios.sql` sections for `config.seed_recommendation` (`rec_id UUID PRIMARY KEY`, `doc JSONB NOT NULL`) and `gold.instruction_status` (data-model E7 columns), `recommendation` added to `READ_SCHEMAS` in `Makefile` and `src/pulsoflota/models/read/recommendation.py` generated (second `make generate-read` leaves `git diff` empty), and the seed load called next to `load_reference` in `src/data/refresh/run.py` and `src/data/pipeline/compute.py`. Turns the T036 schema and model tests green (FR-018, FR-019).
+- [ ] T040 [US2] Create `src/data/simulator/scenarios/holds.py`: `Order`, thread-safe `HoldBoard`, `HoldPoller` daemon thread (own connection from `DATABASE_URL`, `connect_timeout=2`, `default_transaction_read_only=on`, `statement_timeout=2000`, `SIM_HOLD_POLL_S` interval, one log line per transition), seed loading with schema validation, executor cap `MAX_HOLD_S = 90`, compliance draw, hold truth records (`rec_id`, `hold_s`, `complied`). Turns T029, T030 and T032 green (FR-012, FR-014, FR-017, FR-018, FR-028).
+- [ ] T041 [US2] Apply the hold in `src/data/simulator/scenarios/injectors.py` and the guarded `holds` argument of `src/data/simulator/engine.py` (lookup in `_arrive`; total dwell `max(natural_end, t + hold_s)`; breakdown cancels pending orders); `holds=None` keeps every statement unchanged. Run `test_simulator_golden_hash.py` after the edit. Turns T031 and T027 green (FR-013, FR-016, SC-001, SC-007).
+- [ ] T042 [US2] Edit `src/data/simulator/main.py` (`--holds {on,off}`, board and poller only when on, passing `holds=None` otherwise), add the four getters to `src/pulsoflota/config.py` (invalid values stop the process at start), and add `SIM_HOLDS`, `SIM_HOLD_POLL_S`, `SIM_HOLD_NONCOMPLIANCE`, `SEED_RECOMMENDATIONS_PATH` to `.env.example` and to the `ingestion` service of `docker-compose.yml` as `${VAR:-default}` (defaults leave the stack unchanged). Turns the T036 env test green (FR-014, FR-017, FR-031).
+- [ ] T043 [US2] Create `src/data/pipeline/holds.py` (rebuild `gold.instruction_status` each cycle by DELETE + INSERT from bronze, silver and `config`; statuses and rules of research R5) and add its step to `src/data/pipeline/cycle.py` after the incident step, in the same transaction. Turns T033, T034 and T035 (offline part) green (FR-015, FR-016, FR-019, FR-026, SC-007, SC-012).
+- [ ] T044 [US2] Run the offline hand checks of quickstart Phase 2 and record them: with `--holds on` and an empty bronze the baseline hashes are unchanged; pre-written crafted decision rows with `SIM_HOLD_NONCOMPLIANCE` 0 and 1 give `executed` and `not_executed`; `discard` and no decision give zero holds (FR-012, FR-014, SC-001, SC-007).
+
+### Phase 2 verification (ends the phase; commit after it passes)
+
+- [ ] T045 [US2] Verify Phase 2, one command at a time, and write the results into `verification.md`: (1) host suite `uv run pytest` → 0 failed, coverage above 80 %, count not below the previous phase plus the new tests, `rules/holds.py` coverage reported (near 100 %); (2) then the Andon command → same; (3) then the live check of quickstart Phase 2 under the dedicated project (never the default stack): `export COMPOSE_PROJECT_NAME=pulsoflota-verify && docker compose down -v && docker compose up -d --build db ingestion`, then `uv run pytest src/data/tests/integration/test_loop_isolation.py -m live -q --no-cov -s` passes (with `api`, `refresh` and the poller stopped, the `bronze.events` count keeps growing; SC-011), and finish with `docker compose down -v` (still `pulsoflota-verify`); (4) run the **Untouched check** (conventions above) with this phase's allowed list: `src/data/simulator/**`, `src/data/rules/{holds.py,sql/hold_orders.sql}`, `src/data/seeds/**`, `src/data/pipeline/{seeds,holds,cycle,compute}.py`, `src/data/refresh/run.py`, `src/data/db/init/007_scenarios.sql`, `src/pulsoflota/{config.py,models/read/recommendation.py}`, `Makefile`, `.env.example`, `docker-compose.yml`, the Phase 2 tests and fixtures, and `specs/004-scenario-injectors/**`; any other changed file is reported, not accepted (FR-017, FR-028, FR-030, SC-007, SC-008, SC-011, SC-012, SC-013).
+
+**Checkpoint**: approved holds execute and are observed; the effect table is not needed.
+
+---
+
+## Phase 3: Recommendation Effect Table (US3, P3)
+
+**Goal**: after an approved hold and its horizon, a read-only `recommendation_effect` row shows headway before and after, planned headway, expected and observed EWT, and the result (FR-022 to FR-027, SC-009, SC-012 for effect rows).
+
+**Independent Test**: build bronze, silver and snapshots for a hold with known before and after headway and EWT, read the effect row; repeat with crafted inputs for each result value (quickstart Phase 3).
+
+**Commit message**: `feat(gold): recommendation effect table with ADR-0003 result rule`
+
+### Tests first (must fail until the implementation tasks below)
+
+- [ ] T046 [P] [US3] Write `src/data/tests/unit/test_effect_rule.py` for `rules/effect.py`: improvement 29 s gives `partial`, 30 s gives `worked`; fixture values `ewt_expected_s` 55 and `ewt_observed_s` 22 give `worked`; improvement `<= 0` with headway improved (`|after − planned| < |before − planned|`, both known) gives `partial`, otherwise `did_not_work`; null expected, null observed or no after snapshot gives `no_data`; the threshold is read from the argument (30 comes from `config.effect_settings`, not from the rules code); `headway_planned_s` is an argument (600), not a constant (FR-023, FR-025, SC-009; AC3, AC4).
+- [ ] T047 [P] [US3] Write `src/data/tests/integration/test_recommendation_effect.py` with crafted snapshots: window still open gives no row (AC2); window closed gives one row validating against `contracts/read/recommendation_effect.schema.json` (`additionalProperties: false`); `headway_before_s` from the last snapshot at or before `T0`, `headway_after_s` from the first snapshot at or after `T0 + horizon_s` (the held bus's `headway_ahead_s`, gate decision 2); `ewt_observed_s` clamped at 0 and null when not computable; `ewt_expected_s` is the recommendation's `ewt_saving_s` when `>= 0`, else null; `headway_planned_s` read from `config.corridor_settings` (600); a `not_executed` hold still gives a row (AC5); a missing snapshot gives `no_data` and a later replay repairs it; `rec_id UUID PRIMARY KEY`, `doc JSONB NOT NULL`, lineage columns `rules_version` and `max_bronze_id`, `before_snapshot_id` and `after_snapshot_id`; recompute gives the same rows; the step writes only `gold.recommendation_effect` (FR-022 to FR-027, SC-009, SC-012).
+- [ ] T048 [P] [US3] Edit the existing tests the phase changes: `src/data/tests/integration/test_schema_init.py` expects `config.effect_settings` (`id BOOLEAN PRIMARY KEY CHECK (id)`, `worked_threshold_s NUMERIC NOT NULL CHECK (worked_threshold_s > 0)`, one row with 30) and `gold.recommendation_effect`; `tests/unit/test_generated_read_models.py` adds `recommendation_effect` to `NAMES` (FR-025, FR-027, SC-013).
+- [ ] T049 [US3] Confirm red on the host and record each failure reason in `verification.md` (quickstart Phase 3: missing `rules/effect.py`, missing tables and module); earlier tests and golden hashes stay green (FR-030).
+- [ ] T050 [US3] Record the cycle time **before** Phase 3 code (research R12): run the pipeline cycle on a throwaway database loaded with the offline demo-length run (`--duration 2700`, seed 42, one pre-written hold decision) and write the measured cycle time in `verification.md`; the gate is "well inside the 5 s refresh interval" (FR-030, plan Performance Goals).
+
+### Implementation
+
+- [ ] T051 [US3] Create `src/data/rules/effect.py` (pure result rule of ADR-0003 gate decision 6 and research R7; threshold and planned headway are arguments). Turns T046 green; needs the data owner's review (FR-023, FR-025, SC-009).
+- [ ] T052 [US3] Add the `007_scenarios.sql` sections for `config.effect_settings` (seed row `ON CONFLICT DO NOTHING`, value 30) and `gold.recommendation_effect` (data-model E8 columns); add `recommendation_effect` to `READ_SCHEMAS` in `Makefile` and generate `src/pulsoflota/models/read/recommendation_effect.py` (second `make generate-read` leaves `git diff` empty). Turns T048 green (FR-022, FR-025, FR-027).
+- [ ] T053 [US3] Create `src/data/pipeline/effects.py` (rebuild each cycle from stored snapshots, seed recommendations, `silver.stop_visits` and `config`; no row before `T0 + horizon_s`; validate each doc with the generated `RecommendationEffect` model; read-only on bronze, silver and the other gold tables) and add its step to `src/data/pipeline/cycle.py` after the hold step, in the same transaction. Turns T047 green (FR-022 to FR-027, SC-009, SC-012).
+- [ ] T054 [US3] Record the cycle time **after** Phase 3 on the same run as T050 and write both numbers in `verification.md`; if the cycle approaches the 5 s interval, report it and add an index only if the measurement asks for it (research R12) (FR-030).
+
+### Phase 3 verification (ends the phase; commit after it passes)
+
+- [ ] T055 [US3] Verify Phase 3, one command at a time, and write the results into `verification.md`: (1) host suite `uv run pytest` → 0 failed, coverage above 80 %, count not below the previous phase plus the new tests, `rules/effect.py` coverage reported; (2) then the Andon command → same; (3) then the live check of quickstart Phase 3 under the dedicated project (never the default stack): `export COMPOSE_PROJECT_NAME=pulsoflota-verify && docker compose down -v && docker compose up -d db`, insert one crafted `decision` row with `psql` (as the backend would, `command_event` shape, seeded `rec_id`) **before** starting `ingestion` and `refresh` with `SIM_HOLDS=on`, `SIM_SEED=42`, `REFRESH_CLOCK=data`, fast `SIM_PACE_S`; read `gold.instruction_status` and, after the horizon, `gold.recommendation_effect` (all rows valid, rerun unchanged), and record the refresh-cycle time from the logs next to T050 and T054; finish with `docker compose down -v` (still `pulsoflota-verify`); (4) run the **Untouched check** (conventions above) with this phase's allowed list: `src/data/rules/effect.py`, `src/data/pipeline/{effects,cycle}.py`, `src/data/db/init/007_scenarios.sql`, `src/pulsoflota/models/read/recommendation_effect.py`, `Makefile`, the Phase 3 tests, and `specs/004-scenario-injectors/**`; any other changed file is reported, not accepted (FR-022 to FR-027, FR-030, SC-009, SC-012, SC-013).
+
+**Checkpoint**: effect rows; the demo script is not needed.
+
+---
+
+## Phase 4: Demo Script (US1 to US3 together, SC-010)
+
+**Goal**: one command runs the about 8 minute timeline (D1 Estimated → C1 with an approved hold and its effect → C5 breakdown and active incident only → close) on a dedicated compose project (SC-010, FR-029).
+
+**Independent Test**: the offline replay of `demo.json` at pace 0 asserts the gold states at the chosen simulated times with a tolerance; then one live run of `scripts/demo/run_demo.sh` shows each step in `demo-out/`.
+
+**Commit message**: `feat(demo): scripted workshop run with stand-in approval`
+
+### Dry runs and tests first
+
+- [ ] T056 Fix the demo timeline by dry runs at pace 0 (a draft scenario file under `demo-out/` or `/tmp`, never committed): confirm or adjust the candidate times of research R9 (D1 silence B-101 from 250 s for 300 s; C1 on B-102 `extra_s` 400 from 700 s; the stand-in approval time; C5 on B-104 from about 2,400 s for 240 s; close 2,700 s), check the C1 follower falls under 300 s, and record the final numbers and the measured first-hold arrival in `verification.md` (R9: after the first injection later events differ from the base case) (SC-010, FR-029).
+- [ ] T057 [P] Write `tests/unit/test_demo_script.py`: `scripts/demo/run_demo.sh` uses its own project `pulsoflota-demo`, own volume, non-default ports (`DEMO_POSTGRES_PORT` 55433, `DEMO_API_PORT` 58001), aborts when a port is in use or `.env` is missing, runs `down -v` only for its own project, never prints credentials, writes only under `demo-out/`; `scripts/demo/approve_hold.py` is not under `src/` and builds a row that validates against `contracts/read/command_event.schema.json` (`source = "backend"`, `action = "apply"`, fresh UUID, fixed `user_id`); no secrets in the demo files (SC-010, FR-020, FR-031).
+- [ ] T058 [P] Write `src/data/tests/integration/test_demo_scenario.py`: validate `src/data/simulator/scenarios/demo.json` with the config model, replay it offline at pace 0 into a throwaway database with a pre-written decision, and assert with a tolerance the gold state at the chosen simulated times: B-101 `estimated` and no alert, a `bunched` follower, the hold `executed`, an effect row after the horizon, an active `bus_breakdown` incident, no reserve dispatch (B-106 and B-107 never emit events) (SC-010, FR-029, SC-006).
+- [ ] T059 [P] ✂ Write `src/data/tests/integration/test_demo_live.py` (`-m live`, host only, skipped unless `-m live` and `COMPOSE_PROJECT_NAME=pulsoflota-demo`): runs the script's stack and asserts the table of quickstart Phase 4 (D1, C1 and hold, effect row, C5, close) from `demo-out/`. Cut-list item 1; if cut, T058 keeps SC-010 covered offline and T068 still performs the live run by hand (SC-010).
+- [ ] T060 Confirm red on the host: T057 and T058 fail because `scripts/demo/` and `demo.json` do not exist (not for a syntax error); record in `verification.md` (FR-030).
+
+### Implementation
+
+- [ ] T061 Create `src/data/simulator/scenarios/demo.json` with the timeline fixed in T056 (values inside the ranges of data-model E1) and add the matching demo hold to `src/data/seeds/recommendations.json` (hold at most 90 s, `ewt_saving_s` 55, `horizon_s` 600, `expires_ts` in simulated time). Turns the `demo.json` validation part of T058 green (SC-010, FR-018).
+- [ ] T062 [P] Create `scripts/demo/approve_hold.py`: the stand-in for the backend, piped into the `ingestion` container; waits until the newest non-backend `event_ts` reaches the fixed simulated time, then inserts one `decision` row exactly as `command_event.schema.json` says; not part of `src/` and skipped when the real backend is ready (gate decision 1). Turns the `approve_hold.py` checks of T057 green (FR-012, FR-020, SC-010).
+- [ ] T063 Create `scripts/demo/run_demo.sh` (modelled on `scripts/drill/run_drill.sh`): project `pulsoflota-demo`, own volume, `SIM_SEED=42`, `SIM_DURATION_S=2700`, `SIM_PACE_S=0.9`, `REFRESH_CLOCK=data`, `SIM_SCENARIO_FILE` = the demo file, `SIM_HOLDS=on`, `SIM_TRUTH_PATH` unset, ports from `DEMO_POSTGRES_PORT` and `DEMO_API_PORT`, samples gold every 5 s into `demo-out/` (`samples.csv`, `gold_steps.txt`, `truth.log`), prints the table of steps and the truth lines at the end. Turns T057 green (SC-010, FR-031).
+- [ ] T064 [P] Add `demo-out/` to `.gitignore` (SC-010).
+- [ ] T065 ✂ [P] Write `scripts/demo/README.md`: how to run, what each step shows, the one-line runbook for existing volumes (`docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < src/data/db/init/007_scenarios.sql`, research R8), the stand-in approval note and the open integration items. Cut-list item 3; if cut, the same facts stay in `quickstart.md` (SC-010).
+- [ ] T066 Run `src/data/tests/integration/test_demo_scenario.py` and `tests/unit/test_demo_script.py` green and record the offline results in `verification.md` (SC-010, FR-029).
+
+### Phase 4 verification and final evidence (ends the phase; commit after it passes)
+
+- [ ] T067 Verify the code paths of Phase 4, one command at a time: (1) host suite `uv run pytest` → 0 failed, coverage above 80 %, count not below the previous phase plus the new tests; (2) then the Andon command → same (FR-030, SC-013).
+- [ ] T068 Run the live check of quickstart Phase 4 under its dedicated project (never the default stack): `bash scripts/demo/run_demo.sh` (project `pulsoflota-demo`, about 8 minutes, needs `.env`); confirm in `demo-out/` the table of quickstart Phase 4: D1 snapshot `estimated` with B-101 in `sources_down` and no `bunched` or incident; C1 with a `bunched` follower, the `decision` row and `gold.instruction_status` = `executed`; one `gold.recommendation_effect` row after the horizon with its `result` recorded **as the rule yields it, not tuned**; C5 active `bus_breakdown` incident and the bus `broken_down`, no reserve dispatch; truth lines matching gold (kind, bus, time within 5 s); wall time about 8 minutes. Finish with `COMPOSE_PROJECT_NAME=pulsoflota-demo docker compose down -v` (demo project only) and `rm -rf demo-out` (SC-010, SC-006, FR-029).
+- [ ] T069 Final evidence in `specs/004-scenario-injectors/verification.md`: (1) run the **Untouched check** (conventions above) over the whole feature, listing every changed file against the four phase lists; (2) the table mapping SC-001 to SC-013 to the evidence section that proves each; (3) the cuts taken, with the time each saved; (4) the open integration items (instruction status keyed by `rec_id`, to be confirmed with the backend owner; the real recommendation door; `inst_id` and `text` owned by the backend); (5) the CODEOWNERS review list: `src/data/rules/__init__.py`, `src/data/rules/sql/silver_incidents.sql`, `src/data/rules/holds.py`, `src/data/rules/effect.py`, `src/data/rules/sql/hold_orders.sql` (SC-013, FR-030, FR-032).
+
+**Checkpoint**: the 2026-11-24 demo runs from one command.
+
+---
+
+## Dependencies & Execution Order
+
+### Phase dependencies
+
+- **Phase 1** has no dependency; T002 (golden hash, green) precedes every engine edit (T018, T019).
+- **Phase 2** needs Phase 1 (injectors, truth sink, `cycle.py` step order, `007` file). **Phase 3** needs Phase 2 (hold orders and seed recommendations). **Phase 4** needs Phases 1 to 3.
+- Each phase ends with its verification task and can be committed alone.
+
+### Within each phase
+
+- Red tests before implementation; implementation tasks name the test they turn green.
+- Phase 1: T001 → T002 → T003 → T004 to T012 [P] → T013 → T014 → T015 → T016 ∥ T017 → T018 → T019 → T020 → T021 → T022 → T023 → T024 ✂ → T025.
+- Phase 2: T026 → T027 to T036 [P] → T037 → T038 → T039 → T040 → T041 → T042 → T043 → T044 → T045.
+- Phase 3: T046 ∥ T047 ∥ T048 → T049 → T050 → T051 → T052 → T053 → T054 → T055.
+- Phase 4: T056 → T057 ∥ T058 ∥ T059 ✂ → T060 → T061 → T062 ∥ T064 ∥ T065 ✂ → T063 → T066 → T067 → T068 → T069.
+
+### Parallel examples
+
+```text
+# Phase 1 red tests together (after T003)
+Task: "src/data/tests/integration/test_silver_incident_null_duration.py (T004)"
+Task: "src/data/tests/unit/test_scenario_config.py (T005)"
+Task: "src/data/tests/unit/test_scenario_channel.py (T007)"
+
+# Phase 2 red tests together (after T026)
+Task: "src/data/tests/unit/test_hold_rules.py (T028)"
+Task: "src/data/tests/unit/test_hold_compliance.py (T029)"
+Task: "src/data/tests/integration/test_instruction_status.py (T033)"
+
+# Phase 3 red tests together
+Task: "src/data/tests/unit/test_effect_rule.py (T046)"
+Task: "src/data/tests/integration/test_recommendation_effect.py (T047)"
+```
+
+## Cut List (budget about 4 h 50 min; deadline for the demo 2026-11-24)
+
+Phases 1 to 4 are all needed for the demo. Cut **inside** phases, in this order, and record each cut in `verification.md`. Estimates are agent time.
+
+| Order | Task | What is lost | Saves | Spec coverage kept |
+|---|---|---|---|---|
+| 1 | T059 | the automated live demo test (`-m live`) | about 15 min | SC-010 by the offline replay (T058) and the manual live run (T068) |
+| 2 | T024 | the C2 live check under `pulsoflota-verify` | about 10 min | FR-006, SC-003 by the unit and integration C2 tests (T006, T011) |
+| 3 | T065 | `scripts/demo/README.md` wording | about 5 min | the same facts in `quickstart.md` |
+
+Estimate: 5 h 35 min with the null-duration fix (research R14), about 5 h 05 min after the three cuts. That is 15 min above 4 h 50 min; the gap is the Phase 1 fix and is reported to the data owner, not hidden.
+
+**Never cut**: the golden-hash test (T002), any red-test task, the null-duration test and fix (T004, T014), the human-gate tests (T034), the isolation test (T035), any phase verification task, or the live run of the demo (T068).
+
+## Implementation Strategy
+
+- **MVP**: Phase 1 (scenarios on demand plus the incident object). It is committable alone and every later phase needs it.
+- **Order of value**: Phase 2 closes the loop for the cheapest action and exercises the human gate; Phase 3 measures it; Phase 4 packages the demo.
+- **Commits**: the human commits after each phase verification task, with the messages above.
+- **Out of scope (not built, FR-032)**: C3 and C4, stochastic mode, reserve-bus dispatch, adjust-departure and short-turn, the real recommendation door, the decision engine, any endpoint or frontend, direction 2. A task asking for one of these is reported as outside the turn.

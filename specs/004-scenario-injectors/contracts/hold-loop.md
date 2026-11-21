@@ -65,4 +65,5 @@ status time. Data never writes a `confirmation` or any bronze row.
 1. The recommendation door: how the backend hands bus, stop, duration, `ewt_saving_s` and `horizon_s` to data.
 2. `inst_id` and `text` of the instruction are backend-owned; the backend joins the data status by `rec_id`
    (plan open question 3).
-3. A null-duration backend `incident_report` currently fails the silver `end_ts NOT NULL` insert (002).
+3. A null-duration backend `incident_report` failed the silver `end_ts NOT NULL` insert (002). Fixed in
+   Phase 1 of this story: an unknown duration is an open-ended incident (`end_ts = 'infinity'`, research R6).

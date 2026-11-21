@@ -26,8 +26,23 @@ cited number and says so.
 | Dependencies | R13 |
 | Time budget | R14 |
 
-All `NEEDS CLARIFICATION` of Technical Context are resolved. Three questions that need an owner remain
-in `plan.md` (Open questions); each has a default used by the plan.
+All `NEEDS CLARIFICATION` of Technical Context are resolved. The three questions that needed an owner
+were settled at the plan gate (see "Gate decisions" below and `plan.md`, Open questions).
+
+## Gate decisions (plan gate, 2026-11-21, data owner)
+
+1. **Demo approval**: a stand-in script (`scripts/demo/approve_hold.py`) writes the demo `decision` row at a
+   fixed simulated time if the backend is not ready. It uses the same data path as the real backend (a
+   `command_event` row in `bronze.events`); if the backend is ready the step is skipped, with no other change.
+2. **FR-023 reading**: the "after" headway is read at the held bus's position after the horizon (first
+   snapshot at or after `T0 + horizon_s`); the "before" headway is read in the last snapshot at or before
+   `T0`. Observed EWT is clamped at 0 (schema minimum 0).
+3. **Instruction status key**: `gold.instruction_status` is keyed by `rec_id` (no `inst_id`, no `text`).
+   Open integration item: "to be confirmed with the backend owner" that joining by `rec_id` is acceptable.
+4. **Rules version**: `RULES_VERSION` 1.0.0 → 1.1.0 approved (R8).
+5. **Scope additions to Phase 1** (data owner, after the plan gate): fix the pre-existing silver rebuild
+   failure when a backend `incident_report` has a null `duration_min` (see R6, "Null-duration fix"), because
+   C5 uses incidents; and put the C2 live check on the cut list (budget about 4 h 50 min, R14).
 
 ## Findings from reading the code (they shape the decisions)
 
@@ -309,8 +324,17 @@ the backend is the only writer of command events, ADR-0003).
   script`; the bus has `bus_state = broken_down` and `headway_ahead_s = null` (already built in 002);
   after `duration_s` the incident has `until` set and the bus returns to `in_service`.
 - A scripted incident always has a numeric duration, so `duration_s` is never null for this story. The
-  schema keeps it nullable for dispatcher reports (ADR-0003 gate 3). The pre-existing silver limit for a
-  null-duration backend incident is recorded as risk 7, not changed here.
+  schema keeps it nullable for dispatcher reports (ADR-0003 gate 3).
+- **Null-duration fix (gate decision 5)**: `silver.incidents.end_ts` is `NOT NULL` and
+  `silver_incidents.sql` computes `event_ts + (payload->>'duration_min')::numeric * interval '1 minute'`, which
+  is NULL for a backend report with a null duration, so the whole silver rebuild fails. Default chosen
+  (Kiro, to be confirmed by the data owner in review): an unknown duration is an **open-ended incident**,
+  stored as `end_ts = 'infinity'` (valid for `TIMESTAMPTZ`, keeps `NOT NULL` and `CHECK (end_ts >= start_ts)`,
+  needs no DDL change). The incident is active from `start_ts` with no end; in `gold.incident` that gives
+  `duration_s = null` and `until = null`. Existing readers (`silver_bus_current_state.sql`,
+  `silver_segment_traversals.sql`) compare `end_ts` only with `<`, `>`, and so stay correct. This edits one
+  CODEOWNERS file, `src/data/rules/sql/silver_incidents.sql`, and is covered by the `RULES_VERSION` 1.1.0 bump.
+  Rejected: skipping the row (hides a real incident), `NULL` end with a DDL change (touches 002 tables).
 
 **Rationale**: same pattern as `corridor_now` (per-snapshot document, lineage columns), so replays and
 audits work the same way.
@@ -487,13 +511,15 @@ models.
 
 | Phase | Work | Estimate |
 |---|---|---|
-| 1 | golden hash, config model and validation, C1/C2/C5 hooks, channel layer, truth, incident table and step, shape tests | 1 h 45 min |
+| 1 | golden hash, config model and validation, C1/C2/C5 hooks, channel layer, truth, incident table and step, null-duration silver fix (about 15 min, added at the gate), shape tests | 2 h 00 min |
 | 2 | hold rules, seed loader and model, poller thread, board, engine hold, instruction status, isolation test | 1 h 30 min |
 | 3 | effect rule, pipeline step, tests, cycle timing | 45 min |
 | 4 | dry runs, demo file, scripts, live run, verification | 1 h |
 | Margin | Andon runs (about 2 min each), review fixes | 20 min |
-| **Total** | | **5 h 20 min** |
+| **Total** | | **5 h 35 min** |
 
-This is over the 4–5 hour budget by about 20 minutes if nothing is cut. The cut order in `plan.md` Phases
-(live test first, then the C2 live check) brings it to about 4 h 50 min. The 2026-11-24 demo needs Phases 1
+This is over the 4–5 hour budget if nothing is cut. The cut list in `tasks.md` (live demo test, then the C2
+live check, then the README wording) saves about 30 min: about 5 h 05 min with the cuts, 15 min above the
+4 h 50 min the data owner set before the null-duration fix was added to Phase 1. The estimate of what each
+cut saves is in the cut table of `tasks.md`. The 2026-11-24 demo needs Phases 1
 to 4; Phase 3 can be cut only by dropping the effect step from the demo.

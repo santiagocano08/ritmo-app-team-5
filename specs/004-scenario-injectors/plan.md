@@ -206,6 +206,7 @@ src/data/tests/unit/test_hold_board.py                  # Phase 2 (poller behavi
 src/data/tests/unit/test_effect_rule.py                 # Phase 3
 src/data/tests/integration/test_scenarios_gold.py       # Phase 1 (C1, C2, C5, D1 against fixtures and truth)
 src/data/tests/integration/test_incident_gold.py        # Phase 1
+src/data/tests/integration/test_silver_incident_null_duration.py  # Phase 1 (crafted bronze, fails today)
 src/data/tests/integration/test_hold_poller.py          # Phase 2 (real database, read-only session)
 src/data/tests/integration/test_instruction_status.py   # Phase 2
 src/data/tests/integration/test_hold_loop.py            # Phase 2 (simulator + crafted decisions + pipeline)
@@ -222,6 +223,7 @@ Modified:
 ```text
 src/data/simulator/engine.py                  # optional `hooks` and `holds` arguments; guarded calls only
 src/data/simulator/main.py                    # --scenario-file, --truth-path, --holds; env defaults
+src/data/rules/sql/silver_incidents.sql       # Phase 1: unknown duration = open-ended incident (gate decision 5)
 src/data/rules/__init__.py                    # RULES_VERSION = "1.1.0"
 src/data/pipeline/cycle.py                    # three steps after build_snapshot, same transaction
 src/data/refresh/run.py                       # load seeds next to load_reference
@@ -239,7 +241,8 @@ src/data/db/init/ tests (schema init)         # new tables expected
 ```
 
 Not touched: `contracts/`, `docs/adr/`, `src/data/ingestion/`, `Dockerfile`, `pyproject.toml`,
-`uv.lock`, `.github/`, `src/data/rules/sql/silver_*.sql` and the existing gold SQL.
+`uv.lock`, `.github/`, and the existing silver and gold SQL, except `src/data/rules/sql/silver_incidents.sql`
+(Phase 1, null-duration fix, gate decision 5).
 
 **Structure Decision**: keep the existing layout. The simulator extension lives in a sub-package
 `src/data/simulator/scenarios/` so `engine.py` and `model.py` change as little as possible. Pure
@@ -255,13 +258,14 @@ CI-ready command) green, then the human commits. Phase *n+1* needs Phase *n* but
 that can be committed and demonstrated alone. Time estimates are for the agent and sum to the 4–5 hour
 budget (research R14).
 
-### Phase 1 — Injectors and incident view (US1, P1) — about 1 h 45 min
+### Phase 1 — Injectors and incident view (US1, P1) — about 2 h 00 min
 
-Goal: FR-001 to FR-011, FR-021, FR-027, FR-028 (part), SC-001 to SC-006.
+Goal: FR-001 to FR-011, FR-021, FR-027, FR-028 (part), SC-001 to SC-006, plus the null-duration silver fix (gate decision 5).
 
 1. **Golden hash first**: add `test_simulator_golden_hash.py` with the two baseline hashes; run it
    green on the untouched engine.
-2. Tests red: scenario file validation (each invalid case of AC10), injector behavior with a fake step
+2. Tests red: the null-duration silver case (crafted bronze with a backend `incident_report` whose
+   `duration_min` is null; fails today at the `end_ts` insert), scenario file validation (each invalid case of AC10), injector behavior with a fake step
    loop and with `run()` (C1, C2, C5 effects at the expected steps), channel layer (silence, duplicates),
    truth sink, static guard that no pipeline code reads the truth, incident gold, shape tests against the
    fixtures `c1_bunching`, `c2_gap`, `c5_breakdown`, `d1_source_outage` (counts and states, not byte equality).
@@ -318,7 +322,7 @@ Commit point: effect rows. Demo script not needed.
 
 If time runs short, cut in this order: the live test (keep the offline replay), the C2 live check
 (keep the unit and integration tests), the README wording. Never cut the golden hash, the human-gate
-tests or the isolation test.
+tests, the null-duration fix or the isolation test. The cut table with time estimates is in `tasks.md`.
 
 ## Risks (summary; detail in research)
 
@@ -338,23 +342,23 @@ tests or the isolation test.
 6. **Existing volumes lack `007`.** Init scripts run on a fresh volume only (003 R14); the demo uses a
    fresh project volume and the runbook gets one line (R8).
 7. **A dispatcher incident with `duration_min = null` breaks the silver rebuild** (`end_ts` is NOT NULL).
-   Pre-existing from 002; this story's scripted incidents always carry a duration. Recorded, not fixed (R6).
+   Pre-existing from 002. Gate decision: fixed in Phase 1 because C5 uses incidents (open-ended incident,
+   `end_ts = 'infinity'`, research R6). It edits `src/data/rules/sql/silver_incidents.sql` (CODEOWNERS).
 8. **CODEOWNERS.** `src/data/rules/` changes (new files and the version bump) need the data owner's review.
 
 ## Open questions
 
-1. **[NEEDS CLARIFICATION] Who approves the demo hold on 2026-11-24?** The plan uses a stand-in script
-   that writes the `decision` row at a fixed simulated time (reproducible). If the real backend and
-   console are ready, the same data path is used with no change; only the script step is skipped. Confirm
-   which one the demo uses.
-2. **[NEEDS CLARIFICATION] "Headway after at the target stop" (FR-023).** After the horizon (600 s) the
-   held bus has left the stop, so the plan measures the held bus's `headway_ahead_s` in the first snapshot at
-   or after start + `horizon_s`, and "before" in the last snapshot at or before the hold start (the bus is
-   at the stop). It also clamps `ewt_observed_s` at 0 because the schema minimum is 0 and the corridor EWT can
-   be negative. The data owner should confirm both readings.
-3. **[NEEDS CLARIFICATION] Instruction status without `inst_id` and `text`.** Data publishes
-   `gold.instruction_status` keyed by `rec_id` (`bus_id`, `status`, `ts_by_status`); the backend owns
-   `inst_id` and `text`. The backend owner should confirm that joining by `rec_id` is acceptable.
+Resolved at the plan gate (2026-11-21, data owner); the plan's defaults were approved. Recorded in
+[research.md](research.md), "Gate decisions".
+
+1. **Demo approval (resolved)**: a stand-in script writes the demo `decision` row at a fixed simulated time
+   if the backend is not ready (same data path; skipped when the real backend is ready).
+2. **FR-023 reading (resolved)**: "after" is the held bus's `headway_ahead_s` in the first snapshot at or
+   after start + `horizon_s`; "before" is the last snapshot at or before the hold start; `ewt_observed_s` is
+   clamped at 0.
+3. **Instruction status key (resolved)**: `gold.instruction_status` is keyed by `rec_id` (`bus_id`, `status`,
+   `ts_by_status`); `inst_id` and `text` stay with the backend. **Open integration item: to be confirmed with
+   the backend owner** that joining by `rec_id` is acceptable.
 
 ## Complexity Tracking
 
