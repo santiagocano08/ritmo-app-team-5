@@ -165,3 +165,42 @@ the same through `main` in `test_ingestion_run.py`. The existing no-leak test is
 
 A first host run without `DATABASE_URL` in the shell skipped 186 integration tests (coverage 78.5 %); that was my
 environment, not the change, and the run above was repeated with the variable set from `.env` (not printed).
+
+## Phase 1b: publish the image and pin base images
+
+Start 2026-11-21 11:47 UTC, end 2026-11-21 about 12:00 UTC. No image was pushed.
+
+### Red run (T059)
+
+`uv run pytest tests/unit/test_ci_workflow.py tests/unit/test_container_pins.py -q --no-cov` → 10 failed, 13 passed.
+Failures for the stated reasons: no `publish` job (jobs, `if`, permissions, tags, login), mount of `Dockerfile`
+missing, floating `python:3.12-slim`, `postgres:16`, `ARG REVISION` and OCI labels missing. No import or syntax error.
+
+### Green runs (T064), one at a time
+
+| # | Command | Result |
+|---|---|---|
+| 1 | `uv run pytest tests/unit/test_ci_workflow.py tests/unit/test_container_pins.py tests/unit/test_ops_docs.py -q --no-cov` | 24 passed |
+| 2 | host `uv run pytest` (DATABASE_URL from `.env`, not printed) | 514 passed, 2 skipped, 0 failed, coverage 94.75 % (end of Phase 2: 502 passed) |
+| 3 | Andon `docker compose --profile tools build tests && docker compose --profile tools run --rm tests` | 511 passed, 5 skipped, 0 failed, coverage 94.75 % (previous: 499 passed) |
+| 4 | `docker compose --profile tools build` | exit 0; `docker compose config` shows `image: postgres:16.11` for `db` |
+
+### Local dry-run (T065), nothing pushed
+
+- `docker build --target prod --build-arg REVISION=dryrun0000 --build-arg SOURCE_URL=https://github.com/santiagocano08/ritmo-app-team-5 -t pulsoflota-prod-dryrun .` → labels
+  `{"org.opencontainers.image.revision":"dryrun0000","org.opencontainers.image.source":"https://github.com/santiagocano08/ritmo-app-team-5","org.opencontainers.image.title":"pulsoflota"}`
+- `docker run --rm --entrypoint id pulsoflota-prod-dryrun` → `uid=10001(appuser)`.
+- Build without `--build-arg` → `revision=unknown`. Image removed afterwards.
+
+### Untouched check (T066)
+
+Changed: `Dockerfile`, `docker-compose.yml`, `.github/workflows/ci.yml`, `docs/ops/ci-branch-protection.md`,
+`tests/unit/test_ci_workflow.py`, new `tests/unit/test_container_pins.py`, and files in `specs/003-ops-ci-reliability/`
+(`tasks.md`, `verification.md`). Nothing else: no change to `contracts/`, `bronze.py`, `validate.py`, init scripts,
+`.github/CODEOWNERS`, `.drill-input/`, `drill-out/`, `docs/adr`, `.kiro/`, `.specify/`.
+
+### Rework
+
+- T056 replaced the Phase 1 test "no job has `needs`" with "only `publish` has `needs`" as tasks.md asks.
+- First T065 attempt failed because of my zsh quoting (`$B` was not word-split); repeated with explicit arguments.
+- Not shown here: the remote `publish` run (T067, human task).
