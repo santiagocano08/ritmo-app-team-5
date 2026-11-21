@@ -52,7 +52,7 @@ corridor free-flow speed; the 0.43–0.56 band is an expected sanity check, not 
 hard gate — values outside it emit a warning and are kept); `SOURCES.md` has one
 line per file.
 
-Automated: `pytest tests/unit/test_reference_build.py`.
+Automated: `pytest src/data/tests/unit/test_reference_build.py`.
 
 ### V2 — Run environment is isolated (SC-005, SC-008, FR-009..FR-011)
 
@@ -71,12 +71,12 @@ Expected: three separate services start with one command; the health endpoint
 reports healthy; stopping `api` does not stop `ingestion` and `bronze.events`
 keeps growing (Principle III).
 
-Automated: `pytest tests/integration/test_health.py tests/integration/test_isolation.py`.
+Automated: `pytest src/data/tests/integration/test_health.py src/data/tests/integration/test_isolation.py`.
 
 ### V3 — Ingestion validates, rejects and dedupes (SC-002..SC-004, FR-012..FR-016)
 
 Feed crafted valid, invalid and duplicate envelopes through
-`src.ingestion.bronze.ingest(conn, envelope)` (no live simulator):
+`src.data.ingestion.bronze.ingest(conn, envelope)` (no live simulator):
 
 - A valid envelope lands in `bronze.events` exactly once, with `arrival_ts`
   stamped by ingestion.
@@ -87,16 +87,16 @@ Feed crafted valid, invalid and duplicate envelopes through
 - No `UPDATE`/`DELETE` on bronze (insert-only).
 
 Automated:
-- Contract: `pytest tests/contract/test_contract_examples.py` (every valid
+- Contract: `pytest src/data/tests/contract/test_contract_examples.py` (every valid
   example passes, every invalid example is rejected with the expected reason).
-- Integration: `pytest tests/integration/test_bronze_ingest.py
-  tests/integration/test_bronze_immutable.py`.
+- Integration: `pytest src/data/tests/integration/test_bronze_ingest.py
+  src/data/tests/integration/test_bronze_immutable.py`.
 
 ### V4 — Simulator is deterministic, realistic and capacity-safe (SC-001, SC-006, FR-017..FR-026)
 
 ```bash
-python -m src.simulator.main --seed 42 --duration 1800 > /tmp/run_a.jsonl
-python -m src.simulator.main --seed 42 --duration 1800 > /tmp/run_b.jsonl
+python -m src.data.simulator.main --seed 42 --duration 1800 > /tmp/run_a.jsonl
+python -m src.data.simulator.main --seed 42 --duration 1800 > /tmp/run_b.jsonl
 diff /tmp/run_a.jsonl /tmp/run_b.jsonl && echo "deterministic OK"
 sha256sum /tmp/run_a.jsonl
 ```
@@ -106,9 +106,9 @@ validates against the contract; a peak-hour trip completes in ~25 min within
 ±20 %; occupancy never exceeds 40; surplus riders are `rejected`.
 
 Automated:
-- `pytest tests/unit/test_simulator_determinism.py` (same seed → identical hash).
-- `pytest tests/unit/test_simulator_capacity.py` (occupancy ≤ 40; rejected = surplus).
-- `pytest tests/unit/test_simulator_travel_time.py` (peak trip ≈ 25 min ±20 %).
+- `pytest src/data/tests/unit/test_simulator_determinism.py` (same seed → identical hash).
+- `pytest src/data/tests/unit/test_simulator_capacity.py` (occupancy ≤ 40; rejected = surplus).
+- `pytest src/data/tests/unit/test_simulator_travel_time.py` (peak trip ≈ 25 min ±20 %).
 
 ## Test suite and coverage (Gate 2, turn 1)
 

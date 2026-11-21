@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gold_snapshot_notify.schema.json",
+  "title": "Gold Snapshot Notification (v1.0.0, feature-local)",
+  "description": "Payload of NOTIFY on channel gold_snapshot. Emitted once per new gold snapshot, delivered at commit. Feature 002; promotion to contracts/read requires an ADR addendum.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["snapshot_id"],
+  "properties": {
+    "snapshot_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "gold.snapshots.snapshot_id of the snapshot that has just become readable."
+    }
+  }
+}

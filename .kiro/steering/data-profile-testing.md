@@ -1,6 +1,6 @@
 ---
 inclusion: fileMatch
-fileMatchPattern: ["tests/**", "contracts/turn1-events/examples/**"]
+fileMatchPattern: ["tests/**", "src/data/tests/**", "contracts/turn1-events/examples/**"]
 ---
 
 # Data profile — Testing
@@ -23,7 +23,7 @@ stories.
 
 ## Test data
 
-- Small, deterministic fixtures in `tests/fixtures/`, with a fixed seed. No unseeded random data.
+- Small, deterministic fixtures in `src/data/tests/fixtures/`, with a fixed seed. No unseeded random data.
 - Demo scenarios (bunching, gap, surge, accident, broken-down bus, data fault) are generated with
   the simulator in **forced mode**: fixed time and seed.
 - Never use real data with PII. The Helsinki HFP message format is only a template; **its numbers

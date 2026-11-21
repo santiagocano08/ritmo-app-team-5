@@ -57,3 +57,24 @@ def get_sim_duration_s() -> int:
         raise RuntimeError(
             f"SIM_DURATION_S must be an integer, got: {raw!r}"
         )
+
+def get_sim_planned_headway_s() -> int:
+    """Return the planned headway in seconds from SIM_PLANNED_HEADWAY_S (default 600).
+
+    Used by the simulator to space bus starts (R14). The gold rules read the same
+    value from config.corridor_settings.headway_planned_s; a test keeps them equal.
+    """
+    raw = os.environ.get("SIM_PLANNED_HEADWAY_S")
+    if raw is None:
+        return 600
+    try:
+        value = int(raw)
+    except ValueError:
+        raise RuntimeError(
+            f"SIM_PLANNED_HEADWAY_S must be an integer, got: {raw!r}"
+        )
+    if value <= 0:
+        raise RuntimeError(
+            f"SIM_PLANNED_HEADWAY_S must be > 0, got: {value}"
+        )
+    return value

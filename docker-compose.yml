@@ -28,7 +28,7 @@ services:
 
   # --------------------------------------------------------------------------
   # db — PostgreSQL 16
-  # Mounts db/init/ scripts into /docker-entrypoint-initdb.d/ so the schemas
+  # Mounts src/data/db/init/ scripts into /docker-entrypoint-initdb.d/ so the schemas
   # and bronze tables are created on first start.  Scripts are idempotent
   # (IF NOT EXISTS guards) so container restarts are safe.
   # --------------------------------------------------------------------------
@@ -39,7 +39,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (cp .env.example .env)}
     volumes:
-      - ./db/init:/docker-entrypoint-initdb.d:ro
+      - ./src/data/db/init:/docker-entrypoint-initdb.d:ro
       - db_data:/var/lib/postgresql/data
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
@@ -62,10 +62,11 @@ services:
       context: .
       dockerfile: Dockerfile
     # Single line: a folded (>) scalar keeps the newline before "|", which breaks the pipe.
-    command: ["sh", "-c", "python -m src.simulator.main --seed ${SIM_SEED:-42} --duration ${SIM_DURATION_S:-3600} --pace ${SIM_PACE_S:-1} | python -m src.ingestion.run"]
+    command: ["sh", "-c", "python -m src.data.simulator.main --seed ${SIM_SEED:-42} --duration ${SIM_DURATION_S:-3600} --pace ${SIM_PACE_S:-1} | python -m src.data.ingestion.run"]
     environment:
       DATABASE_URL: ${DATABASE_URL}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      SIM_PLANNED_HEADWAY_S: ${SIM_PLANNED_HEADWAY_S:-600}
       PYTHONPATH: /app
     depends_on:
       db:
@@ -103,6 +104,38 @@ services:
     restart: unless-stopped
 
   # --------------------------------------------------------------------------
+  # refresh — gold refresh loop (feature 002, R16). Recomputes the snapshot every
+  # REFRESH_INTERVAL_S and sends one NOTIFY per new snapshot. Off the capture path:
+  # depends only on db, and nothing depends on it, so stopping it never stops
+  # ingestion (FR-041, Principle III).
+  # Healthcheck = freshness: unhealthy when no gold snapshot was committed in the
+  # last REFRESH_HEALTH_MAX_AGE_S seconds (also shows a whole-feed stop in data mode).
+  # --------------------------------------------------------------------------
+  refresh:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: prod
+    command: ["python", "-m", "src.data.refresh.run"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      REFRESH_CLOCK: ${REFRESH_CLOCK:-data}
+      REFRESH_INTERVAL_S: ${REFRESH_INTERVAL_S:-5}
+      REFRESH_HEALTH_MAX_AGE_S: ${REFRESH_HEALTH_MAX_AGE_S:-30}
+      PYTHONPATH: /app
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-m", "src.data.refresh.health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
   # tests — runs the full pytest suite inside the app image.
   # Profile: 'tools' — only started explicitly with:
   #   docker compose --profile tools run --rm tests
@@ -116,19 +149,27 @@ services:
     profiles:
       - tools
     command: >
-      python -m pytest tests/ -p no:cacheprovider --cov=src --cov-report=term-missing --cov-fail-under=80
+      python -m pytest src/data/tests tests -p no:cacheprovider --cov=src --cov-report=term-missing --cov-fail-under=80
     environment:
       DATABASE_URL: ${DATABASE_URL}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       API_BASE_URL: http://api:${API_PORT:-8000}
       PYTHONPATH: /app
       COVERAGE_FILE: /tmp/.coverage
-    # tests/, contracts/ and data/ are excluded from the image (.dockerignore);
-    # mount them read-only so the suite runs on the same image that is deployed.
+    # tests/, src/data/tests/, contracts/ and data/ are excluded from the image
+    # (.dockerignore); mount them read-only so the suite runs on the same image
+    # that is deployed.
     volumes:
       - ./tests:/app/tests:ro
+      - ./src/data/tests:/app/src/data/tests:ro
       - ./contracts:/app/contracts:ro
       - ./data:/app/data:ro
+      # Phase 0 (002): read-only inputs for the throwaway-DB fixture (R10) and the
+      # config/compose/ADR/spec checks of T002, T008 and T016.
+      - ./specs:/app/specs:ro
+      - ./docs/adr:/app/docs/adr:ro
+      - ./docker-compose.yml:/app/docker-compose.yml:ro
+      - ./.env.example:/app/.env.example:ro
     depends_on:
       db:
         condition: service_healthy
