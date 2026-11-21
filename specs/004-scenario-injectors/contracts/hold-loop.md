@@ -34,7 +34,7 @@ retries each interval; the event stream is never delayed.
 |---|---|
 | `rec_id` | key that the `decision` payload carries |
 | `action.bus_id`, `action.stop_id` | target bus and stop |
-| `action.duration_s` | requested hold, 0 to 90 s (the schema rejects more) |
+| `action.duration_s` | requested hold, 0 to 90 s (the schema rejects more, the generated model does not; the hold executor and the seed loader enforce the bound) |
 | `ewt_saving_s`, `horizon_s` | expected EWT saving and effect window (effect table) |
 | `expires_ts` | end of the validity window; written in **simulated** time (2026-11-24T22:xx:xxZ) |
 
@@ -48,7 +48,7 @@ real door is a backend integration item.
 | `action = apply`, known hold `rec_id`, bus arrives at the stop strictly after `decided_at_sim` and not after `expires_ts` | the bus leaves no earlier than `arrival + hold_s` (total dwell; a longer natural dwell is kept), unless the seeded draw says non-compliance |
 | `action = discard`, no decision, unknown `rec_id`, a non-hold recommendation | nothing changes (Principle IV) |
 | bus already departed when the decision was written | order cannot run; `not_executed` at `expires_ts` |
-| hold above 90 s | refused; `not_executed` |
+| hold above 90 s | loads, then refused by the executor (`hold_order_refused`, reason `over_cap`); `not_executed` |
 | second order for the same bus and stop | first by bronze id applies; the second is `not_executed` |
 | same `rec_id` seen twice | one order |
 | `bus_breakdown` fires on the bus before the visit | order cancelled; `not_executed` |

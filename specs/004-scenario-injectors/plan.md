@@ -88,9 +88,9 @@ simulated seconds (about 2,900 events at the measured 3,851 per hour); at most a
 | Hold intake | daemon thread, `SIM_HOLD_POLL_S` = 1 s wall (5 simulated seconds at pace 1), read-only session, 2 s connect and statement timeouts, in-memory board; DB down means no new holds, never a blocked stream | R4 |
 | Order identity | `rec_id` → seeded recommendation (`config.seed_recommendation` for data, the same JSON file for the simulator); order valid for arrivals strictly after `decided_at_sim` and up to `expires_ts` | R4, R5 |
 | Compliance | `SHA-256("{seed}\|hold\|{rec_id}")` mapped to [0, 1); non-compliant when below `SIM_HOLD_NONCOMPLIANCE` (default 0.10); main RNG untouched | R4 |
-| Hold semantics | total dwell: departure no earlier than arrival + D, D ≤ 90 s; a natural dwell longer than D is kept | R4 |
+| Hold semantics | total dwell: departure no earlier than arrival + D, D ≤ 90 s; a natural dwell longer than D is kept. The 0..90 s bound is enforced by the hold executor code and the seed loader, not by the generated model; an out-of-range hold is refused and reported `not_executed` | R4 |
 | Executed | `executed` when the observed dwell is within ±15 s of D, else `not_executed`; constants in `rules/holds.py` | R5 |
-| Incident object | `gold.incident`, one row per incident per snapshot, `duration_s = duration_min × 60`, `until` null while active | R6 |
+| Incident object | `gold.incident`, one row per incident per snapshot, `duration_s = duration_min × 60`, `until` null while active; an open-ended incident (`end_ts = 'infinity'`) publishes `duration_s` and `until` as NULL, computed in SQL with `isfinite(end_ts)`, never read into Python | R6 |
 | Effect object | rebuilt each cycle from stored snapshots: before = last snapshot at or before the hold start, after = first snapshot at or after start + `horizon_s`; EWT observed = corridor `service_metric.ewt_s` clamped at 0; threshold 30 s in `config.effect_settings` | R7 |
 | Rules version | `RULES_VERSION` 1.0.0 → 1.1.0 (new derivations; old objects unchanged); snapshot ids re-key | R8 |
 | Demo | `scripts/demo/run_demo.sh`: project `pulsoflota-demo`, seed 42, `SIM_PACE_S=0.9` (2,700 simulated s = 486 s ≈ 8.1 min), stand-in approval script keyed to simulated time | R9 |
@@ -115,8 +115,10 @@ added. RNF-3.3.1 (boundary validation of 100 % of packets): injected events pass
 validation as any other (SC-002); backend `decision` rows are written directly to bronze by the backend,
 as the 002 builders already do (`insert_backend_commands`), because the ingestion boundary lists only the
 six turn-1 event types. RF-2.3 (approval before action): PASS. Gate 1 (schema validation only): PASS,
-scenario file, seed file and gold objects are schema-validated. Gate 2: PASS. Gate 4: the explicit
-approval step is exercised by the demo. Security baseline: parameterized SQL only, no secrets in the
+scenario file, seed file and gold objects are schema-validated. Gate 2: PASS. Gate 4: the human-approval
+rule is enforced and tested from the data side (no `apply` decision, no hold); the demo approval is **scripted**
+(`approve_hold.py`, a stand-in for the dispatcher's click) and Gate 4 human-approval evidence is deferred to the
+backend and console integration. Security baseline: parameterized SQL only, no secrets in the
 repository or in logs, JSON log lines without stack traces.
 
 **Deferred norms (Evolution, not blocking)**: Redis, PostGIS, 1,000 events/s, SAST/SCA, RBAC, HMAC,
@@ -131,7 +133,7 @@ Points checked explicitly:
    "settings and reference data only"; the seed table is declared demo and test reference data, to be
    removed when the recommendation door exists. No ADR line changes.
 2. `RULES_VERSION` moves to 1.1.0. This changes snapshot ids (they hash the version) but no existing
-   gold content. One existing test pins `"1.0.0"` and is updated in the same commit. Changes under
+   gold content. Existing tests pin `"1.0.0"` in three places: `src/data/tests/unit/test_rules_version.py:17` and `src/data/tests/integration/test_baselines.py:92` and `:159` (the 002 M1 and M2 baseline acceptance tests). They are updated in the same commit; the baseline tests read `src.data.rules.RULES_VERSION` instead of a literal (same assertion, value from the single source). Changes under
    `src/data/rules/` need the data owner's review (CODEOWNERS).
 3. The truth sink is a file or stderr, outside every schema the pipeline reads, which meets the FR-010
    guarantee without a new store.
@@ -234,9 +236,11 @@ docker-compose.yml                            # ingestion: new env vars (default
 Makefile                                      # READ_SCHEMAS gains the three schemas
 .gitignore                                    # demo-out/
 src/data/tests/unit/test_rules_version.py     # expects 1.1.0
+src/data/tests/integration/test_baselines.py  # lines 92 and 159 read RULES_VERSION instead of the literal "1.0.0"
+src/data/tests/fixtures/silver_support.py     # incidents() guards the infinite end_ts (explicit columns, isfinite)
 tests/unit/test_generated_read_models.py      # NAMES gains the three modules
 tests/unit/test_env_example.py                # new variables
-src/data/tests/unit/test_no_bronze_writes.py  # scan list unchanged; new files fall under the existing folders
+src/data/tests/unit/test_no_bronze_writes.py  # scan list gains src/data/simulator (FR-003 static guard)
 src/data/db/init/ tests (schema init)         # new tables expected
 ```
 
@@ -255,8 +259,8 @@ added.
 
 Each phase: tests first (they must fail for the stated reason), implementation, the Andon check (the
 CI-ready command) green, then the human commits. Phase *n+1* needs Phase *n* but each ends in a state
-that can be committed and demonstrated alone. Time estimates are for the agent and sum to the 4–5 hour
-budget (research R14).
+that can be committed and demonstrated alone. Time estimates are for the agent: 5 h 55 min in total, about 5 h 25 min after the
+three cuts of the cut list, which is above the 4 h 50 min the data owner set (research R14).
 
 ### Phase 1 — Injectors and incident view (US1, P1) — about 2 h 00 min
 
@@ -316,7 +320,7 @@ Commit point: effect rows. Demo script not needed.
    `down -v` outside its own project), the demo scenario file validates, an offline replay test of the
    demo scenario file at pace 0 asserts the gold states at the chosen simulated times with tolerance.
 2. Implement `demo.json`, `scripts/demo/run_demo.sh`, `approve_hold.py`, `README.md`, the live test.
-3. Green: one live run on project `pulsoflota-demo` of about 8 minutes shows D1, C1 with its hold and
+3. Green (every compose command carries its project name on the same line, `-p pulsoflota-demo` in the script): one live run on project `pulsoflota-demo` of about 8 minutes shows D1, C1 with its hold and
    effect row, C5 with the active incident, and the close; evidence in `verification.md`. The effect
    `result` is recorded as the rule yields it (SC-010).
 
@@ -343,7 +347,8 @@ tests, the null-duration fix or the isolation test. The cut table with time esti
    fresh project volume and the runbook gets one line (R8).
 7. **A dispatcher incident with `duration_min = null` breaks the silver rebuild** (`end_ts` is NOT NULL).
    Pre-existing from 002. Gate decision: fixed in Phase 1 because C5 uses incidents (open-ended incident,
-   `end_ts = 'infinity'`, research R6). It edits `src/data/rules/sql/silver_incidents.sql` (CODEOWNERS).
+   `end_ts = 'infinity'`, research R6). `'infinity'` never reaches Python (psycopg raises `DataError: timestamp too large`):
+   gold publishes `duration_s` and `until` as NULL and every computation guards with `isfinite(end_ts)` in SQL. It edits `src/data/rules/sql/silver_incidents.sql` (CODEOWNERS).
 8. **CODEOWNERS.** `src/data/rules/` changes (new files and the version bump) need the data owner's review.
 
 ## Open questions

@@ -57,7 +57,7 @@ were settled at the plan gate (see "Gate decisions" below and `plan.md`, Open qu
 | Silver bus-state queries exclude `source = 'backend'`; `silver.incidents` includes every source and has `end_ts NOT NULL`. | silver SQL, `004_silver.sql` | Backend rows never move a bus; a null-duration backend incident would fail the silver insert (pre-existing, risk 7). |
 | The refresh loop in `REFRESH_CLOCK=data` mode uses the newest non-backend bus report as reference time. | `refresh/run.py` | Gold time follows the simulated clock; a backend row's `event_ts` (a wall time) never matters for matching (R4). |
 | Gold snapshots: `gold.snapshots` (unique on `as_of_ts, rules_version, max_bronze_id`), JSONB docs per snapshot with `rules_version` and `max_bronze_id`, `service_metric.ewt_s` per snapshot, one cycle transaction with an advisory lock. | `005_gold.sql`, `cycle.py`, `gold.py` | New gold objects follow the same pattern and join snapshots through `as_of_ts`. |
-| `RULES_VERSION = "1.0.0"` is part of the snapshot id; one test pins it. | `rules/__init__.py`, `test_rules_version.py` | Bump needs one test edit (R8). |
+| `RULES_VERSION = "1.0.0"` is part of the snapshot id; one test pins it. | `rules/__init__.py`, `test_rules_version.py` | Bump needs test edits: `test_rules_version.py` and the two pins in `test_baselines.py` (lines 92 and 159), which read `RULES_VERSION` instead of a literal (R8). |
 | `src/data/rules/` is a CODEOWNERS path. | `.github/CODEOWNERS` | New rule files need the data owner's review. |
 | The compose `ingestion` service runs `simulator | ingestion.run` with `DATABASE_URL` in its environment. | The simulator can open its own read-only connection with the same DSN; no new service. |
 
@@ -214,14 +214,18 @@ and entangle D1 with the world; rejected); a re-delivery of an earlier event lat
   simulated seconds at pace 1 (`SIM_PACE_S=1`) and 4.5 s at the demo pace 0.9. An approval that lands in
   that window before the bus arrives can miss the bus and ends `not_executed` (conservative: it never
   executes something the rule would not). With a pre-written decision (tests, pace 0) the order is known
-  from step 0 and the run is deterministic (AC7).
+  from step 0 and the run is deterministic (AC7). To make that true, the poller does **one synchronous poll
+  before the first simulated event** (bounded by the 2 s timeouts; the only blocking call), then the daemon
+  thread takes over.
 
 ### R4.2 Mapping `rec_id` to an order
 
 - The simulator loads the seed file (`SEED_RECOMMENDATIONS_PATH`, default
   `src/data/seeds/recommendations.json`) at start, validates every entry with the generated
-  `recommendation` model (so `hold` with `duration_s` outside 0 to 90 is rejected at load), and keeps
-  entries with `action.type = "hold"`.
+  `recommendation` model, and keeps entries with `action.type = "hold"`. The generated model does **not**
+  bound the hold `duration_s` (the 0 to 90 limit is an `if/then/else` in the schema; `jsonschema` is a dev
+  extra and not available in the image), so an entry above 90 s **loads** with a `hold_seed_over_cap` log line.
+  The bound is enforced by the hold executor code (below) and checked by the seed loader.
 - A polled `decision` with `action = "apply"` and a known `rec_id` becomes an **order**: `bus_id`,
   `stop_id`, `hold_s = action.duration_s`, `from_s` (= `decided_at_sim` as seconds since the run start,
   or minus infinity), `until_s` (= `expires_ts`). `discard`, an unknown `rec_id` (counted and logged as
@@ -230,8 +234,10 @@ and entangle D1 with the world; rejected); a re-delivery of an earlier event lat
   `not_executed` as a conflict (first by bronze id wins).
 - The seed file is test and demo data, not a contract (spec Open integration items). Data loads the same
   file into `config.seed_recommendation` (R5) so both sides read one source of truth.
-- Executor-level defense: `MAX_HOLD_S = 90` is also checked when an order is built, so a crafted entry
-  above 90 s is refused (AC5) even if it bypassed the load check in a unit test.
+- Executor-level enforcement: `MAX_HOLD_S = 90` is checked when an order is built. An entry above 90 s gives
+  no order, a `hold_order_refused` log line (reason `over_cap`) and a truth record; data reports the
+  instruction `not_executed` (AC5, SC-007) using the same range check in `rules/holds.py`. The entry is not
+  dropped at load, because dropping it would leave an unknown `rec_id` and no instruction row.
 
 ### R4.3 Applying the order
 
@@ -315,8 +321,9 @@ the backend is the only writer of command events, ADR-0003).
   `active` boolean for cheap filtering. Built in the cycle right after `build_snapshot`, from
   `silver.incidents` (already rebuilt for this cycle, so the two cannot differ).
 - Mapping: `inc_id` = `silver.incidents.inc_id` (the bronze `event_id`, a UUID), `type` =
-  `incident_type`, `target_id`, `duration_s = (end_ts − start_ts)` in seconds (= `duration_min × 60`),
-  `since = start_ts`, `until = end_ts` when `end_ts <= as_of` (closed) else null (active),
+  `incident_type`, `target_id`, `duration_s = CASE WHEN isfinite(end_ts) THEN extract(epoch FROM end_ts − start_ts) END`
+  (= `duration_min × 60`, NULL when open-ended), `since = start_ts`, `until = end_ts` when
+  `isfinite(end_ts) AND end_ts <= as_of` (closed) else null (active),
   `reported_by` from the payload. Active means `start_ts <= as_of < end_ts` (002 FR-015).
 - Console read: the rows of the latest snapshot, `WHERE active`. A convenience view
   `gold.incident_current` selects them for the newest snapshot of the current rules version.
@@ -332,7 +339,13 @@ the backend is the only writer of command events, ADR-0003).
   stored as `end_ts = 'infinity'` (valid for `TIMESTAMPTZ`, keeps `NOT NULL` and `CHECK (end_ts >= start_ts)`,
   needs no DDL change). The incident is active from `start_ts` with no end; in `gold.incident` that gives
   `duration_s = null` and `until = null`. Existing readers (`silver_bus_current_state.sql`,
-  `silver_segment_traversals.sql`) compare `end_ts` only with `<`, `>`, and so stay correct. This edits one
+  `silver_segment_traversals.sql`) compare `end_ts` only with `<`, `>`, and so stay correct. **The infinite value
+  must never reach Python or a subtraction**: psycopg raises `DataError: timestamp too large` when it loads
+  `'infinity'::timestamptz` (verified), and PostgreSQL 16 cannot subtract infinite timestamps. So
+  `pipeline/incidents.py` computes `duration_s`, `until` and `active` in SQL behind `isfinite(end_ts)` and
+  never selects the raw `end_ts`; the test helper `silver_support.incidents()` selects explicit columns with
+  `CASE WHEN isfinite(end_ts) THEN end_ts END` and an `open_ended` flag. Choice: keep `'infinity'`; the
+  alternative (`end_ts` NULL, lifting `NOT NULL`) touches the 002 tables and every reader and is not simpler. This edits one
   CODEOWNERS file, `src/data/rules/sql/silver_incidents.sql`, and is covered by the `RULES_VERSION` 1.1.0 bump.
   Rejected: skipping the row (hides a real incident), `NULL` end with a DDL change (touches 002 tables).
 
@@ -401,7 +414,9 @@ build (duplicates the headway rule and needs a parametrized `bus_current_state`;
 **Decision**
 
 - `RULES_VERSION` 1.0.0 → **1.1.0** (SemVer minor: new derivations, existing objects unchanged). It is
-  bumped in Phase 1 with the first new gold table. `test_rules_version.py` is updated in the same commit.
+  bumped in Phase 1 with the first new gold table. `test_rules_version.py` and the two pins in
+  `src/data/tests/integration/test_baselines.py` (lines 92 and 159) are updated in the same commit; the latter read
+  `src.data.rules.RULES_VERSION` instead of a literal (same assertion, value from the single source).
   Snapshot ids change because they hash the version; a replay recomputes them.
 - DDL in one new file, `src/data/db/init/007_scenarios.sql`, idempotent (`IF NOT EXISTS`, seeds with
   `ON CONFLICT DO NOTHING`), in three commented sections, one per phase. The throwaway test database
@@ -474,12 +489,14 @@ would change the base case).
   zero holds run and the bus stream equals the baseline.
 - **Isolation** (SC-011): with the poller stopped, the database unreachable, `api` and `refresh` stopped,
   ingestion keeps inserting (host live check on project `pulsoflota-verify`, as in 003).
-- **Static guards**: truth never read by the pipeline; no write to bronze from the poller, pipeline or
-  rules; no `time`/`datetime.now`/unseeded `random` in `scenarios/injectors.py` and `channel.py`.
+- **Static guards**: truth never read by the pipeline or the API package; no write to bronze from the simulator
+  package (scenarios, poller), pipeline or rules; no `time`/`datetime.now`/unseeded `random` in `scenarios/injectors.py` and `channel.py`.
 - **Coverage**: new code is mostly pure and covered by unit tests; the poller thread by an integration
   test with a real database. Quality rules (`rules/holds.py`, `rules/effect.py`) target about 100 %.
 - **Live checks** use dedicated compose projects (`pulsoflota-verify`, `pulsoflota-demo`), never the
-  default one (003 convention).
+  default one (003 convention). The project name is on the same command line as every compose command that
+  starts, stops or resets a stack (`COMPOSE_PROJECT_NAME=… docker compose …` or `-p …`), never an `export`
+  in one call and a bare `down -v` in another. Every live test carries the 003 project guard.
 
 ## R11 — Scope and evolution (not built)
 
@@ -516,10 +533,11 @@ models.
 | 3 | effect rule, pipeline step, tests, cycle timing | 45 min |
 | 4 | dry runs, demo file, scripts, live run, verification | 1 h |
 | Margin | Andon runs (about 2 min each), review fixes | 20 min |
-| **Total** | | **5 h 35 min** |
+| Analysis fixes (2026-11-21) | open-ended incident in SQL, hold bound in the executor, initial poll, project guards, extra assertions and test edits, inside existing tasks | 20 min |
+| **Total** | | **5 h 55 min** |
 
 This is over the 4–5 hour budget if nothing is cut. The cut list in `tasks.md` (live demo test, then the C2
-live check, then the README wording) saves about 30 min: about 5 h 05 min with the cuts, 15 min above the
-4 h 50 min the data owner set before the null-duration fix was added to Phase 1. The estimate of what each
+live check, then the README wording) saves about 30 min: about 5 h 25 min with the cuts, 35 min above the
+4 h 50 min the data owner set before the null-duration fix and the analysis fixes were added. The estimate of what each
 cut saves is in the cut table of `tasks.md`. The 2026-11-24 demo needs Phases 1
 to 4; Phase 3 can be cut only by dropping the effect step from the demo.

@@ -68,8 +68,10 @@ CLI, DELETE + INSERT in one transaction (like `load_reference`).
 | `rec_id` | `UUID` primary key | from the document |
 | `doc` | `JSONB NOT NULL` | the full recommendation, validated by the generated `Recommendation` model before insert |
 
-Only entries with `action.type = "hold"` are used by this story. Entries are rejected at load when the
-schema fails (a hold above 90 s cannot be loaded).
+Only entries with `action.type = "hold"` are used by this story. The generated model validates the shape but
+does not bound the hold `duration_s`; the 0 to 90 s bound is enforced by the hold executor and the seed loader
+(`rules/holds.py`, `MAX_HOLD_S`). An entry above 90 s loads (with a log line) and ends as a refused order,
+reported `not_executed` (AC5).
 
 ## E4 — `config.effect_settings` (one row)
 
@@ -84,7 +86,7 @@ Seed `ON CONFLICT DO NOTHING`. The planned headway stays in `config.corridor_set
 
 ## E5 — Hold order and board (in memory)
 
-`Order`: `rec_id`, `bus_id`, `stop_id`, `hold_s` (0 to 90), `from_s` (simulated seconds, or minus infinity),
+`Order`: `rec_id`, `bus_id`, `stop_id`, `hold_s` (0 to 90, checked when the order is built; a larger value gives no order), `from_s` (simulated seconds, or minus infinity),
 `until_s`, `cancelled` flag, `complies` (result of the seeded draw). `HoldBoard`: thread-safe map
 `(bus_id, stop_id) → [Order]` plus the set of seen `rec_id` and counters (`ignored_unknown`,
 `ignored_discard`). The engine reads it; the poller writes it.
@@ -102,7 +104,8 @@ Seed `ON CONFLICT DO NOTHING`. The planned headway stays in `config.corridor_set
 
 Primary key `(snapshot_id, inc_id)`. View `gold.incident_current`: the rows of the newest snapshot of the
 current rules version. Doc fields: `schema_version` "1.0.0", `inc_id`, `type`, `target_id`, `duration_s`
-(minutes × 60), `since`, `until` (null while `since <= as_of < end`), `reported_by`.
+(minutes × 60; NULL for an open-ended incident), `since`, `until` (null while `since <= as_of < end`, and for an open-ended
+incident), `reported_by`. Both are computed in SQL behind `isfinite(end_ts)`; an infinite `end_ts` is never read into Python.
 
 ## E7 — `gold.instruction_status` (rebuilt each cycle)
 
@@ -154,7 +157,7 @@ bronze.events (decision) ─► poller (read-only) ─► HoldBoard ─► engin
 ## Validation rules (summary)
 
 - Scenario file: strict schema, ranges and overlap rule; failure before the first event.
-- Seed file: `recommendation.schema.json`; `hold` duration 0 to 90 s.
+- Seed file: `recommendation.schema.json`; `hold` duration 0 to 90 s, enforced by the hold executor and the seed loader (not by the generated model).
 - Incident, effect: generated Pydantic models built from the existing read schemas; extra fields are
   impossible (`additionalProperties: false`, FR-027).
 - Instruction status: enum and `ts_by_status` keys checked against `instruction.schema.json`.

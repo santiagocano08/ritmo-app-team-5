@@ -104,7 +104,7 @@ After an approved hold and its horizon window, the dispatcher can see whether it
 - **Two approved holds for the same bus and stop**: the first applies and the second is reported as not executed (conflicting order).
 - **A `decision` for a recommendation the pipeline cannot resolve to a bus, stop and duration**: it is ignored and counted; the bus is unchanged.
 - **Breakdown of a bus that has a pending hold**: the breakdown wins, and the hold is `not_executed`.
-- **Breakdown incident with unknown duration**: the write contract requires a numeric `duration_min`, so a scripted incident always has a duration. `duration_s` stays nullable in the read schema for dispatcher reports (ADR-0003 gate decision 3).
+- **Breakdown incident with unknown duration**: a scripted incident always has a numeric `duration_min` (the turn-1 `incident_report` contract requires it). A dispatcher report through the backend `command_event` may carry `duration_min = null` (ADR-0003 gate decision 3); it is an open-ended incident: active from its event time with no end, `duration_s` and `until` null in the `incident` view, and the bus stays `broken_down` until a later report closes it (research R6).
 - **Effect window spans a data fault**: if a bus in the window is Estimated, the observation counts as missing, not as zero.
 
 ## Clarifications
@@ -151,13 +151,13 @@ After an approved hold and its horizon window, the dispatcher can see whether it
 
 **Incident view (P1 acceptance, US-12)**
 
-- **FR-021**: Data MUST expose the `incident` gold view (shape `contracts/read/incident.schema.json` v1.0.0) built from the incident reports in bronze: `inc_id`, `type`, `target_id`, `duration_s` (minutes × 60), `since`, `until` (null while active), `reported_by`. An incident is active from its event time until event time plus its duration, consistent with story 002 (FR-015).
+- **FR-021**: Data MUST expose the `incident` gold view (shape `contracts/read/incident.schema.json` v1.0.0) built from the incident reports in bronze: `inc_id`, `type`, `target_id`, `duration_s` (minutes × 60; null when the duration is unknown), `since`, `until` (null while active), `reported_by`. An incident is active from its event time until event time plus its duration, consistent with story 002 (FR-015); an incident with unknown duration is active with no end (open-ended).
 
 **Effect table (P3)**
 
 - **FR-022**: A read-only gold view MUST produce `recommendation_effect` rows validating against `contracts/read/recommendation_effect.schema.json` (v1.0.0), one per approved hold, only after its horizon window has closed.
-- **FR-023**: `headway_before_s` MUST be the headway at the target stop immediately before the action was applied. `headway_after_s` MUST be the headway at the target stop after the horizon elapsed. `headway_planned_s` MUST come from configuration (600 s), not from rules code. Unknown values are null.
-- **FR-024**: `ewt_observed_s` MUST be the EWT of the corridor service metric (story 002 FR-024) after the horizon window. `ewt_expected_s` is the projection carried by the recommendation (see FR-018).
+- **FR-023**: `headway_before_s` MUST be the headway at the target stop immediately before the action was applied. `headway_after_s` MUST be the headway ahead of the held bus (the target bus of the action) in the first snapshot at or after the start of the action plus `horizon_s`, since the bus has left the target stop by then (plan-gate decision 2, 2026-11-21). `headway_planned_s` MUST come from configuration (600 s), not from rules code. Unknown values are null.
+- **FR-024**: `ewt_observed_s` MUST be the EWT of the corridor service metric (story 002 FR-024) after the horizon window, clamped at 0 because the read schema's minimum is 0 (plan-gate decision 2). `ewt_expected_s` is the projection carried by the recommendation (see FR-018).
 - **FR-025**: `result` MUST follow ADR-0003 gate decision 6 exactly: `worked` if `ewt_expected_s − ewt_observed_s ≥ 30`; `partial` if the improvement is above 0 and below 30 s, or the headway improved but EWT did not; `did_not_work` if neither improved; `no_data` if observations are insufficient or the expected EWT is null. The 30 s threshold MUST be configuration, not coded into the rules.
 - **FR-026**: Effect rows MUST be deterministic and recomputable from bronze, reference data and static configuration, and MUST store `rules_version` and `max_bronze_id` (ADR-0001 lineage). The view MUST NOT write to bronze, silver or gold state tables.
 - **FR-027**: No output of this story MAY contain fields outside its read schema (`additionalProperties: false`).

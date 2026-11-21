@@ -26,12 +26,17 @@ uv run --frozen --extra dev pytest src/data/tests/unit -p no:cacheprovider --no-
 Live checks start, stop and reset a stack. Never run them on the default project: `down -v` would delete
 your volume. Use a dedicated project (003 convention):
 
+Put the project name **on the same command line** as every compose command that starts, stops or resets a
+stack. Do not `export` it in one call and run a bare `docker compose down -v` in another (separate shell
+calls do not share the variable and the bare command would delete your default volume):
+
 ```bash
-export COMPOSE_PROJECT_NAME=pulsoflota-verify     # live tests
+COMPOSE_PROJECT_NAME=pulsoflota-verify docker compose up -d db     # live checks
+docker compose -p pulsoflota-verify down -v                        # equivalent form
 # the demo uses its own project, pulsoflota-demo, set by scripts/demo/run_demo.sh
 ```
 
-Live tests (`-m live`) skip themselves unless `-m live` is passed and the variable is set.
+Live tests (`-m live`) skip themselves unless `-m live` is passed and `COMPOSE_PROJECT_NAME == pulsoflota-verify` (the 003 project guard); run them as `COMPOSE_PROJECT_NAME=pulsoflota-verify uv run pytest … -m live`.
 
 ## Phase 1 — Injectors and incident view
 
@@ -44,7 +49,7 @@ Live tests (`-m live`) skip themselves unless `-m live` is passed and the variab
 | `test_scenario_injectors.py` | C1 extends the dwell, C2 delays the departure, C5 halts and emits one `incident_report`; no scenario means the baseline |
 | `test_scenario_channel.py` | silence drops only the three bus-report types of the target in its window; duplicates repeat exactly `count` lines |
 | `test_scenario_truth.py` | records, order, determinism (two runs equal), no secrets or payloads |
-| `test_no_truth_reads.py` | static guard; passes once the package exists and nothing reads it |
+| `test_no_truth_reads.py` | static guard (also scans `src/pulsoflota`); green by design, no red state |
 | `test_incident_gold.py` | `gold.incident` rows validate against `incident.schema.json`; active until `start + duration`; `until` set after |
 | `test_scenarios_gold.py` | shape of `c1_bunching`, `c2_gap`, `c5_breakdown`, `d1_source_outage`; D1(b) leaves silver and gold equal to the run without duplicates |
 
@@ -94,6 +99,8 @@ cat /tmp/truth.jsonl                       # one line per injector
 - Decision rows are inserted directly into `bronze.events` (`source = backend`), as the backend does and
   as `insert_backend_commands` in the builders already does.
 - `discard` or no decision: zero holds run (Principle IV).
+- A pre-written decision is on the board before the first event (initial synchronous poll, pace 0).
+- A seeded hold of 120 s loads, is refused by the executor and ends `not_executed` (AC5).
 - Live isolation check (project `pulsoflota-verify`): stop `api`, `refresh` and the poller; bronze row count
   keeps growing (SC-011):
 
