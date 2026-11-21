@@ -26,28 +26,41 @@ integrity is critical (fare-collection anti-fraud).
 
 ## Technology stack (hard constraints of the target system)
 
-- **Language:** Python 3.12+ (API, ingestion, data pipeline). A React console is
-  the only JavaScript/TypeScript component.
-- **API:** FastAPI or Flask.
-- **Dispatcher console:** Streamlit / Dash, HTML5/Jinja2 + WebSockets, or a
-  React + Vite + Tailwind CSS SPA that talks to the backend only through its
-  REST/WebSocket API (ADR-0004).
+Frontend and backend are **separate** services and folders under `src/`.
+
+- **Language (backend):** Python 3.12+.
+- **Backend:** FastAPI + Pydantic V2 in `src/backend/` (REST + WebSocket API,
+  ingestion, metrics). Holds all business logic and authorization. Database
+  access is **psycopg 3 with parameterized SQL only — no ORM, no Alembic**
+  (parameterized queries are the A05 injection baseline).
+- **Frontend:** React 19 + TypeScript + Vite + Tailwind CSS in `src/frontend/`,
+  built to static assets and served behind a reverse proxy (Nginx/Traefik). It
+  consumes the backend API and never decides access control.
 - **Persistence:** PostgreSQL + PostGIS (SQLite for packaged dev/test).
 - **Real time / cache:** Redis (Pub/Sub for live telemetry + in-memory state).
-- **Containers:** Docker + `docker-compose`, at least 3 services:
-  `ingestion-service`, `pulsoflota-web`, `database-redis`.
+- **Containers:** Docker + `docker-compose`, at least 4 services:
+  `ingestion-service`, `pulsoflota-backend`, `pulsoflota-frontend`,
+  `database-redis`.
 - **Data validation:** Pydantic V2 / JSON Schema at the ingestion gate.
+- **CI/CD:** two GitHub Actions pipelines — `backend-ci` (ruff, mypy, Bandit,
+  pytest + coverage > 80 %, pip-audit, Trivy image scan) and `frontend-ci`
+  (ESLint, `tsc --noEmit`, Vitest, Vite build, JS SCA). Both must pass to merge.
 
 These are adopted **turn by turn**: check `docs/turns-ritmo.md` for what the
 active turn requires and what is deferred.
 
-There is no application code yet; the source layout will follow the service
-breakdown above. Build tooling (Node / Python) is already covered in `.gitignore`.
+Application code lives under `src/`. The target layout above (`src/backend/`,
+`src/frontend/`) is the destination; the current Turn-1 tree is not yet
+reorganized into it — backend code sits in `src/api/` (FastAPI app),
+`src/data/` (ingestion, pipeline, rules, simulator) and `src/pulsoflota/`
+(shared DB/config/models), and there is no frontend code yet. Build tooling
+(Node / Python) is already covered in `.gitignore`.
 
 ## Repository layout
 
 | Path | What it is |
 |------|------------|
+| `src/` | Application code. Target: `src/backend/` + `src/frontend/`; current Turn-1 tree: `src/api/`, `src/data/`, `src/pulsoflota/` (no frontend yet). |
 | `docs/` | Source-of-truth documentation (OMD, PRD, SRD — in Spanish). |
 | `docs/turns-ritmo.md` | **Turn map:** which norms are mandatory in the active turn and which are deferred. |
 | `specs/` | Generated per-feature artifacts (spec, plan, tasks, checklists). |
@@ -89,7 +102,7 @@ breakdown above. Build tooling (Node / Python) is already covered in `.gitignore
 
 ## Governing document
 
-The **constitution** (`.specify/memory/constitution.md`, v1.2.0) is the supreme
+The **constitution** (`.specify/memory/constitution.md`, v1.3.0) is the supreme
 governing document: its 5 core principles are NON-NEGOTIABLE and prevail over
 any other practice. For situational detail, load the matching steering file
 (`.kiro/steering/*.md`).

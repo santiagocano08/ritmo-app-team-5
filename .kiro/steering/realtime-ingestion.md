@@ -12,7 +12,8 @@ description: When working on the isolated ingestion service, the deterministic r
 ## Isolation (Principle III)
 
 - `ingestion-service` runs in a process container **fully isolated** from the
-  `pulsoflota-web` modular monolith, so web failures do not affect data capture.
+  `pulsoflota-backend` service, so web/backend failures do not affect data
+  capture.
 
 ## Critical-path determinism
 

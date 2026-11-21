@@ -55,8 +55,8 @@ criteria. These norms are adopted in the turn that `docs/turns-ritmo.md` assigns
 
 ## A05 — Injection
 
-- Parameterized queries (SQLAlchemy / asyncpg / Pydantic V2); SQL string
-  concatenation is forbidden.
+- Database access is **psycopg 3 with parameterized SQL only** — no ORM, no
+  SQLAlchemy, no Alembic. SQL string concatenation is forbidden.
 - Strict Pydantic V2 validation at ingestion: wrong types, values outside the
   geographic range or undeclared fields → `422 Unprocessable Entity`.
 

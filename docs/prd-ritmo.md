@@ -56,9 +56,15 @@ PulsoFlota es la central web supervisor en tiempo real diseñada para los despac
 * **RNF-3.1.3 (MUST)**: El tiempo total desde la detección de una anomalía en vía hasta la presentación de la recomendación en la consola del despachador **DEBE** ser $\le 10$ segundos.
 
 ### 3.2 Arquitectura y Despliegue en Contenedores
-* **RNF-3.2.1 (MUST)**: La aplicación web **DEBE** ser desarrollada en Python (FastAPI/Flask/Streamlit) y empaquetada mediante Docker y `docker-compose`.
-* **RNF-3.2.2 (MUST)**: El servicio de ingesta de telemetría en tiempo real **DEBE** ejecutarse en un contenedor totalmente aislado del monolito modular de la central web para prevenir que fallos en la interfaz afecten la captura de datos.
+* **RNF-3.2.1 (MUST)**: El **backend** (API, ingesta y cálculo de métricas) **DEBE** ser desarrollado en Python (FastAPI + Pydantic V2) y empaquetado mediante Docker y `docker-compose`. El acceso a base de datos **DEBE** usar psycopg 3 con SQL parametrizado únicamente (sin ORM, sin SQLAlchemy, sin Alembic; las consultas parametrizadas son la línea base de prevención de inyección A05). El **frontend** de la central del despachador **DEBE** desarrollarse como aplicación web separada en React 19 + TypeScript + Vite + Tailwind CSS, servida tras un proxy inverso. Frontend y backend residen en carpetas separadas bajo `src/` (`src/frontend/`, `src/backend/`).
+* **RNF-3.2.2 (MUST)**: El servicio de ingesta de telemetría en tiempo real **DEBE** ejecutarse en un contenedor totalmente aislado del backend y del frontend para prevenir que fallos en la interfaz afecten la captura de datos.
 * **RNF-3.2.3 (MUST)**: El sistema **DEBE** incluir una base de datos persistente (PostgreSQL / SQLite) y una capa de almacenamiento/pub-sub en memoria (Redis) para la gestión de datos de tiempo real mockeados.
+
+### 3.4 Operación, Observabilidad y Entrega Continua (DevOps / SRE)
+* **RNF-3.4.1 (MUST)**: El proyecto **DEBE** disponer de pipelines de CI/CD (GitHub Actions) separados para backend y frontend, ejecutados en cada *Pull Request*, que bloqueen la fusión si falla cualquier compuerta de calidad (lint, tipos, SAST, pruebas, cobertura > 80 %, SCA y build/escaneo de imagen).
+* **RNF-3.4.2 (MUST)**: El sistema **DEBE** exponer las tres señales de observabilidad: logs JSON estructurados (OpenTelemetry), métricas en formato Prometheus y trazas distribuidas correlacionadas por `correlation_id`.
+* **RNF-3.4.3 (SHOULD)**: El equipo **DEBERÍA** definir SLIs/SLOs con presupuesto de error para las latencias críticas (ingesta P99 ≤ 500 ms, mapa ≤ 2 s, detección→recomendación ≤ 10 s) y alertar al equipo SRE/DevSecOps al agotarlos.
+* **RNF-3.4.4 (SHOULD)**: El sistema **DEBERÍA** incluir *healthchecks* (liveness/readiness) por servicio en `docker-compose`, respaldo periódico de PostgreSQL con objetivos de RPO/RTO y un procedimiento de *rollback* por redeploy de la imagen anterior.
 
 ### 3.3 Calidad de Datos, Seguridad e Integridad
 * **RNF-3.3.1 (MUST)**: Toda ingesta de telemetría **DEBE** ser validada en frontera mediante contratos de mensaje (Pydantic / JSON Schema). Los datos corruptos o desfasados en el tiempo **DEBEN** ser rechazados y registrados en el log de DataOps.
@@ -76,3 +82,5 @@ PulsoFlota es la central web supervisor en tiempo real diseñada para los despac
 | **RF-2.3** | Ningún comando se transmite a la flota sin clic de confirmación humana. | Inspección de código y pruebas de integración de API. | Requerido |
 | **RF-3.2** | Recálculo automático de ruta ante evento de bloqueo vial en $\le 5\text{ s}$. | Inyección automatizada de eventos de accidente sintéticos. | Requerido |
 | **RNF-3.3.1** | Rechazo del $100\%$ de paquetes de telemetría sin esquema válido. | Compuerta de calidad de datos automatizada en DataOps. | Requerido |
+| **RNF-3.4.1** | Un PR con compuerta fallida (lint/tipos/SAST/pruebas/cobertura/SCA) no puede fusionarse. | Ejecución de pipelines `backend-ci` y `frontend-ci` en cada PR. | Requerido |
+| **RNF-3.4.2** | Logs JSON, métricas Prometheus y trazas disponibles para el camino ingesta→recomendación. | Inspección de endpoints de observabilidad y revisión de trazas con `correlation_id`. | Requerido |

@@ -9,23 +9,28 @@ fileMatchPattern: ["**/Dockerfile", "**/Dockerfile.*", "**/docker-compose*.yml",
 
 ## `docker-compose` services
 
-At least three services:
+At least four services:
 
 1. **`ingestion-service`** — synchronous ingestion of IoT telemetry and mocked
    traffic sources.
-2. **`pulsoflota-web`** — modular monolith: supervisory console, metric
-   calculation and interactive map.
-3. **`database-redis`** — persistence and event cache/pub-sub infrastructure.
+2. **`pulsoflota-backend`** — FastAPI + Pydantic V2 (`src/backend/`): REST +
+   WebSocket API, metric calculation and all business logic/authorization.
+   Database access is psycopg 3 with parameterized SQL only (no ORM).
+3. **`pulsoflota-frontend`** — React 19 + TypeScript + Vite + Tailwind
+   (`src/frontend/`), built to static assets and served behind the reverse
+   proxy. Consumes the backend API; never decides access control.
+4. **`database-redis`** — persistence and event cache/pub-sub infrastructure.
 
 ## Isolation
 
 - `ingestion-service` runs in a container **fully isolated** from the
-  `pulsoflota-web` monolith, so interface failures do not affect data capture.
+  `pulsoflota-backend`, so interface failures do not affect data capture.
 
 ## Hardening (A02)
 
 - **Non-root** execution: `USER appuser` with UID `10001` in every Python
-  container (Ingestion and Console). Least privilege.
+  container (ingestion and backend), and in the frontend's static-serving
+  image. Least privilege.
 - Hardened reverse proxy (Nginx/Traefik) under least privilege.
 - Mandatory HTTP security headers (exact values in `security.md`): CSP, HSTS,
   `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`.

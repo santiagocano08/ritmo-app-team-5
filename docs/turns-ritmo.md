@@ -2,7 +2,7 @@
 
 ## Document Control
 * **PROJECT_NAME**: RITMO (Riesgo, Incrementos y Trazabilidad para la Movilidad Operativa) / PulsoFlota
-* **MAP VERSION**: 0.1.2 (draft for team review)
+* **MAP VERSION**: 0.1.3 (draft for team review)
 * **DATE**: 2026-11-21
 * **STATUS**: Proposal. Requires team approval
 * **GOVERNED BY**: Constitution v1.2.0, "Phased Adoption" section
@@ -58,8 +58,13 @@ neighborhood direction only. Base fleet of 5 buses + 2 in reserve.
 
 ### 3.1 Scope
 * **Containers from day one** (Principle III is never deferred): `docker-compose` with
-  separate services for PostgreSQL, the simulator/ingestion and the API. The ingestion
-  container keeps writing to bronze even if the API or the web console is down.
+  separate services for PostgreSQL, the simulator/ingestion, the FastAPI backend
+  (`src/backend/`) and the React frontend (`src/frontend/`). The ingestion container keeps
+  writing to bronze even if the backend or the web console is down.
+* **Frontend/backend split from turn 1:** the dispatcher console is a React 19 +
+  TypeScript + Vite + Tailwind app in `src/frontend/`, consuming the FastAPI backend in
+  `src/backend/` over REST/WebSocket. In turn 1 the console shows fleet state and headway
+  (no geographic map yet).
 * **Message contract** with Pydantic V2. Invalid events are rejected with `422`
   and recorded with their reason.
 * **Simulator** with a simple Python loop and a 5 s step. It publishes 5 events:
@@ -91,11 +96,17 @@ neighborhood direction only. Base fleet of 5 buses + 2 in reserve.
 * Gate 4: explicit dispatcher approval.
 * From security, only what costs nothing extra: parameterized queries, no
   secrets in the repository, error responses without stack traces.
+* **DevOps/SRE (turn 1 baseline):** `backend-ci` and `frontend-ci` pipelines in
+  GitHub Actions running lint, types, tests and coverage > 80 % on every PR; per-service
+  `healthcheck` in `docker-compose`. Full SAST/SCA, metrics/traces, SLO error budgets,
+  staging/production environments and DR are deferred (see below).
 
 ### 3.3 Deferred norms (evolution)
 Redis (and the `database-redis` service), PostGIS, 1,000 events/s, geographic map
 ≤ 2 s, SAST/SCA, RBAC/JWT/MFA, mTLS, HMAC, secret manager and route diversion
-(US-03).
+(US-03). DevOps/SRE deferred: image build/scan (`Trivy`), Prometheus metrics and
+OpenTelemetry traces, SLO error budgets with SRE alerting, staging/production
+environments with rollback, and PostgreSQL backup/DR (RPO/RTO).
 
 ---
 
@@ -112,8 +123,9 @@ Redis (and the `database-redis` service), PostGIS, 1,000 events/s, geographic ma
   * Anti-fraud: GPS jumps > 120 km/h, duplicate fare validations and sensor
     inconsistency.
 * **Norms adopted:** the full security section (OWASP Top 10 — 2025), the full
-  Gate 1 (SAST: Bandit, plus ESLint for the React console) and the SCA part of
-  Gate 2 (`pip-audit`, `npm audit`, Trivy).
+  Gate 1 (SAST: Bandit, ESLint) and the SCA part of Gate 2 (`pip-audit`, `npm audit`,
+  Trivy image/dependency scan). DevOps/SRE: OpenTelemetry structured JSON logs without PII
+  and SRE/DevSecOps alerting (A09), secret manager (Docker Secrets / Vault).
 
 ## 5. Turn 3 — Real Time and Isolation (design)
 
@@ -125,7 +137,14 @@ Redis (and the `database-redis` service), PostGIS, 1,000 events/s, geographic ma
   * All 5 data faults: duplicates, out of order, impossible position, source
     outage and bursts.
   * Persistent buffer and local contingency mode.
-* **Norms adopted:** RNF-3.1.2 (1,000 events/s, P99 ≤ 500 ms), RNF-3.2.3, RF-1.1, RF-1.3 and Gate 3 (DataOps: rejection < 0.1 %, ingestion
+* **Scope (DevOps/SRE):**
+  * Prometheus metrics and OpenTelemetry distributed traces on the ingestion → compute →
+    recommendation path.
+  * SLIs/SLOs with error budgets for the real-time latencies; alerting on budget burn.
+  * Staging and production environments with versioned image releases and rollback.
+  * PostgreSQL backup and DR (explicit RPO/RTO), with a tested restore.
+* **Norms adopted:** RNF-3.1.2 (1,000 events/s, P99 ≤ 500 ms), RNF-3.2.3, RNF-3.4.2,
+  RNF-3.4.3, RNF-3.4.4, RF-1.1, RF-1.3 and Gate 3 (DataOps: rejection < 0.1 %, ingestion
   ≤ 200 ms).
 
 ## 6. Turn 4 — Adaptive Lane (design)
