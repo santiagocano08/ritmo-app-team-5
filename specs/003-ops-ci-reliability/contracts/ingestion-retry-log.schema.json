@@ -38,6 +38,19 @@
       "additionalProperties": false
     },
     {
+      "title": "db_auth_failed",
+      "type": "object",
+      "properties": {
+        "ts": { "$ref": "#/$defs/ts" },
+        "level": { "const": "error" },
+        "event": { "const": "db_auth_failed" },
+        "reason": { "const": "db_auth_failed" },
+        "sqlstate": { "$ref": "#/$defs/sqlstate" }
+      },
+      "required": ["ts", "level", "event", "reason", "sqlstate"],
+      "additionalProperties": false
+    },
+    {
       "title": "db_recovered",
       "type": "object",
       "properties": {

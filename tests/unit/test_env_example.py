@@ -55,3 +55,12 @@ def test_compose_passes_planned_headway_to_ingestion() -> None:
     compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
     env = compose["services"]["ingestion"]["environment"]
     assert env["SIM_PLANNED_HEADWAY_S"] == "${SIM_PLANNED_HEADWAY_S:-600}"
+
+
+def test_ingestion_retry_settings_documented_without_secrets() -> None:
+    env = _env_example()
+    assert env["INGESTION_RETRY_INITIAL_S"] == "1"
+    assert env["INGESTION_RETRY_MAX_WAIT_S"] == "5"
+    assert env["INGESTION_RETRY_TOTAL_S"] == "120"
+    for key in ("INGESTION_RETRY_INITIAL_S", "INGESTION_RETRY_MAX_WAIT_S", "INGESTION_RETRY_TOTAL_S"):
+        assert env[key].isdigit()

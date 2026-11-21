@@ -54,3 +54,114 @@ Rework: none. No test was weakened. No new dependency (PyYAML is already in the 
 No secret is used by the workflow; `.env` was never printed.
 
 End of Phase 1: 04:32:25. T010 (push, probes P1 to P3) is a human task and is not done.
+
+### Phase 1 addendum: first GitHub runs and the coverage fix (T010, 2026-11-21)
+
+Probe evidence from GitHub (probes closed without merging, branches deleted):
+
+| Probe | PR | Run | Result |
+|---|---|---|---|
+| P1 first run of the feature branch | #9 | 44898773797 | `test` red: 418 passed, 20 skipped, coverage 69.90 % < 80 % (this finding). `contract` and `build` green was not re-checked after the fix; P1 green is pending the push of this fix |
+| P2 `ci-probe/red-test` | #10 | 44898793966 | `test` red on `test_same_inputs_give_the_same_id`; `contract` and `build` green. As expected |
+| P3 `ci-probe/bad-fixture` | #11 | 44898798832 | `contract` red ("'schema_version' is a required property", 8 s); `build` green. As expected |
+
+Cause of the red `test` in #9: `src/data/tests/unit/test_reference_build.py` (16 tests) skips when `data/raw/` is
+absent. `data/raw/` (37 MB of downloaded sources) is git-ignored, so in CI `src/data/reference/build.py`
+(290 lines) and `src/data/reference/sources.py` (24 lines) read 0 %. Locally the files exist, so the gap was
+invisible.
+
+Fix (data owner, 2026-11-21): both modules are offline ETL that builds the committed `data/reference/*.csv`
+once and does not run in the stack. They are added to `[tool.coverage.run] omit` in `pyproject.toml` with a
+one-line justification. Their tests stay and run wherever `data/raw/` exists. No other omit entry changed;
+`--cov-fail-under=80` unchanged. Test first: `tests/unit/test_coverage_config.py` pins the exact omit list
+(it failed before the change) and the 80 % floor.
+
+Emulation of CI with `data/raw` hidden (empty temporary directory mounted read-only over it, developer files
+untouched): `docker compose --profile tools run --rm -v "$(mktemp -d)":/app/data/raw:ro tests` gives
+**483 passed, 21 skipped, 0 failed, coverage 94.75 %**. The Andon command with the real `data/raw` gives
+499 passed, 5 skipped, coverage 94.75 % (the omitted modules do not change the figure). The GitHub run
+reported 418 passed, 20 skipped at the Phase 1 commit (before Phase 2 tests); the new GitHub totals will be known
+after the next push.
+
+T010: P2 and P3 done and as expected; P1 green pending the push of this fix. Branch protection: not
+configured by this change.
+
+## Phase 2: ingestion survives a database outage (T011 to T024)
+
+Start 05:35 UTC, end 05:55 UTC, 2026-11-21. Tasks T011 to T024 done (T024 included, it was on the cut list).
+
+### Red confirmation (T017)
+
+`uv run pytest src/data/tests/unit/test_ingestion_run.py src/data/tests/unit/test_ingestion_retry.py src/data/tests/unit/test_compose_ingestion.py src/data/tests/integration/test_ingestion_outage.py tests/unit/test_env_example.py -q --no-cov`
+before implementation: 3 collection errors (module `src.data.ingestion.retry` missing, `summarize` and the
+`retrier` argument missing); the two modules that import cleanly failed with `KeyError` on the missing
+`INGESTION_RETRY_*` entries in `.env.example` and the compose file. No syntax errors.
+
+### Phase 2 verification (T023)
+
+| Step | Command | Result |
+|---|---|---|
+| 1 | targeted command above, `--no-cov` | 63 passed |
+| 2 | host `uv run pytest` (05:43 to 05:47) | 492 passed, 2 skipped, 0 failed, coverage 93.06 %, 253 s |
+| 3 | Andon: `docker compose --profile tools build tests && docker compose --profile tools run --rm tests` (05:47 to 05:49) | 489 passed, 5 skipped, 0 failed, coverage 93.06 %, 118 s |
+| 4 | `COMPOSE_PROJECT_NAME=pulsoflota-verify POSTGRES_PORT=55432 docker compose down -v && ... up -d --build db ingestion`, wait 60 s, then `uv run pytest src/data/tests/integration/test_ingestion_outage_live.py -m live -q --no-cov -s` | 1 passed (35 s); `down -v` afterwards, under the dedicated project only |
+
+Coverage: `retry.py` 100 % (85 statements), `run.py` 96 % (lines 75 to 76: the `finally` branch when no connection was opened). Passed count: Andon 489 = 434 (Phase 1) + 55 new.
+
+Live check evidence (dedicated project, `db` stopped 30 s): no ingestion restart (`RestartCount` and `StartedAt`
+unchanged), same simulator PID, bronze grew again, stored `event_id` order equals the first K events of
+`--seed 42`. The ingestion log showed 8 `db_retry` lines per outage and one `db_recovered` (`attempts` 8,
+`outage_s` about 32.1), no credentials in them.
+
+### T024 measurements (live stack)
+
+Pipe capacity of the ingestion stdin pipe, `F_GETPIPE_SZ`: **65,536 B** (same as the kernel default).
+Bytes per event: 1,439,431 B / 3,851 events = **373.8 B**. Both confirm research R3 (about 32.8 s of
+buffer at about 2.0 KB/s); no correction needed.
+
+### Untouched check
+
+`git status --short`: modified `.env.example`, `docker-compose.yml` (3 added lines), `src/data/ingestion/run.py`,
+`src/pulsoflota/config.py`, `src/data/tests/unit/test_ingestion_run.py`, `tests/unit/test_env_example.py`;
+new `src/data/ingestion/retry.py` and four test files. No change to `contracts/`, `bronze.py`, `validate.py`,
+init scripts, `docs/adr`, `.github/`, `CODEOWNERS`, `.kiro/`, `.specify/`, `.drill-input/` (empty, not
+tracked) or `drill-out/`.
+
+### Rework and incidents
+
+- Test-side mistakes fixed before the green runs: the fake ingest in `test_ingestion_run.py` compared lines
+  with their trailing newline; two tests compared `UUID` objects with `str`. No test was weakened.
+- The first host full run ended with 492 passed and 1 setup error in `tests/unit/test_ops_docs.py`
+  (it passes alone). In the same minute the Docker daemon had stopped by itself (the next full run saw
+  "connection refused" on port 5432). I restarted Docker Desktop with `open -a Docker`, waited for the
+  default stack to be healthy and reran the host suite: 492 passed, 0 errors. The cause of the daemon stop
+  was not investigated.
+- At the end the default stack shows `refresh` as `unhealthy` (it restarted with Docker). Not touched.
+- Known limit: if the connection drops after the event INSERT committed but before the reply arrived, the
+  retried line is recorded as `duplicate_event` (the event itself is stored once, so no data is lost or
+  duplicated; only the duplicates counter is off by one).
+
+### Phase 2 rework: wrong password was retried (verifier finding)
+
+`psycopg.connect` with a wrong password raises `OperationalError` with `sqlstate None`, so `classify()` returned
+`db_unreachable` and the 120 s retry window ran. Now an authentication failure is not retried: `is_auth_failure()`
+in `retry.py` matches SQLSTATE 28P01/28000 or the libpq text ("password authentication failed",
+"authentication failed") by looking at `exc.args`, without `str(exc)`; the text is only compared, never stored.
+`Retrier.run` writes one line `{"event": "db_auth_failed", "reason": "db_auth_failed", "sqlstate": ...}` and raises
+`AuthFailed("db_auth_failed")`; `run.py` exits with status 1 and logs nothing else (no traceback, no host, user,
+password, connection string or exception text). The log schema `ingestion-retry-log.schema.json` gained the
+`db_auth_failed` variant (a new `oneOf` entry; the other variants and the reason enum are unchanged).
+Tests first (seen failing on the missing `AuthFailed`/`is_auth_failure`): detection with the real message shape,
+no retry (one call, no sleep), one schema-valid line, no-leak assertions on the line and on the exception, and
+the same through `main` in `test_ingestion_run.py`. The existing no-leak test is unchanged and passes.
+
+### Final runs after both fixes (one at a time)
+
+| Command | Result |
+|---|---|
+| host `uv run pytest` (DATABASE_URL pointing at the local db) | 502 passed, 2 skipped, 0 failed, coverage 94.75 %; `retry.py` 100 %, `run.py` 96 % |
+| Andon `docker compose --profile tools build tests && ... run --rm tests` | 499 passed, 5 skipped, 0 failed, coverage 94.75 % |
+| CI emulation with `data/raw` hidden | 483 passed, 21 skipped, 0 failed, coverage 94.75 % |
+
+A first host run without `DATABASE_URL` in the shell skipped 186 integration tests (coverage 78.5 %); that was my
+environment, not the change, and the run above was repeated with the variable set from `.env` (not printed).
