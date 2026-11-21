@@ -136,6 +136,20 @@ services:
     restart: unless-stopped
 
   # --------------------------------------------------------------------------
+  # web — React + Vite + Tailwind dispatcher console (ADR-0004), static files
+  # served by unprivileged nginx (UID 10001) with the security headers.
+  # No depends_on: the console has no data of its own, and nothing in the
+  # ingestion path depends on it (Principle III).
+  # --------------------------------------------------------------------------
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
   # tests — runs the full pytest suite inside the app image.
   # Profile: 'tools' — only started explicitly with:
   #   docker compose --profile tools run --rm tests

@@ -35,6 +35,8 @@ docker-compose*.yml
 
 # Test files
 tests/
+# React console: built by its own image (web/Dockerfile)
+web/
 
 # Logs
 *.log
