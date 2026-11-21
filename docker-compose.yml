@@ -28,7 +28,7 @@ services:
 
   # --------------------------------------------------------------------------
   # db — PostgreSQL 16
-  # Mounts db/init/ scripts into /docker-entrypoint-initdb.d/ so the schemas
+  # Mounts src/data/db/init/ scripts into /docker-entrypoint-initdb.d/ so the schemas
   # and bronze tables are created on first start.  Scripts are idempotent
   # (IF NOT EXISTS guards) so container restarts are safe.
   # --------------------------------------------------------------------------
@@ -39,7 +39,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (cp .env.example .env)}
     volumes:
-      - ./db/init:/docker-entrypoint-initdb.d:ro
+      - ./src/data/db/init:/docker-entrypoint-initdb.d:ro
       - db_data:/var/lib/postgresql/data
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
@@ -62,7 +62,7 @@ services:
       context: .
       dockerfile: Dockerfile
     # Single line: a folded (>) scalar keeps the newline before "|", which breaks the pipe.
-    command: ["sh", "-c", "python -m src.simulator.main --seed ${SIM_SEED:-42} --duration ${SIM_DURATION_S:-3600} --pace ${SIM_PACE_S:-1} | python -m src.ingestion.run"]
+    command: ["sh", "-c", "python -m src.data.simulator.main --seed ${SIM_SEED:-42} --duration ${SIM_DURATION_S:-3600} --pace ${SIM_PACE_S:-1} | python -m src.data.ingestion.run"]
     environment:
       DATABASE_URL: ${DATABASE_URL}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -116,7 +116,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: prod
-    command: ["python", "-m", "src.refresh.run"]
+    command: ["python", "-m", "src.data.refresh.run"]
     environment:
       DATABASE_URL: ${DATABASE_URL}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -128,7 +128,7 @@ services:
       db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-m", "src.refresh.health"]
+      test: ["CMD", "python", "-m", "src.data.refresh.health"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -149,22 +149,23 @@ services:
     profiles:
       - tools
     command: >
-      python -m pytest tests/ -p no:cacheprovider --cov=src --cov-report=term-missing --cov-fail-under=80
+      python -m pytest src/data/tests tests -p no:cacheprovider --cov=src --cov-report=term-missing --cov-fail-under=80
     environment:
       DATABASE_URL: ${DATABASE_URL}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       API_BASE_URL: http://api:${API_PORT:-8000}
       PYTHONPATH: /app
       COVERAGE_FILE: /tmp/.coverage
-    # tests/, contracts/ and data/ are excluded from the image (.dockerignore);
-    # mount them read-only so the suite runs on the same image that is deployed.
+    # tests/, src/data/tests/, contracts/ and data/ are excluded from the image
+    # (.dockerignore); mount them read-only so the suite runs on the same image
+    # that is deployed.
     volumes:
       - ./tests:/app/tests:ro
+      - ./src/data/tests:/app/src/data/tests:ro
       - ./contracts:/app/contracts:ro
       - ./data:/app/data:ro
       # Phase 0 (002): read-only inputs for the throwaway-DB fixture (R10) and the
       # config/compose/ADR/spec checks of T002, T008 and T016.
-      - ./db:/app/db:ro
       - ./specs:/app/specs:ro
       - ./docs/adr:/app/docs/adr:ro
       - ./docker-compose.yml:/app/docker-compose.yml:ro

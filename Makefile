@@ -43,7 +43,7 @@ generate-read:
 
 # Build curated reference data from data/raw/ -> data/reference/
 reference:
-	python -m src.reference.build
+	python -m src.data.reference.build
 
 # Start all three containers: db, ingestion, api
 up:

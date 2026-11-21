@@ -27,10 +27,10 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/pulsoflota", "src/reference", "src/ingestion", "src/simulator", "src/api", "src/rules", "src/pipeline", "src/refresh"]
+packages = ["src/pulsoflota", "src/api", "src/data"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["src/data/tests", "tests"]
 addopts = "--strict-markers --cov=src --cov-report=term-missing --cov-fail-under=80"
 markers = [
     "slow: long-running checks (for example the 60-minute replay of SC-001)",
@@ -39,7 +39,7 @@ markers = [
 
 [tool.coverage.run]
 source = ["src"]
-omit = ["src/pulsoflota/models/*"]
+omit = ["src/pulsoflota/models/*", "src/data/tests/*"]
 
 [tool.coverage.report]
 exclude_lines = [
