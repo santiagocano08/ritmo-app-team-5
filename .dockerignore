@@ -1,0 +1,41 @@
+# .dockerignore — keep the build context lean
+# Mirrors .gitignore for things that must not enter the image.
+
+.git/
+.github/
+.kiro/
+.specify/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Raw source data (large, not needed in container)
+data/raw/
+
+# Docs and specs (not needed in container)
+docs/
+specs/
+contracts/
+scripts/
+
+# Env files (secrets must not enter images)
+.env
+.env.*
+
+# Docker files themselves (no recursion needed)
+Dockerfile*
+docker-compose*.yml
+
+# Test files
+tests/
+
+# Logs
+*.log
+logs/

@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0.0",
+  "rec_id": "dddd0004-0000-4000-8000-000000000041",
+  "case": "C5",
+  "action": {
+    "type": "reserve_dispatch",
+    "bus_id": "B-106",
+    "stop_id": "P-883",
+    "duration_s": null
+  },
+  "reason": "B-104 has broken down at P-891. A gap of 1200 s (2× planned) has opened between B-103 and B-105. Dispatch reserve B-106 from P-883.",
+  "ewt_saving_s": 180,
+  "horizon_s": 1200,
+  "data_quality": "live",
+  "expires_ts": "2026-11-24T08:23:00Z",
+  "conflicts_with": [],
+  "rank": 1,
+  "status": "proposed",
+  "lineage": {
+    "model_version": "1.0.0",
+    "rule_version": "1.0.0",
+    "snapshot_id": "dddd0004-0000-4000-8000-000000000004"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0.0",
+  "event_id": "b1a2c3d4-6666-4666-8666-666666666666",
+  "event_type": "incident_report",
+  "source": "simulator",
+  "event_ts": "2026-11-24T08:05:00Z",
+  "payload": {
+    "incident_type": "bus_breakdown",
+    "target_id": "B-104",
+    "duration_min": 15.0,
+    "reported_by": "script"
+  }
+}

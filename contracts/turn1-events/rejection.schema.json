@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "rejection.schema.json",
+  "title": "Rejection Record (v1.0.0)",
+  "description": "Record stored in the bronze.rejections table for every event rejected at the ingestion boundary (schema failure) or discarded as a duplicate (idempotency). See ADR-0001.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["original_message", "reason", "received_ts"],
+  "properties": {
+    "original_message": {
+      "description": "The original message as received, stored as-is (it already failed validation, so it is not further constrained).",
+      "type": ["object", "string"]
+    },
+    "reason": {
+      "type": "string",
+      "enum": [
+        "missing_required_field",
+        "wrong_type",
+        "value_out_of_range",
+        "unknown_event_type",
+        "unsupported_schema_version",
+        "undeclared_field",
+        "invalid_uuid",
+        "invalid_timestamp",
+        "duplicate_event"
+      ],
+      "description": "Why the event was rejected or discarded."
+    },
+    "received_ts": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp when the message was received by ingestion."
+    }
+  }
+}

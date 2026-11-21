@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "driver_confirmation.schema.json",
+  "title": "Driver Confirmation Payload (v1.0.0)",
+  "description": "Driver response to a dispatch instruction (always a suggestion; no on-road action runs without the dispatcher's approval - Principle IV).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["instruction_id", "bus_id", "status"],
+  "properties": {
+    "instruction_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifier of the dispatch instruction being confirmed."
+    },
+    "bus_id": {
+      "type": "string",
+      "enum": ["B-101", "B-102", "B-103", "B-104", "B-105", "B-106", "B-107"],
+      "description": "Vehicle identifier. B-106 and B-107 are reserve buses."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["received", "no_response"],
+      "description": "Driver response status."
+    }
+  }
+}

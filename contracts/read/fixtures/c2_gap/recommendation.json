@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0.0",
+  "rec_id": "eeee0005-0000-4000-8000-000000000050",
+  "case": "C2",
+  "action": {
+    "type": "adjust_departure",
+    "bus_id": "B-101",
+    "stop_id": "P-891",
+    "duration_s": -60
+  },
+  "reason": "B-104 is running 482 s ahead of schedule, creating a gap of 1082 s (1.8× planned) behind B-101. Depart B-101 from the next stop P-891 60 s early to begin closing the gap towards B-102.",
+  "ewt_saving_s": 70,
+  "horizon_s": 900,
+  "data_quality": "live",
+  "expires_ts": "2026-11-24T08:33:00Z",
+  "conflicts_with": [],
+  "rank": 1,
+  "status": "proposed",
+  "lineage": {
+    "model_version": "1.0.0",
+    "rule_version": "1.0.0",
+    "snapshot_id": "eeee0005-0000-4000-8000-000000000005"
+  }
+}

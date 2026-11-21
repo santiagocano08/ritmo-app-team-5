@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "corridor_now.schema.json",
+  "title": "Corridor Now (v1.0.0)",
+  "description": "Live fleet state for corridor C6-008, direction 1. Produced by the data layer (gold view). Screen US-04. See ADR-0003.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "snapshot_id", "as_of_ts", "corridor_id", "direction", "buses", "summary"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1.0.0"],
+      "description": "Read contract version (SemVer). Turn 1 produces only 1.0.0."
+    },
+    "snapshot_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID v4 identifying this gold snapshot. Same value as source_status.snapshot_id for the same computation cycle."
+    },
+    "as_of_ts": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp when the gold view was computed."
+    },
+    "corridor_id": {
+      "type": "string",
+      "description": "Corridor identifier. Turn 1: 'C6-008'.",
+      "minLength": 1
+    },
+    "direction": {
+      "type": "integer",
+      "enum": [1],
+      "description": "Travel direction. Turn 1 supports direction 1 only (station to neighbourhood)."
+    },
+    "buses": {
+      "type": "array",
+      "description": "One entry per active bus currently on the corridor, ordered by distance_along_m descending (leader first — the bus furthest along the route).",
+      "minItems": 0,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "bus_id", "direction", "prev_stop_id", "next_stop_id",
+          "distance_along_m", "headway_ahead_s", "headway_planned_s",
+          "bus_state", "data_quality", "ts"
+        ],
+        "properties": {
+          "bus_id": {
+            "type": "string",
+            "enum": ["B-101", "B-102", "B-103", "B-104", "B-105", "B-106", "B-107"],
+            "description": "Vehicle identifier."
+          },
+          "direction": {
+            "type": "integer",
+            "enum": [1],
+            "description": "Direction of travel."
+          },
+          "prev_stop_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Stop id the bus most recently departed. Uses real P-<objectid> ids from data/reference/stops.csv."
+          },
+          "next_stop_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Stop id the bus is heading towards."
+          },
+          "distance_along_m": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 5119.4,
+            "description": "Distance from origin (P-883, 0 m) to terminus (P-900, 5119.4 m) in meters. No geometry in turn 1."
+          },
+          "headway_ahead_s": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "description": "Gap in seconds to the bus immediately ahead (higher distance_along_m, further along the route). Null for the leader bus (no bus ahead on the corridor) or for a broken_down bus. A broken_down bus is excluded from headway calculations: the bus behind it measures its gap to the next operational bus ahead, skipping the broken_down bus."
+          },
+          "headway_planned_s": {
+            "type": "number",
+            "minimum": 1,
+            "description": "Planned headway in seconds for this time window. Turn 1 peak value: 600 s."
+          },
+          "bus_state": {
+            "type": "string",
+            "enum": ["leader", "regular", "bunched", "gap", "broken_down"],
+            "description": "Computed state. 'leader': furthest-ahead bus on the corridor (headway_ahead_s is null — no bus ahead). 'regular': within tolerance. 'bunched': headway_ahead_s < 0.5 * headway_planned_s. 'gap': headway_ahead_s > 1.5 * headway_planned_s. 'broken_down': incident of type bus_breakdown active for this bus."
+          },
+          "data_quality": {
+            "type": "string",
+            "enum": ["live", "estimated"],
+            "description": "Per-bus data quality. 'live': last event within 2 min. 'estimated': no report > 2 min; position is extrapolated; no alert raised."
+          },
+          "ts": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC timestamp of the event_ts from the last bus_position event used for this entry."
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["buses_in_service", "n_bunched", "n_gaps"],
+      "description": "Corridor-level summary counts.",
+      "properties": {
+        "buses_in_service": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of active buses on the corridor (not broken down, not in reserve)."
+        },
+        "n_bunched": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of buses in 'bunched' state."
+        },
+        "n_gaps": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of buses in 'gap' state."
+        }
+      }
+    }
+  }
+}

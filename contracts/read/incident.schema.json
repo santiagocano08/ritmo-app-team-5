@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "incident.schema.json",
+  "title": "Incident (v1.0.0)",
+  "description": "An active incident affecting corridor C6-008. Produced by the data layer (gold view). Screen US-12. See ADR-0003.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "inc_id", "type", "target_id", "duration_s", "since", "until", "reported_by"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1.0.0"],
+      "description": "Read contract version (SemVer). Turn 1 produces only 1.0.0."
+    },
+    "inc_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID v4 uniquely identifying this incident."
+    },
+    "type": {
+      "type": "string",
+      "enum": ["bus_breakdown", "stop_closed", "other"],
+      "description": "Incident type. Aligns with incident_report.schema.json in contracts/turn1-events/."
+    },
+    "target_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifier of the affected bus (B-xxx) or stop (P-xxx)."
+    },
+    "duration_s": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "description": "Estimated duration in seconds. Null when duration is unknown."
+    },
+    "since": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp when the incident started (event_ts of the originating incident_report event)."
+    },
+    "until": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "UTC timestamp when the incident was closed. Null while the incident is still active."
+    },
+    "reported_by": {
+      "type": "string",
+      "enum": ["dispatcher", "script"],
+      "description": "Who reported the incident. 'dispatcher': via UI command_event. 'script': simulator injection via incident_report event in contracts/turn1-events/."
+    }
+  }
+}

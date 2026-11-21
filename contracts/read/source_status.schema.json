@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "source_status.schema.json",
+  "title": "Source Status (v1.0.0)",
+  "description": "Data-quality status of the telemetry sources for the active corridor. Produced by the data layer (gold view). Screen US-03. See ADR-0003.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "snapshot_id", "as_of_ts", "status", "sources_down"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1.0.0"],
+      "description": "Read contract version (SemVer). Turn 1 produces only 1.0.0."
+    },
+    "snapshot_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID v4 identifying this gold snapshot. Referenced by recommendation.lineage.snapshot_id."
+    },
+    "as_of_ts": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp when the gold view was computed."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["live", "estimated", "no_data"],
+      "description": "Overall corridor status. 'live' = all active buses reporting within 2 min. 'estimated' = at least one bus not reporting > 2 min (no alert raised). 'no_data' = no events ever received."
+    },
+    "sources_down": {
+      "type": "array",
+      "description": "List of buses that have not reported for more than 2 minutes. Empty when status is 'live'.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["bus_id", "since"],
+        "properties": {
+          "bus_id": {
+            "type": "string",
+            "enum": ["B-101", "B-102", "B-103", "B-104", "B-105", "B-106", "B-107"],
+            "description": "Bus identifier."
+          },
+          "since": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC timestamp of the last received event from this bus."
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "rider_arrival.schema.json",
+  "title": "Rider Arrival Payload (v1.0.0)",
+  "description": "A rider arrives at a stop to wait for a bus. When origin is 'train', train_trip_id is required and identifies the Metro train the rider arrived on.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["stop_id", "direction", "origin", "destination_stop_id"],
+  "properties": {
+    "stop_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stop where the rider is waiting."
+    },
+    "direction": {
+      "type": "integer",
+      "enum": [1],
+      "description": "Travel direction. Turn 1 supports direction 1 only."
+    },
+    "origin": {
+      "type": "string",
+      "enum": ["train", "street"],
+      "description": "Origin of the rider. 'train' means arrival from a Metro train (requires train_trip_id)."
+    },
+    "destination_stop_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stop the rider wants to travel to."
+    },
+    "train_trip_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Metro train trip identifier. Required when origin is 'train'; forbidden otherwise."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "origin": { "const": "train" } },
+        "required": ["origin"]
+      },
+      "then": {
+        "required": ["train_trip_id"]
+      },
+      "else": {
+        "properties": { "train_trip_id": false }
+      }
+    }
+  ]
+}

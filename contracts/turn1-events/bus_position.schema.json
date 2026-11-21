@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "bus_position.schema.json",
+  "title": "Bus Position Payload (v1.0.0)",
+  "description": "Position of a bus along the corridor. Published every 5 s per active bus. Position is stored as distance along the corridor in meters, without geometry (turn 1).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["bus_id", "operator", "trip_id", "direction", "distance_along_m", "speed_kmh", "schedule_deviation_s", "doors_open", "occupancy"],
+  "properties": {
+    "bus_id": {
+      "type": "string",
+      "enum": ["B-101", "B-102", "B-103", "B-104", "B-105", "B-106", "B-107"],
+      "description": "Vehicle identifier. B-106 and B-107 are reserve buses."
+    },
+    "operator": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Operator identifier (id_operador in the OMD)."
+    },
+    "trip_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Trip identifier on the standard route."
+    },
+    "direction": {
+      "type": "integer",
+      "enum": [1],
+      "description": "Travel direction. Turn 1 supports direction 1 only (station -> neighborhood)."
+    },
+    "distance_along_m": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Distance along the corridor from the origin, in meters. No geometry in turn 1."
+    },
+    "speed_kmh": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 120,
+      "description": "Instantaneous speed in km/h. Range 0-120."
+    },
+    "schedule_deviation_s": {
+      "type": "integer",
+      "description": "Deviation from the schedule in seconds. Negative = early, positive = late."
+    },
+    "doors_open": {
+      "type": "boolean",
+      "description": "Whether the bus doors are open."
+    },
+    "occupancy": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 40,
+      "description": "Number of passengers on board. Bus capacity is 40. The OMD models occupancy as a 0.0-1.0 ratio; turn 1 uses the absolute count; see ADR-0002 open points."
+    }
+  }
+}

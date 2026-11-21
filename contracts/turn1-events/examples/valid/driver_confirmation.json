@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0.0",
+  "event_id": "b1a2c3d4-5555-4555-8555-555555555555",
+  "event_type": "driver_confirmation",
+  "source": "simulator",
+  "event_ts": "2026-11-24T08:03:00Z",
+  "payload": {
+    "instruction_id": "INST-20261124-001",
+    "bus_id": "B-103",
+    "status": "received"
+  }
+}

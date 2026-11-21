@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "event_id": "bad00002-0000-4000-8000-000000000002",
+  "event_type": "bus_position",
+  "source": "simulator",
+  "event_ts": "2026-11-24T08:00:05Z",
+  "payload": {
+    "bus_id": "B-101",
+    "operator": "OP-01",
+    "trip_id": "C6-008-AM-001",
+    "direction": 1,
+    "distance_along_m": 1250.0,
+    "speed_kmh": "28.5",
+    "schedule_deviation_s": 40,
+    "doors_open": false,
+    "occupancy": 12
+  }
+}

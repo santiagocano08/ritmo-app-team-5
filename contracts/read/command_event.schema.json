@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "command_event.schema.json",
+  "title": "Command Event (v1.0.0)",
+  "description": "Event written by the backend to bronze when the dispatcher acts. Reuses the turn1-events envelope structure (source: 'backend'). Three event_type values: decision, incident_report, confirmation. The backend is the only writer; the frontend never writes directly. See ADR-0003.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "event_type", "source", "event_ts", "payload"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1.0.0"],
+      "description": "Envelope contract version (SemVer). Same versioning rule as contracts/turn1-events/."
+    },
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID v4. Idempotency key = source + event_id (same rule as turn1-events bronze)."
+    },
+    "event_type": {
+      "type": "string",
+      "enum": ["decision", "incident_report", "confirmation"],
+      "description": "Discriminator. 'decision': dispatcher approves or discards a recommendation. 'incident_report': dispatcher reports an incident via UI. 'confirmation': driver confirmation status update written by the backend after receiving a driver_confirmation event."
+    },
+    "source": {
+      "type": "string",
+      "const": "backend",
+      "description": "Always 'backend' for command events."
+    },
+    "event_ts": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp when the dispatcher action occurred (or the backend processed the confirmation)."
+    },
+    "payload": {
+      "type": "object",
+      "description": "Event-specific payload. Shape determined by event_type via oneOf."
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "event_type": { "const": "decision" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["rec_id", "action", "user_id", "ts"],
+          "description": "Dispatcher decision on a recommendation. Principle IV: no on-road action runs without this event.",
+          "properties": {
+            "rec_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "UUID v4 of the recommendation being acted on."
+            },
+            "action": {
+              "type": "string",
+              "enum": ["apply", "discard"],
+              "description": "'apply': dispatcher approves; instruction is sent to the bus. 'discard': dispatcher rejects."
+            },
+            "user_id": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Identifier of the dispatcher who acted. Logged for audit (SRD §2.9)."
+            },
+            "ts": {
+              "type": "string",
+              "format": "date-time",
+              "description": "UTC timestamp of the dispatcher click. May equal event_ts; kept separately for precision."
+            }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "event_type": { "const": "incident_report" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["incident_type", "target_id", "duration_min", "reported_by"],
+          "description": "Backend-initiated incident report. Reuses the incident_report payload shape from contracts/turn1-events/incident_report.schema.json. reported_by must be 'dispatcher' for command events.",
+          "properties": {
+            "incident_type": {
+              "type": "string",
+              "enum": ["bus_breakdown", "stop_closed", "other"]
+            },
+            "target_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "duration_min": {
+              "type": ["number", "null"],
+              "minimum": 0,
+              "description": "Estimated duration in minutes. Null when unknown."
+            },
+            "reported_by": {
+              "type": "string",
+              "const": "dispatcher",
+              "description": "Always 'dispatcher' in a command_event incident_report."
+            }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "event_type": { "const": "confirmation" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["inst_id", "status", "ts"],
+          "description": "Driver confirmation status update written by the backend after receiving a driver_confirmation event from the simulator.",
+          "properties": {
+            "inst_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "UUID v4 of the instruction being confirmed."
+            },
+            "status": {
+              "type": "string",
+              "enum": ["sent", "received", "no_confirmation", "radio", "executed", "not_executed"],
+              "description": "Updated instruction status."
+            },
+            "ts": {
+              "type": "string",
+              "format": "date-time",
+              "description": "UTC timestamp of the status transition."
+            }
+          }
+        }
+      }
+    }
+  ]
+}

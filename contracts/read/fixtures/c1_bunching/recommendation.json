@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0.0",
+  "rec_id": "cccc0003-0000-4000-8000-000000000030",
+  "case": "C1",
+  "action": {
+    "type": "hold",
+    "bus_id": "B-101",
+    "stop_id": "P-887",
+    "duration_s": 90
+  },
+  "reason": "B-101 and B-103 are bunching (headway 177 s, planned 600 s). Holding B-101 at P-887 for 90 s will restore spacing towards B-103.",
+  "ewt_saving_s": 55,
+  "horizon_s": 600,
+  "data_quality": "live",
+  "expires_ts": "2026-11-24T08:12:00Z",
+  "conflicts_with": [],
+  "rank": 1,
+  "status": "applied",
+  "lineage": {
+    "model_version": "1.0.0",
+    "rule_version": "1.0.0",
+    "snapshot_id": "cccc0003-0000-4000-8000-000000000003"
+  }
+}

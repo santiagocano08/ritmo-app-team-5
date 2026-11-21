@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "instruction.schema.json",
+  "title": "Instruction (v1.0.0)",
+  "description": "A dispatch instruction sent to a driver after the dispatcher approves a recommendation. Data determines 'executed' status by observing dwell within ±15 s. Screen US-10. See ADR-0003.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "inst_id", "rec_id", "bus_id", "text", "status", "ts_by_status"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1.0.0"],
+      "description": "Read contract version (SemVer). Turn 1 produces only 1.0.0."
+    },
+    "inst_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID v4 uniquely identifying this instruction."
+    },
+    "rec_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID v4 of the recommendation that originated this instruction."
+    },
+    "bus_id": {
+      "type": "string",
+      "enum": ["B-101", "B-102", "B-103", "B-104", "B-105", "B-106", "B-107"],
+      "description": "Bus this instruction was sent to."
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable instruction text shown to and confirmed by the driver. Frontend displays this."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["sent", "received", "no_confirmation", "radio", "executed", "not_executed"],
+      "description": "Current lifecycle status. sent → received | no_confirmation | radio → executed | not_executed. 'executed' is set by data when dwell at the target stop is within ±15 s of the instructed duration."
+    },
+    "ts_by_status": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Timestamps for each status transition that occurred, keyed by status value. Missing keys mean that status was never reached.",
+      "properties": {
+        "sent":             { "type": "string", "format": "date-time" },
+        "received":         { "type": "string", "format": "date-time" },
+        "no_confirmation":  { "type": "string", "format": "date-time" },
+        "radio":            { "type": "string", "format": "date-time" },
+        "executed":         { "type": "string", "format": "date-time" },
+        "not_executed":     { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

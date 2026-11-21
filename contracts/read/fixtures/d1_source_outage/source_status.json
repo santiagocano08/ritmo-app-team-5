@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0.0",
+  "snapshot_id": "bbbb0002-0000-4000-8000-000000000002",
+  "as_of_ts": "2026-11-24T08:04:00Z",
+  "status": "estimated",
+  "sources_down": [
+    {
+      "bus_id": "B-103",
+      "since": "2026-11-24T08:01:30Z"
+    }
+  ]
+}
