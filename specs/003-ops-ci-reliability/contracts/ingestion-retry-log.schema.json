@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pulsoflota.local/specs/003-ops-ci-reliability/contracts/ingestion-retry-log.schema.json",
+  "title": "IngestionRetryLogLine",
+  "description": "One structured JSON line written to stderr by the ingestion process while the database is unreachable (feature 003, FR-011, FR-012). Feature-local contract; promotion to contracts/ needs an ADR. Never carries a connection string, user, host, password, exception text or any part of an event.",
+  "type": "object",
+  "oneOf": [
+    {
+      "title": "db_retry",
+      "type": "object",
+      "properties": {
+        "ts": { "$ref": "#/$defs/ts" },
+        "level": { "const": "warning" },
+        "event": { "const": "db_retry" },
+        "attempt": { "type": "integer", "minimum": 1 },
+        "wait_s": { "type": "number", "exclusiveMinimum": 0 },
+        "elapsed_s": { "type": "number", "minimum": 0 },
+        "reason": { "$ref": "#/$defs/reason" },
+        "sqlstate": { "$ref": "#/$defs/sqlstate" }
+      },
+      "required": ["ts", "level", "event", "attempt", "wait_s", "elapsed_s", "reason", "sqlstate"],
+      "additionalProperties": false
+    },
+    {
+      "title": "db_retry_exhausted",
+      "type": "object",
+      "properties": {
+        "ts": { "$ref": "#/$defs/ts" },
+        "level": { "const": "error" },
+        "event": { "const": "db_retry_exhausted" },
+        "attempts": { "type": "integer", "minimum": 1 },
+        "elapsed_s": { "type": "number", "minimum": 0 },
+        "window_s": { "type": "number", "exclusiveMinimum": 0 },
+        "reason": { "$ref": "#/$defs/reason" },
+        "sqlstate": { "$ref": "#/$defs/sqlstate" }
+      },
+      "required": ["ts", "level", "event", "attempts", "elapsed_s", "window_s", "reason", "sqlstate"],
+      "additionalProperties": false
+    },
+    {
+      "title": "db_recovered",
+      "type": "object",
+      "properties": {
+        "ts": { "$ref": "#/$defs/ts" },
+        "level": { "const": "info" },
+        "event": { "const": "db_recovered" },
+        "attempts": { "type": "integer", "minimum": 1 },
+        "outage_s": { "type": "number", "minimum": 0 }
+      },
+      "required": ["ts", "level", "event", "attempts", "outage_s"],
+      "additionalProperties": false
+    }
+  ],
+  "$defs": {
+    "ts": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$",
+      "description": "UTC timestamp, RFC 3339, ending in Z."
+    },
+    "reason": {
+      "enum": ["db_unreachable", "db_connection_lost", "db_shutting_down", "db_starting"],
+      "description": "Generic reason from a fixed vocabulary; never exception text."
+    },
+    "sqlstate": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^[0-9A-Z]{5}$" }
+      ],
+      "description": "PostgreSQL SQLSTATE, or null for a client-side failure with no server code."
+    }
+  }
+}
