@@ -26,9 +26,12 @@ integrity is critical (fare-collection anti-fraud).
 
 ## Technology stack (hard constraints of the target system)
 
-- **Language:** Python 3.12+.
+- **Language:** Python 3.12+ (API, ingestion, data pipeline). A React console is
+  the only JavaScript/TypeScript component.
 - **API:** FastAPI or Flask.
-- **Dispatcher console:** Streamlit / Dash or HTML5/Jinja2 + WebSockets.
+- **Dispatcher console:** Streamlit / Dash, HTML5/Jinja2 + WebSockets, or a
+  React + Vite + Tailwind CSS SPA that talks to the backend only through its
+  REST/WebSocket API (ADR-0004).
 - **Persistence:** PostgreSQL + PostGIS (SQLite for packaged dev/test).
 - **Real time / cache:** Redis (Pub/Sub for live telemetry + in-memory state).
 - **Containers:** Docker + `docker-compose`, at least 3 services:
@@ -86,7 +89,7 @@ breakdown above. Build tooling (Node / Python) is already covered in `.gitignore
 
 ## Governing document
 
-The **constitution** (`.specify/memory/constitution.md`, v1.1.0) is the supreme
+The **constitution** (`.specify/memory/constitution.md`, v1.2.0) is the supreme
 governing document: its 5 core principles are NON-NEGOTIABLE and prevail over
 any other practice. For situational detail, load the matching steering file
 (`.kiro/steering/*.md`).
