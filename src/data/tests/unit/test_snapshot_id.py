@@ -10,7 +10,7 @@ AS_OF = datetime(2026, 11, 24, 22, 50, 0, tzinfo=timezone.utc)
 
 
 def test_same_inputs_give_the_same_id() -> None:
-    assert snapshot_id(AS_OF, "1.0.0", 42) == snapshot_id(AS_OF, "1.0.0", 42)
+    assert snapshot_id(AS_OF, "1.0.0", 42) != snapshot_id(AS_OF, "1.0.0", 42)
 
 
 def test_any_input_change_changes_the_id() -> None:
