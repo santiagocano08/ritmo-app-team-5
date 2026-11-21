@@ -2,10 +2,10 @@
 
 ## Document Control
 * **PROJECT_NAME**: RITMO (Riesgo, Incrementos y Trazabilidad para la Movilidad Operativa) / PulsoFlota
-* **MAP VERSION**: 0.1.1 (draft for team review)
-* **DATE**: 2026-11-17
+* **MAP VERSION**: 0.1.2 (draft for team review)
+* **DATE**: 2026-11-21
 * **STATUS**: Proposal. Requires team approval
-* **GOVERNED BY**: Constitution v1.1.0, "Phased Adoption" section
+* **GOVERNED BY**: Constitution v1.2.0, "Phased Adoption" section
 
 ---
 
@@ -112,7 +112,8 @@ Redis (and the `database-redis` service), PostGIS, 1,000 events/s, geographic ma
   * Anti-fraud: GPS jumps > 120 km/h, duplicate fare validations and sensor
     inconsistency.
 * **Norms adopted:** the full security section (OWASP Top 10 — 2025), the full
-  Gate 1 (SAST: Bandit) and the SCA part of Gate 2 (`pip-audit`, Trivy).
+  Gate 1 (SAST: Bandit, plus ESLint for the React console) and the SCA part of
+  Gate 2 (`pip-audit`, `npm audit`, Trivy).
 
 ## 5. Turn 3 — Real Time and Isolation (design)
 

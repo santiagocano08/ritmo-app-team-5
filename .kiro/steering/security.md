@@ -37,11 +37,12 @@ criteria. These norms are adopted in the turn that `docs/turns-ritmo.md` assigns
 
 ## A03 — Software Supply Chain Failures
 
-- SCA on every PR: `pip-audit`, `Safety` or `Snyk` (Python), `Trivy` (base
-  Docker images and JS libraries).
+- SCA on every PR: `pip-audit`, `Safety` or `Snyk` (Python), `npm audit`
+  (React console), `Trivy` (base Docker images and JS libraries).
 - Block merges on High or Critical CVEs (CVSS ≥ 7.0).
-- Pin dependencies to exact versions with SHA-256 hashes (`poetry.lock` or
-  `requirements.txt` with hashes).
+- Pin dependencies to exact versions with SHA-256 hashes (`poetry.lock`,
+  `uv.lock` or `requirements.txt` with hashes). JavaScript: committed
+  `package-lock.json` with npm `integrity` hashes, installed with `npm ci`.
 
 ## A04 — Cryptographic Failures
 

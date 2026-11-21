@@ -23,8 +23,10 @@ description: When writing tests, configuring CI/CD, or checking a quality gate (
 
 ## Gate 2 — Integration and Supply Chain (CI)
 
-- SCA: `pip-audit` / `Trivy` (and `Safety`/`Snyk` for Python).
-- Unit/integration test suites.
+- SCA: `pip-audit` / `Trivy` (and `Safety`/`Snyk` for Python); `npm audit`
+  for the React console.
+- Unit/integration test suites (pytest for Python; Vitest for the React
+  console, which counts towards the same > 80 % threshold).
 - Pass: coverage > 80 % and 0 known dependency vulnerabilities (a CVE with
   CVSS ≥ 7.0 blocks the merge).
 
