@@ -12,6 +12,18 @@ green. Interfaces are in [contracts/](contracts/README.md), values and reasons i
   whole suite).
 - Agents never commit or push; the human commits each phase and pushes the probe branches of Phase 1.
 
+## Dedicated compose project for verification
+
+Live checks start, stop and reset a stack. Never run them on your default project: `down -v` would delete
+your volume. Use a dedicated project name for every live check (the drill uses `pulsoflota-drill`):
+
+```text
+export COMPOSE_PROJECT_NAME=pulsoflota-verify
+```
+
+The live tests (`-m live`) skip themselves unless `-m live` is passed and this variable is set. Clean up
+with `docker compose down -v` **under this project only**, or plain `docker compose down` without `-v`.
+
 ## The Andon check (end of every phase)
 
 ```text
@@ -85,7 +97,8 @@ uv run pytest src/data/tests/unit/test_ingestion_run.py src/data/tests/unit/test
 container and in CI):
 
 ```text
-docker compose down -v && docker compose up -d --build db ingestion
+export COMPOSE_PROJECT_NAME=pulsoflota-verify
+docker compose down -v && docker compose up -d --build db ingestion    # dedicated project only
 # wait about 60 s, then:
 uv run pytest src/data/tests/integration/test_ingestion_outage_live.py -m live -q --no-cov -s
 ```
@@ -94,7 +107,7 @@ The test records the highest bronze row and the `RestartCount` and `StartedAt` o
 for 30 s, starts it, waits for new rows, then asserts: no exit and no restart, the simulator PID is
 unchanged, rows keep growing, the `event_id` order equals the first *K* event ids of the seeded
 simulator output, no replay from the start, and every retry line is valid JSON without credentials.
-Also measure here and write into `verification.md`: the pipe capacity inside the container
+Finish with `docker compose down -v` under `pulsoflota-verify`. Also measure here and write into `verification.md`: the pipe capacity inside the container
 (`F_GETPIPE_SZ`) and the bytes per event, which confirm or correct research R3.
 
 Phase 2 is done when the unit and integration tests and the Andon run are green and the live check passes.
@@ -111,7 +124,10 @@ unhealthy without detail, view missing unhealthy); compose test for the `ingesti
 (interval 5s, timeout 3s, retries 1, start period 20s, `CMD python -m src.data.ingestion.health`),
 `INGESTION_HEALTH_MAX_AGE_S` passed with default 15, and ingestion still depending only on `db`; the
 ADR-0001 addendum sentence; `test_schema_init.py` lists the `ops` schema and view; the write guard
-covers `006_ops.sql` and `health.py`.
+covers `006_ops.sql` and `health.py`. The `tests` service gets the read-only `./scripts` mount in this
+phase (it is needed by the `feed_control` test), not in Phase 4. The ADR addendum is checked in the
+container only as a sentence; "one added content line, at most the blank separator" is the host check
+below.
 
 **Green**:
 
@@ -119,20 +135,21 @@ covers `006_ops.sql` and `health.py`.
 uv run pytest src/data/tests/integration/test_ingestion_health_view.py src/data/tests/integration/test_ingestion_health.py \
   src/data/tests/unit/test_compose_ingestion.py src/data/tests/integration/test_schema_init.py \
   src/data/tests/unit/test_no_bronze_writes.py -q --no-cov
-git diff --numstat docs/adr          # one content line added (plus the blank separator), none removed
+git diff --numstat docs/adr          # host check: one content line added (plus at most the blank separator, 002 precedent), none removed
 ```
 
 **Live check (SC-007, SC-008)**:
 
 ```text
-docker compose down -v && docker compose up -d --build db ingestion
+export COMPOSE_PROJECT_NAME=pulsoflota-verify
+docker compose down -v && docker compose up -d --build db ingestion    # dedicated project only
 docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -x -c "SELECT * FROM ops.ingestion_health"
 uv run pytest src/data/tests/integration/test_ingestion_feed_live.py -m live -q --no-cov -s
 ```
 
 The live test reads the view (freshness below 15 s, positive `events_60s`), freezes the simulator with
 `scripts/drill/feed_control.py stop`, polls `docker inspect` health log until `unhealthy`, and asserts
-the delay from the last insert is at most 15 s + 5 s + the probe duration. It then resumes the feed and
+the delay from the last insert is at most 15 s + one 5 s interval + the probe duration (the spec's "15 s plus one healthcheck interval", with the probe duration measured and stated). It then resumes the feed and
 asserts `healthy` within one interval plus the probe duration after the first new insert. Also record in
 `verification.md`: the time from container start to the first `healthy` (confirms the 20 s start period)
 and `EXPLAIN ANALYZE` of the view on 1 million synthetic rows in a throwaway database (R7).
@@ -150,11 +167,14 @@ Phase 3 is done when the tests, the Andon run and the live check are green.
 seven sections (summary, timeline, impact, root causes, what went well, actions mapped to US1 to US3,
 lessons), the runbook (state, freshness view, recovery for database outage, stopped feed, crashing
 ingestion, stalled `refresh`, escalation), the SLI/SLO text marked as a proposal with an error budget, the
-branch-protection note, and the drill table; and that `scripts/drill/feed_control.py` selects only the
-simulator process in a fake `/proc` tree (not PID 1, not itself). The `tests` service gets read-only
-mounts for `docs/ops`, `scripts` and `.github/workflows`.
+branch-protection note, and the drill table; the baseline files (`tests/unit/test_drill_baseline.py`: English
+header, rows unchanged, no Spanish label) and the static checks of `scripts/drill/run_drill.sh`
+(`tests/unit/test_drill_script.py`). The `scripts` mount already exists since Phase 3, where
+`tests/unit/test_drill_feed_control.py` (T029) checks that `feed_control.py` selects only the simulator
+process in a fake `/proc` tree (not PID 1, not itself). The `docs/ops` and `.github/workflows` mounts
+come from Phase 1.
 
-**Green**: `uv run pytest tests/unit/test_ops_docs.py tests/unit/test_drill_feed_control.py -q --no-cov`,
+**Green**: `uv run pytest tests/unit/test_ops_docs.py tests/unit/test_drill_baseline.py tests/unit/test_drill_script.py tests/unit/test_drill_feed_control.py -q --no-cov`,
 then the Andon run.
 
 **Drill rerun (final acceptance)**:
@@ -166,11 +186,16 @@ bash scripts/drill/run_drill.sh        # own Compose project, fresh volume, seed
 The script writes raw samples to `drill-out/` (git-ignored). Copy the results into the before/after
 table of `docs/ops/drill-rerun.md` and compare with the baseline (SC-009):
 
+Lag-reading rule, the same for both columns: *lag after F2* = `ingestion_lag_s` of the last sample strictly
+before the F3 mark; *F3 lag* = `ingestion_lag_s` of the last sample of the observation window. The
+2026-11-18 report quoted 125 s and 204 s, read a few seconds off (t=232 and t=312); the fixed rule is used
+for both columns. The baseline CSV header is the English one (`t_s,events,max_event_ts,ingestion_lag_s,duplicates,other_rejections,ingestion,api,db`).
+
 | Metric | Baseline | Rerun |
 |---|---|---|
 | Ingestion survives F2 (no exit, no restart) | died, restarted | measured |
-| Lag after F2 | 125 s | measured, expected below 15 s |
-| Lag after F3 | 204 s | measured, reported as is |
+| Lag after F2 | 120 s (t = 227 s) | measured, expected below 15 s |
+| F3 lag | 209 s (t = 316 s) | measured, reported as is |
 | Duplicates counted as rejections | 971 (65 %) | 0 as rejections; duplicates reported on their own |
 | Real rejection rate | not available | measured |
 | Alerts or `unhealthy` transitions | none | at least one, measured |

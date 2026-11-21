@@ -48,7 +48,8 @@ Compose settings: `interval 5s`, `timeout 3s`, `retries 1`, `start_period 20s` (
 first probe with exit 0, `unhealthy` after one failed probe, `healthy` again on the next success.
 
 Bound (SC-008): after the last insert, `unhealthy` is reached within 15 s + one interval (5 s) + the
-probe duration. Recovery to `healthy` is within one interval + the probe duration after the first new insert.
+probe duration (the spec words it "15 s plus one healthcheck interval"; the probe duration is measured
+and stated in the verification report). Recovery to `healthy` is within one interval + the probe duration after the first new insert.
 
 ## Reading it by hand
 

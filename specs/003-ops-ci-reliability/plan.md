@@ -71,13 +71,13 @@ only on `db`.
 | What is retried | `OperationalError` / `InterfaceError` with SQLSTATE `None`, class `08`, `57P01`, `57P02`, `57P03`; everything else raises; a bad event is a rejection, never an exception | R2 |
 | Holding the line | the retry wraps the call that stores the current line; stdin is not read while waiting; the pipe gives backpressure; about 65,536 B pipe ≈ 32.8 s at 2.0 KB/s (to measure) | R3 |
 | Duplicates | stay in `bronze.rejections` as `duplicate_event`; counted as `duplicates`, excluded from rejection count and rate in logs, summary and view | R4 |
-| Healthcheck | `interval 5s`, `timeout 3s`, `retries 1`, `start_period 20s`, threshold `15` s; `retries 1` is needed because the default 3 would allow 30 s | R5 |
+| Healthcheck | `interval 5s`, `timeout 3s`, `retries 1`, `start_period 20s`, threshold `15` s; `retries 1` is needed because the default 3 would allow 30 s. SC-008 bound used everywhere (tasks, contract, verification): 15 s + one 5 s interval + the probe duration (the spec words it "15 s plus one healthcheck interval"; the probe duration is measured and stated) | R5 |
 | Stopping the feed | `SIGSTOP` / `SIGCONT` to the process whose argv is exactly `-m src.data.simulator.main`, through `scripts/drill/feed_control.py` piped into `docker compose exec -T ingestion python -` | R6 |
 | `ops` view | one row, `clock_timestamp()`, 60 s windows, NULL for "not computable"; the healthcheck reads only `last_insert_age_s` | R7, R8 |
 | CI | one workflow, three independent jobs on `ubuntu-latest`; `test` = unchanged command; `contract` = existing fixture test through `uv run --frozen`; `build` = `docker compose --profile tools build`; `pull_request` + `push` to `main`; concurrency cancels PR runs only; setup-uv cache only | R9 |
 | Demonstration | six throwaway branches and draft PRs into the feature branch, evidence in `verification.md`, nothing kept in the repo | R10 |
 | SLI/SLO proposal | fresh probes ÷ probes; proposed 99 % over 28 days, error budget 403 min; marked as a proposal; final target chosen from the rerun | R11 |
-| Drill rerun | `scripts/drill/run_drill.sh`; same faults, windows and metric columns as the original drill, sample every 2 s; baseline data in `docs/ops/drill-baseline/`; table in `docs/ops/drill-rerun.md` | R12 + Gate decisions |
+| Drill rerun | `scripts/drill/run_drill.sh`; same faults, windows and metric columns as the original drill (English header `t_s,events,max_event_ts,ingestion_lag_s,duplicates,other_rejections,ingestion,api,db`; fixed lag-reading rule, baseline 120 s and 209 s), sample every 2 s; F3 kills the exact-argv ingestion process; baseline data in `docs/ops/drill-baseline/`; table in `docs/ops/drill-rerun.md` | R12 + Gate decisions |
 
 ## Constitution Check
 
@@ -118,12 +118,14 @@ Points checked explicitly:
    unchanged. Only counting changes.
 3. The `db_recovered` log line is a small addition beyond the spec's list of lines (retry and final
    error). It is justified because the post-mortem and the drill need the real outage time, it is not
-   a retry (SC-005 counts `db_retry` lines only), and it carries no sensitive field.
+   a retry (SC-005 counts `db_retry` lines only), and it carries no sensitive field. It is listed as an
+   extra informational log line in `contracts/README.md`.
 4. Structured retry logs are plain JSON with a UTC timestamp. The OpenTelemetry-compatible format is a
    turn-2 norm and is recorded as evolution, not built now.
 5. SC-011 says the ADR diff is "exactly one added line". The 002 addendum added the sentence plus one
    blank separator line (2 lines in `--numstat`). The plan follows that precedent: one content line and
-   the same blank separator, nothing removed. See risk 8.
+   at most the same blank separator, nothing removed; the host check and the tasks (T037, T055) accept it.
+   The container test checks only the addendum sentence (the `tests` container has no git). See risk 8.
 
 **No violations; Complexity Tracking is empty.**
 
@@ -182,15 +184,15 @@ Modified:
 
 ```text
 src/data/ingestion/run.py                              # retry around the stored line; tally and summary; exit code
-src/pulsoflota/config.py                               # four getters with validation
-docker-compose.yml                                     # ingestion: 4 env vars + healthcheck; tests: read-only mounts
-.env.example                                           # 4 new variables with defaults
+src/pulsoflota/config.py                               # three retry getters with validation (INGESTION_HEALTH_MAX_AGE_S is read in health.py)
+docker-compose.yml                                     # ingestion: 3 retry env vars (Phase 2) + health env var and healthcheck (Phase 3); tests: read-only mounts (.github/workflows, docs/ops in Phase 1; scripts in Phase 3)
+.env.example                                           # 3 retry variables (Phase 2) + INGESTION_HEALTH_MAX_AGE_S (Phase 3), with defaults
 docs/adr/0001-data-layers-and-ingestion-semantics.md   # one addendum line (+ blank separator)
 .gitignore                                             # drill-out/ (only if not already ignored; .drill-input/ is already in .git/info/exclude)
 src/data/tests/unit/test_ingestion_run.py              # updated for the new retry and tally behavior (red first)
 src/data/tests/integration/test_schema_init.py         # adds schema ops and the ADR addendum check
 src/data/tests/unit/test_no_bronze_writes.py           # scan also covers 006_ops.sql and ingestion/health.py
-tests/unit/test_env_example.py                         # four new variables
+tests/unit/test_env_example.py                         # three retry variables (Phase 2) + the health variable (Phase 3)
 ```
 
 Not touched: `contracts/`, `src/data/ingestion/bronze.py` and `validate.py` (the duplicate marker
@@ -235,8 +237,8 @@ Goal: FR-009 to FR-015, SC-004 to SC-006.
    `connect_with_retry` contract (10 × 2 s, `RuntimeError`) is replaced.
 2. Red, integration: real `57P01` through `pg_terminate_backend` on a throwaway database; duplicate
    counted apart, bronze unchanged.
-3. Implement `retry.py`, edit `run.py` and `config.py`; add the four variables to `.env.example` and the
-   `ingestion` service environment.
+3. Implement `retry.py`, edit `run.py` and `config.py` (three getters); add the three retry variables to
+   `.env.example` and the `ingestion` service environment.
 4. Green: unit and integration tests, then the Andon run; then the live outage check (quickstart).
 5. Measure and record: pipe capacity and bytes per event inside the container (confirms R3).
 
@@ -250,8 +252,9 @@ Goal: FR-016 to FR-023, SC-007, SC-008.
 1. Red: view tests on crafted bronze (empty, fresh, stale, mixed, duplicates only, windows); healthcheck
    tests; compose test for the `ingestion` healthcheck and its isolation; ADR addendum test; schema
    init and write-guard updates; `feed_control` selection test on a fake `/proc` tree.
-2. Implement `006_ops.sql`, `health.py`, `feed_control.py`; add the healthcheck and the setting to the
-   `ingestion` service and `.env.example`; add the ADR-0001 addendum line.
+2. Implement `006_ops.sql`, `health.py`, `feed_control.py`; add the healthcheck and the fourth variable
+   (`INGESTION_HEALTH_MAX_AGE_S`, read in `health.py`) to the `ingestion` service and `.env.example`; add the
+   read-only `scripts` mount to the `tests` service; add the ADR-0001 addendum line.
 3. Green: tests, Andon run, then the live feed-stop check (quickstart).
 4. Measure and record: start-to-first-healthy time (confirms the 20 s start period) and the view cost on
    1 million rows (decides whether the `arrival_ts` index stays in the evolution list).
@@ -263,7 +266,7 @@ Commit message: `feat(ops): expose ingestion freshness and add an ingestion heal
 ### Phase 4 — Documentation and drill rerun (FR-024 to FR-027, SC-009 to SC-011)
 
 1. Red: `test_ops_docs.py` section checks for the post-mortem, runbook, SLI/SLO proposal, branch protection
-   and drill table; add the `scripts` mount.
+   and drill table, plus the baseline and drill-script checks (the `scripts` mount already exists since Phase 3).
 2. Write `docs/ops/*` and `scripts/drill/run_drill.sh`.
 3. Run the drill on a fresh volume (quickstart Phase 4), fill `docs/ops/drill-rerun.md` with the real
    numbers, and update the SLO proposal with measured stale times.
@@ -283,19 +286,21 @@ Commit message: `docs(ops): post-mortem, runbook, SLI/SLO proposal and drill rer
 | 4 | A lost acknowledgement can duplicate one `bronze.rejections` row per outage | one extra row at most per outage | accepted and documented (R3); bronze events are never duplicated |
 | 5 | Existing database volumes lack schema `ops` | healthcheck reports `unhealthy: check failed` | runbook and quickstart give the idempotent `psql -f` and the `down -v` options (R14) |
 | 6 | `docker compose` on `ubuntu-latest`, action major versions and job timeouts are assumptions | first run could fail for environment reasons | `docker compose version` guard step; confirm majors when writing the file; timeouts adjusted after the first runs; all recorded in `verification.md` |
-| 7 | The default simulated day lasts 720 s of wall time, then ingestion goes stale and restarts into a replay | `unhealthy` in a long-running demo, which is correct for a finite feed | spec edge case; the drill sets a long `SIM_DURATION_S`; runbook explains it |
+| 7 | The default simulated day lasts 720 s of wall time, then ingestion goes stale and restarts into a replay | `unhealthy` in a long-running demo, which is correct for a finite feed | spec edge case; the drill does **not** override `SIM_DURATION_S` (Gate decisions: the whole drill, about 329 s, fits in the default 720 s); runbook explains it |
 | 8 | SC-011 "exactly one added line" versus the blank separator line of the 002 precedent | a strict reader counts two added lines | follow the 002 precedent; verification reports the numstat and states the blank line |
 | 9 | `view` scans `bronze.events` for the 60 s counts | cost grows with table size | measured in Phase 3; the healthcheck does not use the counts; index kept as evolution unless the measurement asks for it |
 | 10 | A hung connect could stall the loop | window overrun | 3 s connect timeout per attempt; window measured on a monotonic clock |
 | 11 | A non-retryable database error (for example `53100` disk full) exits the process | restart loop | intended loud failure; not hidden by retry (R2) |
-| 12 | The rerun on the real repo stack could delete the developer's volume or collide on ports | data loss on a dev machine | own Compose project name `pulsoflota-drill`, port guard in the script (research "Gate decisions") |
+| 12 | The rerun and the live verification steps on the real repo stack could delete the developer's volume or collide on ports | data loss on a dev machine | own Compose project name `pulsoflota-drill` for the drill and `pulsoflota-verify` for live tests and verification (no `down -v` on the default project), port guard in the drill script (research "Gate decisions") |
 
 ## Open questions
 
 1. **Resolved (data owner, 2026-11-20).** The original 2026-11-18 drill is available in `.drill-input/`
    (git-ignored, local only, never committed). The rerun reuses its faults (F1 api 30 s, F2 db 30 s,
-   F3 kill of ingestion), observation windows (45 / 30 / 25 / 30 / 90 / 90 s) and metric columns, with
-   one sample every 2 s. Repo versions: `scripts/drill/run_drill.sh` (English, real repo stack under its
+   F3 kill of ingestion), observation windows (45 / 30 / 25 / 30 / 90 / 90 s) and metric columns (header
+   translated to English: `t_s,events,max_event_ts,ingestion_lag_s,duplicates,other_rejections,ingestion,api,db`;
+   data rows unchanged), with one sample every 2 s. Fixed lag-reading rule for both columns (baseline
+   120 s and 209 s; the 2026-11-18 report quoted 125 s and 204 s, read a few seconds off). Repo versions: `scripts/drill/run_drill.sh` (English, real repo stack under its
    own Compose project name) and `docs/ops/drill-baseline/` (baseline metrics as the "before" data).
    Details: research.md "Gate decisions".
 2. **Resolved (data owner, 2026-11-20).** `.github/workflows/` gets no CODEOWNERS entry for now; the

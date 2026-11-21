@@ -10,10 +10,20 @@ these to `contracts/` would need an ADR and is not part of this story.
 | [ingestion-retry-log.schema.json](ingestion-retry-log.schema.json) | JSON log lines of the ingestion retry loop | the on-call person, the drill script, the runbook |
 | [ci-workflow.md](ci-workflow.md) | the CI workflow: job names, triggers, required checks | GitHub branch protection, the DevOps owner |
 
+## Log lines (ingestion retry)
+
+[ingestion-retry-log.schema.json](ingestion-retry-log.schema.json) validates three lines: `db_retry`
+(FR-011) and `db_retry_exhausted` (FR-012), which the spec asks for, and `db_recovered`, an **extra
+informational log line** beyond the spec's list, emitted once on the first stored line after a failure with `attempts` and `outage_s`, so the
+post-mortem and the drill can read the real outage time. It is not a retry: SC-005 counts `db_retry`
+lines only. It carries no connection detail, exception text or event content.
+
 ## Environment variables (new)
 
 All go into `.env.example` (committed, no secrets) and into the `ingestion` service of
-`docker-compose.yml` as `${VAR:-default}`, following the existing `UPPER_SNAKE` plus `_S` convention.
+`docker-compose.yml` as `${VAR:-default}`. The three retry variables are added in Phase 2 and read by
+`src/pulsoflota/config.py` (three getters); `INGESTION_HEALTH_MAX_AGE_S` is added in Phase 3 and read in
+`src/data/ingestion/health.py`. They follow the existing `UPPER_SNAKE` plus `_S` convention.
 
 | Variable | Default | Read by | Meaning |
 |---|---|---|---|

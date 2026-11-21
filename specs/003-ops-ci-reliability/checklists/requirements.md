@@ -32,4 +32,4 @@
 ## Notes
 
 - Validation iteration 2 of 3 (2026-11-20). The data owner answered Q1 (FR-013) with Option A, so all items pass. The spec is ready for `/speckit.clarify` or `/speckit.plan`.
-- Numbers are limited to the drill baseline (31 s, 125 s, 204 s, 971, 65 %, 525/525), 80 % coverage, the 15 s default threshold, the 60 s window and the 5 %/1 min constitution reference. Retry defaults and the SLO target are explicitly deferred.
+- Numbers are limited to the drill baseline (31 s, 120 s, 209 s, 971, 65 %, 525/525), 80 % coverage, the 15 s default threshold, the 60 s window and the 5 %/1 min constitution reference. Retry defaults and the SLO target are explicitly deferred.

@@ -416,34 +416,39 @@ constitutional norm, this story only exposes the signal); latency SLOs (turn 3 n
 
 ## R12 — The drill rerun (FR-027, SC-009)
 
+> **Superseded in part by "Gate decisions" (2026-11-20) at the end of this file**, which wins over
+> this section on: `SIM_DURATION_S` (not overridden), the sampling period (2 s, not 5 s), the F3 fault
+> (kill of the exact-argv ingestion process, not `docker compose kill ingestion`), the windows, the
+> metric columns (English header), the lag-reading rule and the removal of the comparability caveat.
+> The text below is kept as the original reasoning.
+
 **Decision**: a script `scripts/drill/run_drill.sh` (bash, host side, uses `docker compose` and
 `docker compose exec -T db psql`; no new dependency) reproduces the faults of 2026-11-18 on the fixed
 code and writes raw samples to a git-ignored `drill-out/` folder; the table goes into
 `docs/ops/drill-rerun.md` (before column = the spec's Drill Evidence, after column = the rerun).
 
 Faults, as in the baseline: **F1** `docker compose stop api`, 31 s, `start`; **F2**
-`docker compose stop db`, 31 s, `start`; **F3** `docker compose kill ingestion`. Between faults the
-script waits a settle period (value recorded in the report). Fresh volume (`down -v`) and the same seed
+`docker compose stop db`, 31 s, `start`; **F3** ~~`docker compose kill ingestion`~~ `kill -9` of the ingestion process selected by the exact-argv rule (superseded, see Gate decisions). Between faults the
+script waits a settle period (value recorded in the report). Fresh volume (`down -v`, only under the drill's own project `pulsoflota-drill`) and the same seed
 (42) at start. Because the default simulated day ends after 720 s of wall time (3,600 s at 5 s per second),
-the drill sets `SIM_DURATION_S` large through the environment so the feed does not end during the drill;
-`.env.example` defaults are not changed.
+~~the drill sets `SIM_DURATION_S` large~~ **superseded: the drill does not override `SIM_DURATION_S`**; the
+whole drill (about 329 s) fits in the default 720 s; `.env.example` defaults are not changed.
 
 Measurements per fault, from the database clock and Docker: bronze row count before and after, number
-of `duplicate_event` rows, contract rejections, `ops.ingestion_health` sampled every 5 s (lag =
-`last_insert_age_s`), `docker events --filter event=health_status` for `unhealthy` transitions,
+of `duplicate_event` rows, contract rejections, `ops.ingestion_health` sampled every ~~5 s~~ **2 s (superseded)** (lag =
+`now() - max(arrival_ts)` read from the tables, as in the baseline), `docker events --filter event=health_status` for `unhealthy` transitions,
 `RestartCount` and `StartedAt` of `ingestion`, and the `db_retry` / `db_recovered` lines from
 `docker compose logs`. Comparable to the baseline: rows intact, duplicates, false versus real
-rejection rate (baseline 971 ÷ (525 + 971) = 65 %), final lag after F2 (baseline 125 s) and after F3
-(baseline 204 s), and alerts (baseline none).
+rejection rate (baseline 971 ÷ (525 + 971) = 65 %), lag after F2 (baseline **120 s**) and F3 lag
+(baseline **209 s**, fixed lag-reading rule in Gate decisions), and alerts (baseline none).
 
 **Expected, not assumed**: F1 unchanged. F2: no exit, no restart, no replay, lag below 15 s a few seconds after recovery. F3:
 still restarts the pipe and replays the day as duplicates (simulator resume is out of scope), so the lag is reported
 as measured and an `unhealthy` transition is expected. The rerun records actual numbers; a value that does not improve is
 reported as such (SC-009).
 
-**Comparability caveat**: the spec records the fault durations and outcomes but not the observation
-windows or the sampling point of "final lag" of the baseline. The rerun states its own windows and the
-report says so. See open question 1 in the plan.
+**Comparability caveat (superseded)**: replaced by the Gate decisions, which reuse the original windows,
+columns and sampling and fix one lag-reading rule for both columns.
 
 **Alternatives considered**: a Python drill script (needs the Compose CLI anyway; bash is enough and
 matches the commands used on 2026-11-18); running the drill in CI (needs a live stack for minutes; not
@@ -468,7 +473,7 @@ contingency mode (turn 3), simulator resume mid-day, an `arrival_ts` index (R7),
 
 **Decision**: init scripts run only on an empty volume, so a stack started before this change has no
 `ops` schema. The ingestion healthcheck then fails (reported as `unhealthy: check failed`). The runbook
-and the quickstart give both fixes: `docker compose down -v` (loses data, fine for a simulator volume) or
+and the quickstart give both fixes: `docker compose down -v` (loses data, fine for a simulator volume; in verification steps only under the dedicated project `pulsoflota-verify`, never on a developer's default project) or
 apply the script to the running database with
 `docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < src/data/db/init/006_ops.sql`
 (idempotent, no data loss). No migration tool is added (turn-1 scope, same as 002).
@@ -501,8 +506,9 @@ note wins.
      30 s (measured 31 s), 25 s settle, F2 `stop db` 30 s (measured 31 s), 90 s settle, F3 `kill -9`
      of the ingestion process, 90 s observation, end. Total about 329 s, shorter than the 720 s default
      simulated day, so `SIM_DURATION_S` is **not** overridden.
-   - **Metric columns** (one row every 2 s, header kept byte for byte so the files diff cleanly):
-     `t_s,events,max_event_ts,lag_ingesta_s,dup,otros_rech,ingestion,api,db`. Lag is
+   - **Metric columns** (one row every 2 s, header translated to English by the data owner, 2026-11-20; only the header line changes, data rows stay
+     byte for byte): `t_s,events,max_event_ts,ingestion_lag_s,duplicates,other_rejections,ingestion,api,db`
+     (old to new: `lag_ingesta_s` → `ingestion_lag_s`, `dup` → `duplicates`, `otros_rech` → `other_rejections`). Lag is
      `now() - max(arrival_ts)` in whole seconds, `-1` with empty bronze, `NA` while the database is
      down. The sampler reads the tables directly, not `ops.ingestion_health`, so the lag definition is
      the baseline's. New observations (health transitions, `db_retry` lines, restart counts) go to
@@ -511,7 +517,18 @@ note wins.
      the real repo stack (not a copy), with the F3 kill target updated to `src.data.ingestion.run`;
      the baseline numbers go to `docs/ops/drill-baseline/` (`metrics.csv`, `events.log`,
      `rejections.txt`, `restarts.txt`) as the "before" data and the source of the table in
-     `docs/ops/drill-rerun.md`. The baseline files are data and stay as captured (Spanish labels).
+     `docs/ops/drill-rerun.md`. The baseline files are evidence: in the repo copies only the `metrics.csv` header line and the Spanish
+     labels of `events.log` and `restarts.txt` are translated to English (file names too: `metrics.csv`,
+     `events.log`, `rejections.txt`, `restarts.txt`); timestamps and values are unchanged, and
+     `docs/ops/drill-baseline/README.md` says so. The originals stay in `.drill-input/`.
+   - **Lag-reading rule (fixed, same for baseline and rerun)**: *lag after F2* = `ingestion_lag_s` of the
+     last sample strictly before the F3 mark; *F3 lag* = `ingestion_lag_s` of the last sample of the
+     observation window. On the baseline this gives **120 s** (t = 227 s, F3 mark at 228 s) and **209 s**
+     (t = 316 s). The 2026-11-18 report quoted 125 s and 204 s, read a few seconds off (t=232 and t=312);
+     the fixed rule is used for both columns, and 120 s / 209 s are the baseline numbers in SC-009, the
+     quickstart, the tasks and the before/after table.
+   - **F3 target**: the kill selects the ingestion process by the exact-argv rule of R6 (argv after the
+     interpreter is exactly `-m src.data.ingestion.run`; never PID 1, never the helper, never a substring match).
    - **Isolation from the developer stack**: the original ran on a copy and ended with `down -v`. On the
      real repo the script must use its own Compose project name (`pulsoflota-drill`) so `down -v`
      cannot delete the developer's volume, and it refuses to start if another project's stack holds

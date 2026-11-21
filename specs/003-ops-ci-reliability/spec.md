@@ -19,9 +19,11 @@ Incident drill on a copy of story 001 on 2026-11-18, faults injected with `docke
 | Fault | Duration | Observed behavior |
 |-------|----------|-------------------|
 | F1: API down | 31 s | Ingestion unaffected (good). |
-| F2: database down | 31 s | The ingestion process dies (no reconnect). Compose restarts the whole `simulator \| ingestion` pipe, the simulator replays the day from the start with the same seed, 0 new events arrive, final lag 125 s. |
-| F3: ingestion crash | n/a | Same restart-and-replay behavior, final lag 204 s. |
+| F2: database down | 31 s | The ingestion process dies (no reconnect). Compose restarts the whole `simulator \| ingestion` pipe, the simulator replays the day from the start with the same seed, 0 new events arrive, lag after F2 120 s. |
+| F3: ingestion crash | n/a | Same restart-and-replay behavior, F3 lag 209 s. |
 | End of drill | n/a | 971 duplicates counted as rejections (a false 65 % rejection rate). Bronze intact (525 of 525 rows, nothing corrupted). **No alert fired at any point.** |
+
+Lag-reading rule, fixed and used for both the baseline and the rerun: *lag after F2* = the lag of the last sample strictly before the F3 mark; *F3 lag* = the lag of the last sample of the observation window. Applied to the baseline (F3 mark at 228 s) it gives 120 s (t = 227 s) and 209 s (t = 316 s). The 2026-11-18 report quoted 125 s and 204 s, read a few seconds off (t=232 and t=312); the fixed rule is used for both columns.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -187,7 +189,7 @@ These are required outputs of the story, verified by existence and content check
 - **SC-006**: After the drill, the rejection count excludes duplicates: a stream with N invalid events and M duplicates reports N rejections and M duplicates, and a real rejection rate of N ÷ (accepted + N). The M duplicates remain stored in `bronze.rejections` with reason `duplicate_event` and are excluded from N in logs, summary and the `ops` health view.
 - **SC-007**: On a live stack, the health view reports freshness below 15 s, a positive events-per-minute value and a computable rejection rate.
 - **SC-008**: Stopping the simulator feed turns the `ingestion` service `unhealthy` within 15 s plus one healthcheck interval, measured by timestamped `docker compose ps` or `docker inspect` readings. Resuming the feed returns it to `healthy` within one healthcheck interval plus the time of the first insert.
-- **SC-009**: The drill rerun table shows, against the baseline: ingestion does not die on F2 and F3, the lag after F2 returns to below the 15 s freshness threshold (baseline 125 s), the F3 lag is reported (baseline 204 s), the false rejection rate drops from 65 % to the real rate of the run, and at least one `unhealthy` transition is observed where the baseline had no alert. The rerun records the actual numbers, and any value that does not improve is reported as such.
+- **SC-009**: The drill rerun table shows, against the baseline: ingestion does not die on F2 and F3, the lag after F2 returns to below the 15 s freshness threshold (baseline 120 s), the F3 lag is reported (baseline 209 s), the false rejection rate drops from 65 % to the real rate of the run, and at least one `unhealthy` transition is observed where the baseline had no alert. The rerun records the actual numbers, and any value that does not improve is reported as such.
 - **SC-010**: The post-mortem, the runbook and the SLI/SLO text exist under `docs/ops/` and contain every section named in FR-024 to FR-026. A person who has not seen the drill can follow the runbook to see freshness and recover a stopped feed on a live stack.
 - **SC-011**: The full test suite stays green with coverage above 80 % after the change, and the `git diff` of ADR-0001 is exactly one added line.
 
