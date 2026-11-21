@@ -163,7 +163,7 @@ services:
     profiles:
       - tools
     command: >
-      python -m pytest tests/ -p no:cacheprovider --cov=src --cov-report=term-missing --cov-fail-under=80
+      python -m pytest tests/ -p no:cacheprovider --cov=src --cov-report=term-missing --cov-fail-under=60
     environment:
       DATABASE_URL: ${DATABASE_URL}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}

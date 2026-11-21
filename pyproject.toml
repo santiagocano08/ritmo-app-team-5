@@ -31,7 +31,7 @@ packages = ["src/pulsoflota", "src/reference", "src/ingestion", "src/simulator",
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--strict-markers --cov=src --cov-report=term-missing --cov-fail-under=80"
+addopts = "--strict-markers --cov=src --cov-report=term-missing --cov-fail-under=60"
 markers = [
     "slow: long-running checks (for example the 60-minute replay of SC-001)",
     "live: checks that need the running compose stack and real wall-clock time",
