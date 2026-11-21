@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Job ids are the required status check names (docs/ops/ci-branch-protection.md).
+  # Do not rename them.
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Create .env from the committed example (placeholders only)
+        run: cp .env.example .env
+      - name: Docker Compose available
+        run: docker compose version
+      - name: Test suite and coverage gate
+        run: docker compose --profile tools build tests && docker compose --profile tools run --rm tests
+      - name: Compose logs on failure
+        if: failure()
+        run: docker compose --profile tools logs --no-color
+
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.9.5"
+          enable-cache: true
+      - name: Read-contract fixtures
+        run: uv run --frozen --extra dev pytest src/data/tests/contract/test_read_fixtures.py -p no:cacheprovider --no-cov
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Create .env from the committed example (placeholders only)
+        run: cp .env.example .env
+      - name: Build every service image
+        run: docker compose --profile tools build

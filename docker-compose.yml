@@ -170,6 +170,9 @@ services:
       - ./docs/adr:/app/docs/adr:ro
       - ./docker-compose.yml:/app/docker-compose.yml:ro
       - ./.env.example:/app/.env.example:ro
+      # Feature 003: the workflow structure test and the ops-docs test read these.
+      - ./.github/workflows:/app/.github/workflows:ro
+      - ./docs/ops:/app/docs/ops:ro
     depends_on:
       db:
         condition: service_healthy
