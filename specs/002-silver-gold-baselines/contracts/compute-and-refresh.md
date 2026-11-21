@@ -1,10 +1,10 @@
 # `compute` CLI and `refresh` service
 
-Both run the same cycle function (`src/pipeline/cycle.py`). It takes `as_of_ts` as an argument
+Both run the same cycle function (`src/data/pipeline/cycle.py`). It takes `as_of_ts` as an argument
 (FR-004), runs the one-transaction cycle (research R4–R6) and returns the `snapshot_id`, or nothing
 when the snapshot already existed.
 
-## `python -m src.pipeline.compute` (Phase 2; always delivered)
+## `python -m src.data.pipeline.compute` (Phase 2; always delivered)
 
 | Argument | Meaning |
 |---|---|

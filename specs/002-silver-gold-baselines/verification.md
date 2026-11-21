@@ -1,5 +1,7 @@
 # Verification — 002-silver-gold-baselines
 
+Paths moved under `src/data/` on 2026-11-20 (refactor/src-data-layout); commands below use the old paths.
+
 Evidence per phase. Times are UTC. Branch `feature/002-silver-gold-baselines` (base commit `122afc4`).
 Nothing is committed; the human reviews and commits.
 
