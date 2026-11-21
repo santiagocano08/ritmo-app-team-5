@@ -70,10 +70,23 @@ services:
       INGESTION_RETRY_INITIAL_S: ${INGESTION_RETRY_INITIAL_S:-1}
       INGESTION_RETRY_MAX_WAIT_S: ${INGESTION_RETRY_MAX_WAIT_S:-5}
       INGESTION_RETRY_TOTAL_S: ${INGESTION_RETRY_TOTAL_S:-120}
+      INGESTION_HEALTH_MAX_AGE_S: ${INGESTION_HEALTH_MAX_AGE_S:-15}
       PYTHONPATH: /app
     depends_on:
       db:
         condition: service_healthy
+    # Freshness probe (feature 003): unhealthy when the newest bronze insert is older than
+    # INGESTION_HEALTH_MAX_AGE_S. Timing: interval 5s, timeout 3s, start period 20s (no failure
+    # counted while the stack boots). retries: 1 because Docker's default of 3 would add 30 s
+    # before the status changes; one failed probe turns it unhealthy, the next success recovers.
+    # Depends on db only (reads ops.ingestion_health). A finite simulator run that reached its
+    # duration is unhealthy by design.
+    healthcheck:
+      test: ["CMD", "python", "-m", "src.data.ingestion.health"]
+      interval: 5s
+      timeout: 3s
+      retries: 1
+      start_period: 20s
     restart: unless-stopped
 
   # --------------------------------------------------------------------------
@@ -178,6 +191,8 @@ services:
       # Feature 003: the workflow structure test and the ops-docs test read these.
       - ./.github/workflows:/app/.github/workflows:ro
       - ./docs/ops:/app/docs/ops:ro
+      # Phase 3 (003): the feed-control helper test reads scripts/.
+      - ./scripts:/app/scripts:ro
     depends_on:
       db:
         condition: service_healthy

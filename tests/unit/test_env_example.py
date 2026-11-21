@@ -64,3 +64,9 @@ def test_ingestion_retry_settings_documented_without_secrets() -> None:
     assert env["INGESTION_RETRY_TOTAL_S"] == "120"
     for key in ("INGESTION_RETRY_INITIAL_S", "INGESTION_RETRY_MAX_WAIT_S", "INGESTION_RETRY_TOTAL_S"):
         assert env[key].isdigit()
+
+
+def test_ingestion_health_setting_documented_without_secrets() -> None:
+    env = _env_example()
+    assert env["INGESTION_HEALTH_MAX_AGE_S"] == "15"
+    assert env["INGESTION_HEALTH_MAX_AGE_S"].isdigit()

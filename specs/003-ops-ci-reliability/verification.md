@@ -204,3 +204,51 @@ Changed: `Dockerfile`, `docker-compose.yml`, `.github/workflows/ci.yml`, `docs/o
 - T056 replaced the Phase 1 test "no job has `needs`" with "only `publish` has `needs`" as tasks.md asks.
 - First T065 attempt failed because of my zsh quoting (`$B` was not word-split); repeated with explicit arguments.
 - Not shown here: the remote `publish` run (T067, human task).
+
+## Phase 3: freshness view and healthcheck (US3, T025 to T038)
+
+Start 2026-11-21 about 11:58 UTC (tests first), end 12:13 UTC (all UTC, approximate to the minute).
+
+### Red run (T031)
+
+`uv run pytest src/data/tests/integration/test_ingestion_health_view.py src/data/tests/integration/test_ingestion_health.py src/data/tests/unit/test_compose_ingestion.py src/data/tests/integration/test_schema_init.py src/data/tests/unit/test_no_bronze_writes.py tests/unit/test_drill_feed_control.py tests/unit/test_env_example.py -q --no-cov`
+Before implementation: `test_ingestion_health.py` failed at collection (`cannot import name 'health' from src.data.ingestion`); the other modules gave 24 failed, 39 passed. The failures were the missing view (`ops.ingestion_health`), missing healthcheck and `INGESTION_HEALTH_MAX_AGE_S` in compose and `.env.example`, missing `006_ops.sql`/`health.py`, missing `scripts/drill/feed_control.py` and the missing ADR addendum. No syntax errors. `test_view_is_not_updatable` passed early because the missing relation also raises; it is meaningful once the view exists.
+
+### Green runs (T037), one at a time
+
+| # | Command | Result |
+|---|---|---|
+| 1 | the T031 command, `--no-cov` | 74 passed |
+| 2 | `git diff --numstat docs/adr` | `2 0`: one content line plus one blank separator line (002 precedent, SC-011), nothing removed |
+| 3 | host `uv run pytest` (DATABASE_URL from `.env`, not printed), 12:02 to 12:06 | 544 passed, 3 skipped, 0 failed, coverage 94.91 %, 234 s (end of Phase 1b: 514 passed) |
+| 4 | Andon `docker compose --profile tools build tests && docker compose --profile tools run --rm tests`, 12:06 to 12:08 | 541 passed, 6 skipped, 0 failed, coverage 94.91 %, 130 s (previous: 511 passed) |
+| 5 | live, dedicated project: `COMPOSE_PROJECT_NAME=pulsoflota-verify POSTGRES_PORT=55432 docker compose down -v && ... up -d --build db ingestion`, wait 45 s, `SELECT * FROM ops.ingestion_health`, then `uv run pytest src/data/tests/integration/test_ingestion_feed_live.py -m live -q --no-cov -s` | 1 passed (26 s); `down -v` afterwards under the same project |
+
+Coverage of the new module: `src/data/ingestion/health.py` is exercised by `test_ingestion_health.py` (both suites include it; total stays 94.91 %).
+
+Live view reading (healthy stack): `last_insert_age_s` 0.008, `events_60s` 257, `rejections_60s` 0, `duplicates_60s` 0, `rejection_rate_60s` 0.
+
+Live freeze (SC-008): after `SIGSTOP` of the simulator the first failed probe ended **20.3 s** after the last insert. Bound: 15 s + 5 s interval + probe duration (0.36 s measured) = 20.36 s. Resuming returned the status to `healthy`; `RestartCount` and `StartedAt` were unchanged.
+
+Existing-volume path (R14), same dedicated project on a fresh volume: `DROP SCHEMA ops CASCADE` (stands in for a volume created before `006_ops.sql`) turned ingestion `unhealthy`; `docker compose exec -T db psql ... < src/data/db/init/006_ops.sql` and the status was `healthy` within 3 s (one probe).
+
+Observation worth knowing for the drill (not a defect): restarting the `ingestion` container replays the seeded stream, so bronze receives only `duplicate_event` rows until the replay passes the stored point, and the status stays `unhealthy` meanwhile. That is the F3 behavior the spec declares (replay is reported, not fixed), and the view shows it as `duplicates_60s` > 0 with a stale `last_insert_age_s`.
+
+### T038 measurements (cut-list task, done)
+
+- Start to first `healthy` on a fresh stack: **6 s** after `docker compose up` returned (the container was already created and started). Below 15 s, so `start_period: 20s` stays and nothing changed.
+- `EXPLAIN ANALYZE SELECT * FROM ops.ingestion_health` on 1,000,000 synthetic bronze rows (throwaway database `pf_explain`, dropped afterwards, rows spread over 10,000 s): planning 0.53 ms, **execution 117.9 ms**. This is above 50 ms, so, per R7, the `arrival_ts` index is recorded as **evolution** and not added. At the drill volume (about 4 events/s, a few thousand rows) the cost is negligible; the healthcheck itself reads one column, but the view computes all counts.
+
+### Note for the K8s chart owner
+
+The `ops.ingestion_health` view works the same under Kubernetes (it lives in the database); the ingestion healthcheck applies to compose only, because the chart runs ingestion as a Job.
+
+### Untouched check (Phase 3)
+
+Changed: `.env.example`, `docker-compose.yml` (ingestion env var and healthcheck, `./scripts` read-only mount in `tests`), `docs/adr/0001-data-layers-and-ingestion-semantics.md` (the allowed addendum, T035), `specs/003-ops-ci-reliability/tasks.md` and `verification.md`, `src/data/tests/integration/test_schema_init.py`, `src/data/tests/unit/test_compose_ingestion.py`, `src/data/tests/unit/test_no_bronze_writes.py`, `tests/unit/test_env_example.py`. New: `src/data/db/init/006_ops.sql`, `src/data/ingestion/health.py`, `scripts/drill/feed_control.py`, `src/data/tests/integration/test_ingestion_health_view.py`, `src/data/tests/integration/test_ingestion_health.py`, `src/data/tests/integration/test_ingestion_feed_live.py`, `tests/unit/test_drill_feed_control.py`. No change to `contracts/`, `bronze.py`, `validate.py`, `001` to `005` init scripts, `.github/CODEOWNERS`, `.github/workflows/`, `.drill-input/`, `drill-out/`, `.kiro/`, `.specify/`. The default stack was not stopped or recreated; the live checks used `pulsoflota-verify` only.
+
+### Rework and decisions
+
+- The first existing-volume attempt was invalid: my zsh variable holding the psql command was not word-split, so `DROP SCHEMA` never ran. Repeated with a shell function.
+- The first "start to healthy" measurement followed a container restart and was contaminated by the replay described above; it was repeated on a fresh stack.
+- The ADR addendum wording is mine (data owner to confirm, CODEOWNERS `/docs/adr/`): "Addendum 2026-11-21: a fifth schema, `ops`, holds read-only views over bronze for operations (ingestion freshness). It holds no tables and no secrets."

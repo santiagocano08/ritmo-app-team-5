@@ -119,3 +119,5 @@ Decided by the data owner at the contract and data architecture gate, 2026-11-17
 - **Bronze retention: none in turn 1** (no retention policy; deferred to turn 3).
 
 Addendum 2026-11-18: a fourth schema, `config`, holds static configuration and reference tables. It holds no derived data and no secrets.
+
+Addendum 2026-11-21: a fifth schema, `ops`, holds read-only views over bronze for operations (ingestion freshness). It holds no tables and no secrets.
