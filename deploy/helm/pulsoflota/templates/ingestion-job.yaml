@@ -1,0 +1,60 @@
+{{- if .Values.ingestion.enabled }}
+{{- /*
+Job spec is immutable, so the name carries the image tag and a hash of the ingestion settings:
+a new image or new settings create a new Job, and Helm / Argo CD prune the old one.
+No ttlSecondsAfterFinished: Argo CD would see the Job missing and recreate it.
+Re-running is safe: bronze deduplicates on (source, event_id).
+*/}}
+{{- $hash := toJson .Values.ingestion | sha256sum | trunc 8 }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "pulsoflota.fullname" . }}-ingestion-{{ .Values.image.app.tag | trunc 12 | trimSuffix "-" }}-{{ $hash }}
+  labels:
+    {{- include "pulsoflota.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ingestion
+spec:
+  backoffLimit: {{ .Values.ingestion.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "pulsoflota.labels" . | nindent 8 }}
+        {{- include "pulsoflota.selector" (dict "root" . "component" "ingestion") | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- range . }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
+      securityContext:
+        {{- include "pulsoflota.podSecurity" . | nindent 8 }}
+      initContainers:
+        {{- include "pulsoflota.waitForDb" . | nindent 8 }}
+      containers:
+        - name: ingestion
+          image: {{ include "pulsoflota.appImage" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - >-
+              python -m src.simulator.main --seed {{ .Values.ingestion.seed }}
+              --duration {{ .Values.ingestion.durationS }} --pace {{ .Values.ingestion.paceS }}
+              | python -m src.ingestion.run
+          env:
+            {{- include "pulsoflota.dbEnv" . | nindent 12 }}
+            - name: SIM_PLANNED_HEADWAY_S
+              value: {{ .Values.ingestion.plannedHeadwayS | quote }}
+          securityContext:
+            {{- include "pulsoflota.containerSecurity" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.ingestion.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

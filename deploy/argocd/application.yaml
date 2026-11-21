@@ -1,0 +1,27 @@
+# Argo CD Application: keeps the `pulsoflota` namespace of the kind cluster equal to the chart
+# in Git (values-kind.yaml carries the image tags written by CI). Private repo: Argo CD reads it
+# with a repository Secret created out of band (see deploy/README.md), never committed.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pulsoflota
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:santiagocano08/ritmo-app-team-5.git
+    targetRevision: main
+    path: deploy/helm/pulsoflota
+    helm:
+      releaseName: pf
+      valueFiles:
+        - values-kind.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: pulsoflota
+  syncPolicy:
+    automated:
+      prune: true      # resources removed from Git are removed from the cluster (old ingestion Jobs)
+      selfHeal: true   # manual changes in the cluster are reverted to what Git says
+    syncOptions:
+      - CreateNamespace=true

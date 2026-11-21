@@ -1,0 +1,192 @@
+# PulsoFlota CI/CD (ADR-0005)
+#   every PR and push: Python tests (Gate 2, coverage > 80 %), web lint/types/tests/build,
+#                      Helm lint, and a smoke deploy of the chart in kind
+#   push to main or feature/**: publish both images to GHCR, tagged with the commit SHA and the
+#                      branch name (`latest` only on main)
+#   push to main only: write the SHA into deploy/helm/pulsoflota/values-kind.yaml; Argo CD deploys
+#                      it (GitOps). Feature builds are published but never deployed automatically.
+# Actions are pinned to major versions; pinning by SHA is a turn-2 supply-chain norm.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main, "feature/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  REGISTRY: ghcr.io
+  APP_IMAGE: ghcr.io/${{ github.repository }}/pulsoflota-app
+  WEB_IMAGE: ghcr.io/${{ github.repository }}/pulsoflota-web
+  NPM_VERSION: 11.21.3
+
+jobs:
+  python:
+    name: python tests (compose)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: db/init and the chart copy must match
+        run: diff -r db/init deploy/helm/pulsoflota/files/db-init
+      - name: Environment from the committed template (dev-only values, no real secret)
+        run: cp .env.example .env
+      - name: Start db and api
+        run: docker compose up -d --build --wait db api
+      - name: Full suite with coverage (the documented CI-ready command)
+        run: docker compose --profile tools run --build --rm tests
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+      - if: always()
+        run: docker compose down -v
+
+  web:
+    name: web lint, types, tests, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # npm 10 crashes resolving this dependency tree (see web/README.md).
+      - run: npm install -g npm@${{ env.NPM_VERSION }}
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run coverage
+      - run: npm run build
+      - run: npm audit --audit-level=high
+
+  helm:
+    name: helm lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - run: helm lint deploy/helm/pulsoflota -f deploy/helm/pulsoflota/values-kind.yaml
+      - run: helm template pf deploy/helm/pulsoflota -f deploy/helm/pulsoflota/values-kind.yaml > /dev/null
+
+  k8s-smoke:
+    name: smoke deploy in kind
+    needs: [python, web, helm]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: pulsoflota
+          config: deploy/kind/cluster.yaml
+      - name: Build images and load them into kind
+        run: |
+          docker build -t pulsoflota-app:ci --target prod .
+          docker build -t pulsoflota-web:ci web
+          kind load docker-image pulsoflota-app:ci pulsoflota-web:ci --name pulsoflota
+      - name: Install the chart
+        run: |
+          kubectl create namespace pulsoflota
+          kubectl -n pulsoflota create secret generic pulsoflota-db \
+            --from-literal=POSTGRES_PASSWORD="$(openssl rand -hex 16)"
+          helm install pf deploy/helm/pulsoflota -n pulsoflota \
+            -f deploy/helm/pulsoflota/values-kind.yaml \
+            --set image.app.repository=pulsoflota-app --set image.app.tag=ci \
+            --set image.web.repository=pulsoflota-web --set image.web.tag=ci \
+            --set imagePullSecrets=null --set ingestion.paceS=0 \
+            --wait --timeout 5m
+      - name: Data reached gold and both services answer
+        run: |
+          kubectl -n pulsoflota wait --for=condition=complete job -l app.kubernetes.io/component=ingestion --timeout=5m
+          sleep 15
+          snapshots=$(kubectl -n pulsoflota exec pf-db-0 -- psql -U pulsoflota -d pulsoflota -tAc "SELECT count(*) FROM gold.snapshots")
+          echo "gold snapshots: $snapshots"
+          test "$snapshots" -gt 0
+          curl -sf http://127.0.0.1:8100/healthz
+          curl -sf -o /dev/null http://127.0.0.1:8180/
+      - name: Cluster state on failure
+        if: failure()
+        run: |
+          kubectl -n pulsoflota get all
+          kubectl -n pulsoflota describe pods
+          kubectl -n pulsoflota logs -l app.kubernetes.io/part-of=pulsoflota --all-containers --tail=50
+
+  publish:
+    name: publish images to GHCR
+    needs: [k8s-smoke]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Tags: full commit SHA, branch name (feature/004-devops -> feature-004-devops), latest on main.
+      - id: app-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.APP_IMAGE }}
+          tags: |
+            type=sha,prefix=,format=long
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
+      - id: web-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.WEB_IMAGE }}
+          tags: |
+            type=sha,prefix=,format=long
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: prod
+          push: true
+          tags: ${{ steps.app-meta.outputs.tags }}
+          labels: ${{ steps.app-meta.outputs.labels }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: web
+          push: true
+          tags: ${{ steps.web-meta.outputs.tags }}
+          labels: ${{ steps.web-meta.outputs.labels }}
+
+  gitops-bump:
+    name: point values-kind.yaml at the new images
+    needs: [publish]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: gitops-bump
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write the commit SHA into both image tags
+        run: |
+          sed -i -E "s/^(    tag: ).*/\1\"${GITHUB_SHA}\"/" deploy/helm/pulsoflota/values-kind.yaml
+          grep -n 'tag:' deploy/helm/pulsoflota/values-kind.yaml
+      - name: Commit and push (GITHUB_TOKEN pushes do not trigger new workflow runs)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add deploy/helm/pulsoflota/values-kind.yaml
+          git diff --cached --quiet && { echo "no change"; exit 0; }
+          git commit -m "chore(deploy): kind images -> ${GITHUB_SHA::7} [skip ci]"
+          git push

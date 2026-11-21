@@ -1,0 +1,21 @@
+# kind environment. The CI pipeline rewrites the two `tag:` lines below on every push to main
+# (GitOps: Argo CD deploys whatever this file says). Do not edit them by hand on main.
+image:
+  app:
+    tag: latest
+  web:
+    tag: latest
+
+# GHCR is private for this repo: pull Secret created out of band (see deploy/README.md).
+imagePullSecrets:
+  - ghcr-pull
+
+# NodePorts mapped to the host by deploy/kind/cluster.yaml (web :8180, api :8100).
+api:
+  service:
+    type: NodePort
+    nodePort: 30800
+web:
+  service:
+    type: NodePort
+    nodePort: 30080

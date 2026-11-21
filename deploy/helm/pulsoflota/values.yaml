@@ -1,0 +1,70 @@
+# Default values for the PulsoFlota chart. Environment files (values-kind.yaml) override them.
+# No secret lives here: the database credentials come from an existing Secret (see db.existingSecret).
+
+image:
+  # One Python image for ingestion, refresh and api (root Dockerfile, target prod).
+  app:
+    repository: ghcr.io/santiagocano08/ritmo-app-team-5/pulsoflota-app
+    tag: latest
+  # React console (web/Dockerfile).
+  web:
+    repository: ghcr.io/santiagocano08/ritmo-app-team-5/pulsoflota-web
+    tag: latest
+  pullPolicy: IfNotPresent
+
+# Names of pre-created docker-registry Secrets (GHCR is private for this repo).
+imagePullSecrets: []
+
+db:
+  image: postgres:16
+  database: pulsoflota
+  user: pulsoflota
+  # Secret created out of band, with key POSTGRES_PASSWORD (letters and digits only: the
+  # password is placed inside DATABASE_URL without URL-encoding).
+  existingSecret: pulsoflota-db
+  storage: 1Gi
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 512Mi }
+
+ingestion:
+  # Job, not Deployment: the simulator runs for `durationS` simulated seconds and exits.
+  enabled: true
+  seed: 42
+  durationS: 3600
+  paceS: 1
+  plannedHeadwayS: 600
+  backoffLimit: 3
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { memory: 256Mi }
+
+refresh:
+  # Exactly one replica: the design assumes a single writer of gold snapshots.
+  clock: data
+  intervalS: 5
+  healthMaxAgeS: 30
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { memory: 256Mi }
+
+api:
+  replicas: 1
+  port: 8000
+  service:
+    type: ClusterIP
+    nodePort: null
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 256Mi }
+
+web:
+  replicas: 1
+  service:
+    type: ClusterIP
+    nodePort: null
+  resources:
+    requests: { cpu: 20m, memory: 32Mi }
+    limits: { memory: 64Mi }
+
+logLevel: INFO

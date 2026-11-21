@@ -61,6 +61,43 @@ test:
 lint:
 	@echo "Linting deferred to turn 2 (SAST/SCA not in turn-1 scope)"
 
+# --- Kubernetes (kind + Helm + Argo CD, ADR-0005). Guide: deploy/README.md ------------
+KIND_CLUSTER := pulsoflota
+K8S_NS := pulsoflota
+CHART := deploy/helm/pulsoflota
+ARGOCD_VERSION := v3.6.2
+
+.PHONY: kind-up kind-down kind-load kind-deploy argocd-install sync-db-init
+
+# Create the kind cluster (web on 127.0.0.1:8180, api on 127.0.0.1:8100).
+kind-up:
+	kind create cluster --config deploy/kind/cluster.yaml
+
+kind-down:
+	kind delete cluster --name $(KIND_CLUSTER)
+
+# Build both images locally and load them into kind (no registry needed).
+kind-load:
+	docker build -t pulsoflota-app:local --target prod .
+	docker build -t pulsoflota-web:local web
+	kind load docker-image pulsoflota-app:local pulsoflota-web:local --name $(KIND_CLUSTER)
+
+# Install or upgrade the chart with the local images (needs the pulsoflota-db Secret).
+kind-deploy:
+	helm upgrade --install pf $(CHART) -n $(K8S_NS) -f $(CHART)/values-kind.yaml \
+	  --set image.app.repository=pulsoflota-app --set image.app.tag=local \
+	  --set image.web.repository=pulsoflota-web --set image.web.tag=local \
+	  --set imagePullSecrets=null --wait --timeout 5m
+
+argocd-install:
+	kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+	kubectl apply -n argocd --server-side -f https://raw.githubusercontent.com/argoproj/argo-cd/$(ARGOCD_VERSION)/manifests/install.yaml
+	kubectl -n argocd rollout status deploy/argocd-server --timeout=300s
+
+# Copy db/init/*.sql into the chart (Helm cannot read files outside it). CI fails if they differ.
+sync-db-init:
+	cp db/init/*.sql $(CHART)/files/db-init/
+
 # Remove generated and cached artifacts
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true

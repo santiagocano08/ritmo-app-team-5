@@ -1,0 +1,6 @@
+apiVersion: v2
+name: pulsoflota
+description: PulsoFlota turn-1 stack (db, ingestion, refresh, api, web) for Kubernetes (ADR-0005)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

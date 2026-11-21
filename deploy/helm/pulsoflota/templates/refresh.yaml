@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pulsoflota.fullname" . }}-refresh
+  labels:
+    {{- include "pulsoflota.labels" . | nindent 4 }}
+    app.kubernetes.io/component: refresh
+spec:
+  # One writer of gold snapshots. Recreate: the old pod stops before the new one starts.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "pulsoflota.selector" (dict "root" . "component" "refresh") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "pulsoflota.labels" . | nindent 8 }}
+        {{- include "pulsoflota.selector" (dict "root" . "component" "refresh") | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- range . }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
+      securityContext:
+        {{- include "pulsoflota.podSecurity" . | nindent 8 }}
+      initContainers:
+        {{- include "pulsoflota.waitForDb" . | nindent 8 }}
+      containers:
+        - name: refresh
+          image: {{ include "pulsoflota.appImage" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "-m", "src.refresh.run"]
+          env:
+            {{- include "pulsoflota.dbEnv" . | nindent 12 }}
+            - name: REFRESH_CLOCK
+              value: {{ .Values.refresh.clock | quote }}
+            - name: REFRESH_INTERVAL_S
+              value: {{ .Values.refresh.intervalS | quote }}
+            - name: REFRESH_HEALTH_MAX_AGE_S
+              value: {{ .Values.refresh.healthMaxAgeS | quote }}
+          # Freshness check as READINESS only. It fails on purpose when the data feed stops
+          # (e.g. the simulator finished); as liveness it would restart the pod in a loop
+          # without fixing anything. No liveness probe: if the process dies, the kubelet
+          # restarts the container anyway.
+          readinessProbe:
+            exec:
+              command: ["python", "-m", "src.refresh.health"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          securityContext:
+            {{- include "pulsoflota.containerSecurity" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.refresh.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
