@@ -77,7 +77,7 @@ only on `db`.
 | CI | one workflow, three independent jobs on `ubuntu-latest`; `test` = unchanged command; `contract` = existing fixture test through `uv run --frozen`; `build` = `docker compose --profile tools build`; `pull_request` + `push` to `main`; concurrency cancels PR runs only; setup-uv cache only | R9 |
 | Demonstration | six throwaway branches and draft PRs into the feature branch, evidence in `verification.md`, nothing kept in the repo | R10 |
 | SLI/SLO proposal | fresh probes ÷ probes; proposed 99 % over 28 days, error budget 403 min; marked as a proposal; final target chosen from the rerun | R11 |
-| Drill rerun | `scripts/drill/run_drill.sh`; faults F1 (api 31 s), F2 (db 31 s), F3 (ingestion killed); table in `docs/ops/drill-rerun.md` | R12 |
+| Drill rerun | `scripts/drill/run_drill.sh`; same faults, windows and metric columns as the original drill, sample every 2 s; baseline data in `docs/ops/drill-baseline/`; table in `docs/ops/drill-rerun.md` | R12 + Gate decisions |
 
 ## Constitution Check
 
@@ -164,6 +164,7 @@ docs/ops/post-mortem-2026-11-18-drill.md               # Phase 4 (FR-024)
 docs/ops/runbook-ingestion-refresh-unhealthy.md        # Phase 4 (FR-025)
 docs/ops/sli-slo-proposal.md                           # Phase 4 (FR-026)
 docs/ops/drill-rerun.md                                # Phase 4 (FR-027, before/after table)
+docs/ops/drill-baseline/                               # Phase 4: metrics.csv, events.log, rejections.txt, restarts.txt (2026-11-18 "before" data)
 tests/unit/test_ci_workflow.py                         # Phase 1
 tests/unit/test_ops_docs.py                            # Phase 1 and 4
 tests/unit/test_drill_feed_control.py                  # Phase 3
@@ -185,7 +186,7 @@ src/pulsoflota/config.py                               # four getters with valid
 docker-compose.yml                                     # ingestion: 4 env vars + healthcheck; tests: read-only mounts
 .env.example                                           # 4 new variables with defaults
 docs/adr/0001-data-layers-and-ingestion-semantics.md   # one addendum line (+ blank separator)
-.gitignore                                             # drill-out/ (only if not already ignored)
+.gitignore                                             # drill-out/ (only if not already ignored; .drill-input/ is already in .git/info/exclude)
 src/data/tests/unit/test_ingestion_run.py              # updated for the new retry and tally behavior (red first)
 src/data/tests/integration/test_schema_init.py         # adds schema ops and the ADR addendum check
 src/data/tests/unit/test_no_bronze_writes.py           # scan also covers 006_ops.sql and ingestion/health.py
@@ -287,22 +288,20 @@ Commit message: `docs(ops): post-mortem, runbook, SLI/SLO proposal and drill rer
 | 9 | `view` scans `bronze.events` for the 60 s counts | cost grows with table size | measured in Phase 3; the healthcheck does not use the counts; index kept as evolution unless the measurement asks for it |
 | 10 | A hung connect could stall the loop | window overrun | 3 s connect timeout per attempt; window measured on a monotonic clock |
 | 11 | A non-retryable database error (for example `53100` disk full) exits the process | restart loop | intended loud failure; not hidden by retry (R2) |
-| 12 | The baseline observation windows of the drill are not recorded | before/after is not like for like | the rerun states its own windows; open question 1 |
+| 12 | The rerun on the real repo stack could delete the developer's volume or collide on ports | data loss on a dev machine | own Compose project name `pulsoflota-drill`, port guard in the script (research "Gate decisions") |
 
 ## Open questions
 
-1. **[NEEDS CLARIFICATION]** Is the original 2026-11-18 drill script or log (timeline, settle times,
-   and the moment "final lag" was read) available? The spec records durations and outcomes only. If it
-   is, `scripts/drill/run_drill.sh` copies its timeline; if not, the rerun defines and records its own
-   windows (warm-up, settle after each fault, sampling every 5 s) and the report states that the
-   comparison is by fault and outcome, not by observation window. Planning proceeds with the second
-   option.
-2. **[NEEDS CLARIFICATION]** Who owns `.github/workflows/`? `.github/CODEOWNERS` lists the data owner for
-   `/contracts/`, `/src/data/rules/` and `/docs/adr/` only, and the spec names a DevOps owner for lint
-   and security jobs without a handle. Adding a `/.github/workflows/` line needs that handle, so the plan
-   does not edit CODEOWNERS. Decision needed before the DevOps owner adds jobs; it does not block any phase.
+1. **Resolved (data owner, 2026-11-20).** The original 2026-11-18 drill is available in `.drill-input/`
+   (git-ignored, local only, never committed). The rerun reuses its faults (F1 api 30 s, F2 db 30 s,
+   F3 kill of ingestion), observation windows (45 / 30 / 25 / 30 / 90 / 90 s) and metric columns, with
+   one sample every 2 s. Repo versions: `scripts/drill/run_drill.sh` (English, real repo stack under its
+   own Compose project name) and `docs/ops/drill-baseline/` (baseline metrics as the "before" data).
+   Details: research.md "Gate decisions".
+2. **Resolved (data owner, 2026-11-20).** `.github/workflows/` gets no CODEOWNERS entry for now; the
+   decision is taken with the team in issue #5. `.github/CODEOWNERS` stays untouched.
 
-No third question. Defaults chosen in the plan (retry numbers, health timing, SLO starting point) are
+No open question remains. Defaults chosen in the plan (retry numbers, health timing, SLO starting point) are
 stated with reasons in research.md and can be changed there without changing the structure.
 
 ## Complexity Tracking
@@ -311,7 +310,6 @@ No Constitution Check violations. Nothing to justify.
 
 ## Readiness for `/speckit.tasks`
 
-Ready. All `NEEDS CLARIFICATION` items from the Technical Context are resolved in research.md; the two
-open questions above do not block task generation (question 1 only affects how the drill table is
-worded, question 2 only a CODEOWNERS line). Tasks should follow the four phases in order, each task list
+Ready. All `NEEDS CLARIFICATION` items are resolved (the two open questions were answered on 2026-11-20
+and recorded in research.md "Gate decisions"). Tasks should follow the four phases in order, each task list
 beginning with its red tests, and each phase ending with the Andon run.

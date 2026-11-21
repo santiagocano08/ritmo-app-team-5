@@ -160,7 +160,7 @@ then the Andon run.
 **Drill rerun (final acceptance)**:
 
 ```text
-SIM_DURATION_S=86400 bash scripts/drill/run_drill.sh        # fresh volume, seed 42, faults F1, F2, F3
+bash scripts/drill/run_drill.sh        # own Compose project, fresh volume, seed 42, faults F1, F2, F3, same windows as 2026-11-18, one sample every 2 s
 ```
 
 The script writes raw samples to `drill-out/` (git-ignored). Copy the results into the before/after

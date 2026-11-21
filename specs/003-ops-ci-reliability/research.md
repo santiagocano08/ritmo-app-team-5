@@ -483,3 +483,38 @@ the "read-only view" and least-privilege spirit); Alembic (new dependency, out o
 **Decision**: none added. Retry is stdlib (`time`, `json`, `datetime`), health uses `psycopg`, the
 workflow test uses PyYAML and the contract job uses `jsonschema` and `rfc3339-validator`, all
 already in the dev extra and locked in `uv.lock`. `pyproject.toml` and `uv.lock` are unchanged.
+
+---
+
+## Gate decisions (2026-11-20, data owner)
+
+Answers to the two open questions of `plan.md`. Where they conflict with R6, R10 to R12 above, this
+note wins.
+
+1. **The original 2026-11-18 drill is available.** Its script, metrics, event log, restarts and
+   rejections were copied to `.drill-input/` at the repository root. That folder is git-ignored
+   (`.git/info/exclude`), local only, and is never committed. Consequences:
+   - The rerun **reuses the same faults, observation windows and metric columns** as the original, so
+     the before/after table is comparable. This replaces the R12 "comparability caveat" and the 5 s
+     sampling: the sample period is **2 s**.
+   - **Windows** (read from the original script and `eventos.log`): start, 45 s warm-up, F1 `stop api`
+     30 s (measured 31 s), 25 s settle, F2 `stop db` 30 s (measured 31 s), 90 s settle, F3 `kill -9`
+     of the ingestion process, 90 s observation, end. Total about 329 s, shorter than the 720 s default
+     simulated day, so `SIM_DURATION_S` is **not** overridden.
+   - **Metric columns** (one row every 2 s, header kept byte for byte so the files diff cleanly):
+     `t_s,events,max_event_ts,lag_ingesta_s,dup,otros_rech,ingestion,api,db`. Lag is
+     `now() - max(arrival_ts)` in whole seconds, `-1` with empty bronze, `NA` while the database is
+     down. The sampler reads the tables directly, not `ops.ingestion_health`, so the lag definition is
+     the baseline's. New observations (health transitions, `db_retry` lines, restart counts) go to
+     **separate files**, never extra columns.
+   - **Repo versions**: `scripts/drill/run_drill.sh` is the original translated to English that runs on
+     the real repo stack (not a copy), with the F3 kill target updated to `src.data.ingestion.run`;
+     the baseline numbers go to `docs/ops/drill-baseline/` (`metrics.csv`, `events.log`,
+     `rejections.txt`, `restarts.txt`) as the "before" data and the source of the table in
+     `docs/ops/drill-rerun.md`. The baseline files are data and stay as captured (Spanish labels).
+   - **Isolation from the developer stack**: the original ran on a copy and ended with `down -v`. On the
+     real repo the script must use its own Compose project name (`pulsoflota-drill`) so `down -v`
+     cannot delete the developer's volume, and it refuses to start if another project's stack holds
+     the published ports.
+2. **`.github/workflows/` gets no CODEOWNERS entry for now.** Ownership is decided with the team in
+   issue #5. `.github/CODEOWNERS` is not edited by this story.
