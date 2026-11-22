@@ -1,0 +1,42 @@
+# Overlay for the data test lab (read-only evidence console). It adds one service to the
+# default stack and changes nothing else:
+#
+#   docker compose -f docker-compose.yml -f src/data/test_lab/compose.lab.yml up -d --build test-lab
+#   open http://localhost:8085
+#
+# The lab reads the default stack through the compose network (db:5432, api:8000). The optional
+# `pfsim` target reads the sim-console stack through the host ports it publishes (56432, 58100);
+# set PFSIM_DSN in .env to enable it, e.g.
+#   PFSIM_DSN=postgresql://pulsoflota:<password>@host.docker.internal:56432/pulsoflota
+services:
+  test-lab:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: prod
+    image: pulsoflota/test-lab:${IMAGE_TAG:-dev}
+    command: ["python", "-m", "src.data.test_lab.app"]
+    environment:
+      LAB_PORT: "8085"
+      LAB_MAIN_DSN: ${DATABASE_URL}
+      LAB_MAIN_API: http://api:${API_PORT:-8000}
+      LAB_PFSIM_DSN: ${PFSIM_DSN:-}
+      LAB_PFSIM_API: http://host.docker.internal:58100
+      INGESTION_HEALTH_MAX_AGE_S: ${INGESTION_HEALTH_MAX_AGE_S:-15}
+      REFRESH_HEALTH_MAX_AGE_S: ${REFRESH_HEALTH_MAX_AGE_S:-30}
+      PYTHONPATH: /app
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${LAB_PORT:-8085}:8085"
+    # Only db: the lab must keep working (and report failures) when ingestion, refresh or api are down.
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8085/api/targets || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped

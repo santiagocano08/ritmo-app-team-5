@@ -49,6 +49,8 @@ omit = [
     "src/data/reference/sources.py",
     # Local data-team test harness (drives docker compose and a browser UI); not product code.
     "src/data/sim_console/*",
+    # Data flow viewer and what-if lab for the decision model (read-only, own container, port 8085).
+    "src/data/test_lab/*",
 ]
 
 [tool.coverage.report]
