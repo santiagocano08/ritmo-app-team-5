@@ -1,13 +1,27 @@
 ---
 inclusion: auto
 name: data-contracts
-description: When defining or changing the domain model, telemetry/ingestion message contracts, Pydantic V2 schemas, boundary validation, fare-collection anti-fraud or data lineage (DataOps).
+description: When defining or changing the domain model, telemetry/ingestion message contracts, Pydantic V2 schemas, boundary validation, fare-collection anti-fraud, data lineage (DataOps), silver/gold tables and views, service metrics (EWT, P(board ≤ t), M1, M2), the decision model, or anything the backend reads or writes (docs/data-contract.md).
 ---
 
 # Data Contracts and Domain Model — PulsoFlota
 
 > These are norms of the **target system**. For what the active turn requires,
 > check `docs/turns-ritmo.md`; the data profiles (`data-profile-*.md`) narrow it down.
+
+## Data contract review on every data change (data owner rule, 2026-11-21)
+
+Every change to data MUST include a review of the data contract. The data contract is:
+- `docs/data-contract.md` (how the backend reads gold and writes command events);
+- the JSON Schemas under `contracts/read/` and `contracts/turn1-events/`;
+- the ADRs that back them (0001–0003, 0006, 0007).
+
+A data change is any change to a silver or gold table or view, a metric (EWT, P(board ≤ t), M1, M2), a rule (bus states, freshness, effect), the decision model, a command event, the reference data, or the simulator when it changes what gets published.
+
+- **Specs and plans** MUST list the contract sections they affect, or state "no contract impact" with the reason.
+- **Verification** MUST check that the contract's queries, example outputs and versions still hold after the change.
+- **When there is an impact**, the contract is updated in the same PR or the very next one, never "later". A change of meaning in a published field requires a version bump (ADR-0002/0003 versioning rule).
+- Changes to `docs/data-contract.md`, `contracts/` and data ADRs need the data owner's review (`.github/CODEOWNERS`).
 
 ## Contract-First and Data Ownership (Principle II)
 
