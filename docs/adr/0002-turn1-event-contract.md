@@ -110,3 +110,7 @@ Decided by the data owner at the contract and data architecture gate, 2026-11-17
 - **`arrival_ts` is optional and overwritten by ingestion** — decided.
 - **OMD identifier reconciliation stays open** as a non-blocking note for the docs owner; it does
   not block implementation (the turn-1 contract is authoritative).
+
+## Amendment 2026-11-22 (story 005, data owner)
+
+The rejection reason `value_out_of_range` is now also used for a `bus_position` whose `distance_along_m` is beyond the route end, 5,119.4 m. That bound comes from reference data (`config.ref_stops`), not from the JSON Schema, so the schema is unchanged. A bus that cannot be placed is `estimated` and the cycle keeps running. See `specs/005-data-fixes-metrics/contracts/guards.md` and `docs/data-contract.md` v0.3 §5.
