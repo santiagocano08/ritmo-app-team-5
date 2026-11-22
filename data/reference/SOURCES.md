@@ -8,7 +8,7 @@ One entry per output file.  Each records source URL, license, download date and 
 - **Source URL / origin**: Sistema Inteligente de Movilidad de Medellín (SIMM) — provided by Área Metropolitana del Valle de Aburrá
 - **License**: Uso interno / Internal use
 - **Download date**: 2026-11-17
-- **Transformation**: Grouped FECHAHORA by UTC hour; computed mean(VELOCIDAD) per hour. Corridor free-flow speed = length-weighted mean of v_libre_kmh across 17 segments from tramos_c6008_s1_osm.csv. congestion_factor[h] = mean(VELOCIDAD[h]) / free_flow_speed. Values outside the 0.43–0.56 sanity band emit a warning and are kept as computed.
+- **Transformation**: FECHAHORA is UTC and is converted to the local hour (UTC-5) before grouping; computed mean(VELOCIDAD) per local hour. Corridor free-flow speed = length-weighted mean of v_libre_kmh across 17 segments from tramos_c6008_s1_osm.csv. congestion_factor[h] = mean(VELOCIDAD[h]) / free_flow_speed. Values outside the 0.43–0.56 sanity band emit a warning and are kept as computed.
 
 ## demand_params.csv
 

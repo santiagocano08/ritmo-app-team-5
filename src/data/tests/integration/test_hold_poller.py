@@ -111,7 +111,7 @@ def test_pre_written_decision_is_on_the_board_before_the_first_event(module_db_d
                and e["payload"]["stop_id"] == "P-887")
     dep = next(e for e in events if e["event_type"] == "stop_departure" and e["payload"]["bus_id"] == "B-103"
                and e["payload"]["stop_id"] == "P-887")
-    assert (arr["event_ts"], dep["event_ts"]) == ("2026-11-24T22:27:30Z", "2026-11-24T22:29:00Z")
+    assert (arr["event_ts"], dep["event_ts"]) == ("2026-11-24T22:27:45Z", "2026-11-24T22:29:15Z")
 
 
 def test_the_thread_polls_and_stops(module_db_dsn, conn) -> None:

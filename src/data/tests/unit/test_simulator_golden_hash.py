@@ -14,8 +14,8 @@ import pytest
 from src.data.simulator.main import main
 
 GOLDEN = {
-    42: "51a5e9b3063667320a6e66cab6293f84197822378783724dd664b6f6865d39e1",
-    7: "6bd20707cf9aaccc852b6f8431e1129b759321b69f5cd06e5697c1638e0ab132",
+    42: "8bae0e5229b2e547fac181f0f87176809d71be7a80600a4b066832b6274690bc",
+    7: "27a8206e4bcf896b54f847521ae80d65db9db260c2ba1431422e04b244d4df7e",
 }
 
 
@@ -38,8 +38,8 @@ def test_base_stream_matches_golden_hash(seed: int) -> None:
 
 def test_seed_42_shape() -> None:
     data = _stream(42)
-    assert data.count(b"\n") == 3851
-    assert len(data) == 1_439_431
+    assert data.count(b"\n") == 3831
+    assert len(data) == 1_433_630
 
 
 EMPTY = Path(__file__).resolve().parents[1] / "fixtures" / "scenarios" / "empty.json"

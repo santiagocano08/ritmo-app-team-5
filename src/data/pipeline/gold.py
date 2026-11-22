@@ -88,15 +88,26 @@ def build_snapshot(conn: psycopg.Connection, as_of_ts: datetime, max_bronze_id: 
         for r in history_rows:
             history.setdefault(r["bus_id"], []).append((_utc(r["event_ts"]), float(r["distance_along_m"])))
 
+        # Departure from the first stop on the trip each bus is positioned on (US2, research R3): a bus waiting at
+        # the terminal reports the same distance until it leaves, so the headway counts from the departure.
+        origin = cur.execute("SELECT distance_along_m FROM config.ref_stops WHERE stop_seq = 1").fetchone()
+        origin_m = float(origin["distance_along_m"]) if origin else 0.0
+        departure_rows = cur.execute(
+            "SELECT s.bus_id, v.departure_ts FROM silver.bus_current_state s "
+            "JOIN silver.stop_visits v ON v.bus_id = s.bus_id AND v.trip_id = s.position_trip_id "
+            "JOIN config.ref_stops r ON r.stop_id = v.stop_id AND r.stop_seq = 1 WHERE s.on_corridor").fetchall()
+        first_departure = {r["bus_id"]: _utc(r["departure_ts"]) for r in departure_rows}
+
         on_corridor = [r for r in state_rows if r["on_corridor"] and r["distance_along_m"] is not None]
         by_id = {r["bus_id"]: r for r in on_corridor}
         ordered = order_buses([
             BusObs(bus_id=r["bus_id"], distance_along_m=float(r["distance_along_m"]),
                    position_ts=_utc(r["position_ts"]), history=tuple(history.get(r["bus_id"], ())),
                    estimated=r["data_quality"] == "estimated",
-                   broken_down=r["operational_status"] == "broken_down")
+                   broken_down=r["operational_status"] == "broken_down",
+                   departure_ts=first_departure.get(r["bus_id"]))
             for r in on_corridor])
-        headways = compute_headways(ordered)
+        headways = compute_headways(ordered, origin_m)
         states = classify_buses(ordered, headways, planned)
         in_service, n_bunched, n_gaps = summarize(states)
 
