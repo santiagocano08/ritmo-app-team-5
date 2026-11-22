@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[4]
 def test_rules_version() -> None:
     from src.data.rules import RULES_VERSION
 
-    assert RULES_VERSION == "1.5.0"
+    assert RULES_VERSION == "1.7.0"
 
 
 @pytest.mark.parametrize("name", ["src.data.rules", "src.data.pipeline", "src.data.refresh"])

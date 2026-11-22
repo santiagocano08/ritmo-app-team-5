@@ -12,11 +12,11 @@ import pytest
 
 from src.data.simulator.scenarios import holds as holds_module
 from src.data.simulator.scenarios import scenario_events
-from src.data.simulator.scenarios.holds import HoldBoard, HoldPoller, connect_read_only, fetch_decisions, load_seeds
+from src.data.simulator.scenarios.holds import HoldBoard, HoldPoller, connect_read_only, fetch_decisions
 from src.data.simulator.scenarios.truth import TruthSink
 from src.data.tests.fixtures.bronze_builders import Builder, insert_backend_commands, iso
+from src.data.tests.fixtures.rec_support import insert_seed_like
 
-SEEDS_FILE = Path(__file__).resolve().parents[1] / "fixtures" / "scenarios" / "seed_recommendations.json"
 START = datetime(2026, 11, 24, 22, 0, 0, tzinfo=timezone.utc)
 REC1 = "11111111-1111-4111-8111-111111111111"
 REC2 = "22222222-2222-4222-8222-222222222222"
@@ -31,7 +31,9 @@ def decision(rec_id: str, action: str = "apply", at: float = 0, tag: str = "poll
 def conn(module_db_dsn):
     with psycopg.connect(module_db_dsn) as c:
         c.execute("TRUNCATE bronze.events, bronze.rejections RESTART IDENTITY")
+        c.execute("DELETE FROM gold.recommendation")
         c.commit()
+        insert_seed_like(c)  # 006 R4: the recommendations the old seed file held, as `gold.recommendation` rows
         yield c
 
 
@@ -47,7 +49,7 @@ def test_the_session_is_read_only(module_db_dsn, conn) -> None:
 
 def test_new_decisions_appear_in_id_order_and_only_once(module_db_dsn, conn) -> None:
     insert_backend_commands(conn, [decision(REC2, at=1), decision(REC1, at=2)])
-    board = HoldBoard(load_seeds(SEEDS_FILE, START), seed=42, noncompliance=0.0)
+    board = HoldBoard(seed=42, noncompliance=0.0)
     poller = HoldPoller(module_db_dsn, board, START, 1.0)
     poller.poll_once()
     assert [o.rec_id for o in board.pending_orders()] == [REC2, REC1]
@@ -56,6 +58,32 @@ def test_new_decisions_appear_in_id_order_and_only_once(module_db_dsn, conn) -> 
     poller.poll_once()
     assert len(board.pending_orders()) == 2  # the 120 s hold is refused; the first two are not repeated
     assert poller.last_id == 3
+    poller.stop()
+
+
+def test_the_poller_resolves_a_rec_id_from_the_recommendation_table(module_db_dsn, conn) -> None:
+    """006 R4: `SELECT rec_id, doc, params FROM gold.recommendation` through the read-only session."""
+    insert_backend_commands(conn, [decision(REC1)])
+    board = HoldBoard(seed=42, noncompliance=0.0)
+    poller = HoldPoller(module_db_dsn, board, START, 1.0)
+    poller.poll_once()
+    (o,) = board.pending_orders()
+    assert (o.rec_id, o.bus_id, o.stop_id, o.hold_s, o.until_s) == (REC1, "B-103", "P-887", 90.0, 2100.0)
+    assert poller.unresolved_ids() == []
+    poller.stop()
+
+
+def test_a_decision_whose_row_does_not_exist_yet_is_retried(module_db_dsn, conn) -> None:
+    late = "88888888-8888-4888-8888-888888888888"
+    insert_backend_commands(conn, [decision(late)])
+    board = HoldBoard(seed=42, noncompliance=0.0)
+    poller = HoldPoller(module_db_dsn, board, START, 1.0)
+    poller.poll_once()
+    assert board.pending_orders() == [] and poller.unresolved_ids() == [late]
+    from src.data.tests.fixtures.rec_support import insert_recommendation
+    insert_recommendation(conn, late, bus="B-104", stop="P-888", duration_s=60, expires="2026-11-24T22:40:00Z")
+    poller.poll_once()
+    assert [o.rec_id for o in board.pending_orders()] == [late] and poller.unresolved_ids() == []
     poller.stop()
 
 
@@ -87,7 +115,7 @@ def test_decisions_of_other_sources_and_types_are_ignored(conn) -> None:
 
 
 def test_database_down_does_not_raise_or_block() -> None:
-    board = HoldBoard({}, seed=42, noncompliance=0.0)
+    board = HoldBoard(seed=42, noncompliance=0.0)
     poller = HoldPoller("postgresql://nobody:x@127.0.0.1:1/none", board, START, 1.0)
     started = time.monotonic()
     poller.poll_once()
@@ -102,7 +130,7 @@ def test_poller_module_has_select_only() -> None:
 def test_pre_written_decision_is_on_the_board_before_the_first_event(module_db_dsn, conn) -> None:
     """The initial synchronous poll: the daemon thread is not started, the run is still deterministic."""
     insert_backend_commands(conn, [decision(REC1)])
-    board = HoldBoard(load_seeds(SEEDS_FILE, START), seed=42, noncompliance=0.0)
+    board = HoldBoard(seed=42, noncompliance=0.0)
     poller = HoldPoller(module_db_dsn, board, START, 1.0)
     poller.poll_once()  # what main() does before the first simulated event
     assert poller.thread is None
@@ -115,7 +143,7 @@ def test_pre_written_decision_is_on_the_board_before_the_first_event(module_db_d
 
 
 def test_the_thread_polls_and_stops(module_db_dsn, conn) -> None:
-    board = HoldBoard(load_seeds(SEEDS_FILE, START), seed=42, noncompliance=0.0)
+    board = HoldBoard(seed=42, noncompliance=0.0)
     poller = HoldPoller(module_db_dsn, board, START, 0.05)
     poller.start()
     insert_backend_commands(conn, [decision(REC1)])

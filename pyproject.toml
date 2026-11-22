@@ -47,6 +47,8 @@ omit = [
     "src/api/tests/*",
     "src/data/reference/build.py",
     "src/data/reference/sources.py",
+    # Local data-team test harness (drives docker compose and a browser UI); not product code.
+    "src/data/sim_console/*",
 ]
 
 [tool.coverage.report]

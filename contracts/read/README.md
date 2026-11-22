@@ -29,7 +29,7 @@ objects the backend exposes and data persists; Pydantic V2 models are derived fr
 | `source_status.schema.json` | US-03 — data quality status | Data (gold view) |
 | `corridor_now.schema.json` | US-04 — live fleet panel | Data (gold view) |
 | `decision_inputs.schema.json` | US-05 internal — backend engine input | Data (gold view, internal only) |
-| `recommendation.schema.json` | US-05 — dispatcher recommendation | Backend (decision engine) |
+| `recommendation.schema.json` (v1.1.0) | US-05 — dispatcher recommendation | Data (decision model, `gold.recommendation`); v1.1.0 adds `slow_down`, `skip_stop` and `action.speed_reduction_pct`, 1.0.0 is still read |
 | `instruction.schema.json` | US-10 — driver instruction status | Backend |
 | `recommendation_effect.schema.json` | US-11 — effect measurement | Data (gold view) |
 | `incident.schema.json` | US-12 — active incidents | Data (gold view) + Backend |
@@ -56,6 +56,9 @@ its schema with realistic, internally consistent values. Use them in tests and a
 | C1 — bunching | `fixtures/c1_bunching/` | B-102/B-103 bunching; hold recommendation proposed and applied; effect measured |
 | C5 — breakdown | `fixtures/c5_breakdown/` | B-104 broken down; incident active; reserve B-106 dispatched |
 | C2 — gap | `fixtures/c2_gap/` | B-104 running ahead; two gaps; adjust-departure recommendation proposed |
+
+| Slow down (006) | `fixtures/c1_slow_down/` | `slow_down` recommendation, 20 % for 300 s (schema 1.1.0) |
+| Skip stop (006) | `fixtures/c2_skip_stop/` | `skip_stop` recommendation (schema 1.1.0) |
 
 Each scenario directory contains only the objects relevant to that scenario; `source_status.json`
 and `corridor_now.json` are present in every scenario.

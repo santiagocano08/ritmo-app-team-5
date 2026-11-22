@@ -146,6 +146,10 @@ def get_sim_hold_noncompliance() -> float:
     return value
 
 
-def get_seed_recommendations_path() -> str | None:
-    """Path of the seed recommendations file (SEED_RECOMMENDATIONS_PATH); unset or empty means the built-in file."""
-    return os.environ.get("SEED_RECOMMENDATIONS_PATH") or None
+def get_mpc_enabled() -> bool:
+    """True when the decision model runs (MPC_ENABLED=on, the default). `off` skips candidates and publishing but
+    still derives the status of existing recommendations. Anything else is an error (006)."""
+    raw = (os.environ.get("MPC_ENABLED") or "on").strip().lower()
+    if raw not in ("on", "off"):
+        raise RuntimeError(f"MPC_ENABLED must be 'on' or 'off', got: {raw!r}")
+    return raw == "on"

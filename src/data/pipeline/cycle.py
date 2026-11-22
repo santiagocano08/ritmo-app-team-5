@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -17,7 +18,7 @@ from uuid import UUID
 import psycopg
 from psycopg import pq
 
-from src.data.pipeline import gold
+from src.data.pipeline import gold, recommend
 from src.data.pipeline.holds import build_instruction_status
 from src.data.pipeline.incidents import build_incidents
 from src.data.pipeline.silver import rebuild_silver
@@ -36,6 +37,7 @@ class CycleResult:
     max_bronze_id: int
     status: str
     created: bool
+    model_ms: float = 0.0  # time of the decision-model step alone (006)
 
 
 class CycleError(RuntimeError):
@@ -77,6 +79,9 @@ def run_cycle(conn: psycopg.Connection, as_of_ts: datetime, notify: bool = True,
         if snap.created:
             build_incidents(conn, snap.snapshot_id, as_of, max_id)
         build_instruction_status(conn, as_of, max_id)  # 004: rebuilt every cycle, not per snapshot
+        model_started = time.monotonic()
+        recommend.run_model(conn, snap.snapshot_id, as_of, max_id)  # 006: candidates, top 3, status, same transaction
+        model_ms = (time.monotonic() - model_started) * 1000
         if snap.created and notify:
             conn.execute("SELECT pg_notify(%s, %s)", (CHANNEL, json.dumps({"snapshot_id": str(snap.snapshot_id)})))
         conn.commit()
@@ -87,5 +92,5 @@ def run_cycle(conn: psycopg.Connection, as_of_ts: datetime, notify: bool = True,
              correlation_id=correlation_id, as_of_ts=as_of.isoformat())
         raise CycleError(correlation_id) from None
     _log(logging.INFO, event="cycle_done", snapshot_id=str(snap.snapshot_id), created=snap.created,
-         max_bronze_id=max_id, as_of_ts=as_of.isoformat())
-    return CycleResult(snap.snapshot_id, as_of, max_id, snap.status, snap.created)
+         max_bronze_id=max_id, as_of_ts=as_of.isoformat(), model_ms=round(model_ms, 1))
+    return CycleResult(snap.snapshot_id, as_of, max_id, snap.status, snap.created, model_ms)

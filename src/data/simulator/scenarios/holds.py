@@ -1,12 +1,14 @@
 """Hold executor of the simulator: board, read-only poller, seeded compliance (004 FR-012 to FR-018; research R4).
 
 An approved hold is a backend `decision` row in `bronze.events`. A daemon thread reads those rows with a
-read-only session and puts orders on an in-memory `HoldBoard`; the engine looks the board up when a bus
-arrives at a stop. The engine never waits for the thread: a board read is a dictionary lookup under a
+read-only session, looks each `rec_id` up in `gold.recommendation` (006: the model's table replaced the seed file)
+and puts orders on an in-memory `HoldBoard`; the engine looks the board up when a bus arrives at a stop.
+The engine never waits for the thread: a board read is a dictionary lookup under a
 lock that is never held during input or output. If the database is down the poller logs one line, keeps
 the orders it has and retries; the event stream is not delayed (SC-011).
 
-This module only reads bronze (SELECT through `rules/sql/hold_orders.sql`); a static test keeps it so.
+This module only reads (SELECT through `rules/sql/hold_orders.sql` and the recommendation lookup); a static test
+keeps it so.
 Log lines are JSON on stderr and carry the exception class only, never its text.
 """
 from __future__ import annotations
@@ -20,17 +22,16 @@ from collections import defaultdict
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import NamedTuple
 
 import psycopg
 
 from src.data.rules.holds import HOLD_ORDERS_SQL, MAX_HOLD_S, hold_in_range
-from src.data.seeds import load_recommendations
 from src.data.simulator.scenarios.truth import TruthSink
 
 MAX_BIGINT = 2**63 - 1
 _SQL: list[str] = []  # the query text, read once
+_REC_SQL = "SELECT rec_id::text, doc, params FROM gold.recommendation WHERE rec_id = ANY(%(ids)s::uuid[])"
 
 
 def log_event(event: str, **fields: object) -> None:
@@ -39,28 +40,30 @@ def log_event(event: str, **fields: object) -> None:
 
 
 @dataclass(frozen=True)
-class SeedHold:
-    """What a seeded `rec_id` means for the executor. `is_hold` is false for other action types."""
+class RecAction:
+    """What an approved `rec_id` means for the simulator, read from its `gold.recommendation` row."""
     rec_id: str
+    type: str
     bus_id: str
     stop_id: str
-    hold_s: float
+    duration_s: float | None
+    speed_reduction_pct: float | None
     expires_s: float  # simulated seconds since the run start
-    is_hold: bool
+    ready_s: int | None
 
 
-def load_seeds(path: str | Path | None, start: datetime) -> dict[str, SeedHold]:
-    """Seed entries by `rec_id`. A hold above `MAX_HOLD_S` is kept (and logged); the executor refuses it."""
-    seeds: dict[str, SeedHold] = {}
-    for e in load_recommendations(path):
-        is_hold = e.action.type == "hold"
-        hold_s = float(e.action.duration_s) if e.action.duration_s is not None else 0.0
-        rec_id = str(e.rec_id)
-        if is_hold and not hold_in_range(hold_s):
-            log_event("hold_seed_over_cap", rec_id=rec_id, duration_s=hold_s, max_hold_s=MAX_HOLD_S)
-        seeds[rec_id] = SeedHold(rec_id, str(e.action.bus_id), e.action.stop_id, hold_s,
-                                 (e.expires_ts - start).total_seconds(), is_hold)
-    return seeds
+def rec_action(rec_id: str, doc: Mapping, params: Mapping | None, start: datetime) -> RecAction:
+    """The action of a recommendation row. A hold above `MAX_HOLD_S` is kept (and logged); the executor refuses it."""
+    act = doc["action"]
+    expires = datetime.fromisoformat(str(doc["expires_ts"]).replace("Z", "+00:00"))
+    duration = None if act.get("duration_s") is None else float(act["duration_s"])
+    pct = act.get("speed_reduction_pct")
+    if act["type"] == "hold" and not hold_in_range(duration if duration is not None else 0.0):
+        log_event("hold_rec_over_cap", rec_id=rec_id, duration_s=duration, max_hold_s=MAX_HOLD_S)
+    ready = (params or {}).get("ready_s")
+    return RecAction(rec_id.lower(), str(act["type"]), str(act["bus_id"]), str(act["stop_id"]), duration,
+                     None if pct is None else float(pct), (expires - start).total_seconds(),
+                     None if ready is None else int(ready))
 
 
 def compliance_draw(seed: int, rec_id: str) -> float:
@@ -90,33 +93,38 @@ class Order:
 class HoldBoard:
     """Thread-safe orders by (bus, stop). The poller writes, the engine reads."""
 
-    def __init__(self, seeds: Mapping[str, SeedHold], seed: int, noncompliance: float,
+    def __init__(self, seed: int, noncompliance: float,
                  truth: TruthSink | None = None, when: Callable[[int], str] | None = None) -> None:
-        self._seeds = dict(seeds)
         self._seed, self._p = seed, noncompliance
         self._truth, self._when = truth, when or (lambda t: str(t))
         self._lock = threading.Lock()
         self._orders: dict[tuple[str, str], list[Order]] = defaultdict(list)
         self._seen: set[str] = set()
-        self.ignored_unknown = 0
         self.ignored_discard = 0
+        self.ignored_not_executed: dict[str, int] = {}  # 006 FR-024: adjust_departure and skip_stop are only counted
+        self._not_executed_seen: set[str] = set()
 
     # -- intake (poller side) -----------------------------------------------------
-    def apply_decision(self, rec_id: str, action: str, from_s: float) -> Order | None:
-        """Turn a polled decision into an order. `discard`, unknown ids and non-holds make none."""
+    def apply_decision(self, rec_id: str, action: str, from_s: float, rec: RecAction | None) -> Order | None:
+        """Turn a polled decision into an order. `discard` makes none; `rec` is the recommendation row (found by
+        the poller). Only a hold becomes an order in this story: `adjust_departure` and `skip_stop` are counted as
+        not executed (FR-024) and other types are ignored until their executors exist."""
         rec_id = rec_id.lower()
         if action != "apply":
             self.ignored_discard += 1
             return None
-        seed = self._seeds.get(rec_id)
-        if seed is None:
-            self.ignored_unknown += 1
-            log_event("hold_order_ignored", rec_id=rec_id, reason="unknown_rec")
+        if rec is None:
             return None
-        if not seed.is_hold:
+        if rec.type in ("adjust_departure", "skip_stop"):
+            if rec_id not in self._not_executed_seen:
+                self._not_executed_seen.add(rec_id)
+                self.ignored_not_executed[rec.type] = self.ignored_not_executed.get(rec.type, 0) + 1
+                log_event("not_executed_in_this_story", rec_id=rec_id, type=rec.type)
+            return None
+        if rec.type != "hold":
             log_event("hold_order_ignored", rec_id=rec_id, reason="not_hold")
             return None
-        return self.add_order(rec_id, seed.bus_id, seed.stop_id, seed.hold_s, from_s, seed.expires_s)
+        return self.add_order(rec_id, rec.bus_id, rec.stop_id, rec.duration_s or 0.0, from_s, rec.expires_s)
 
     def add_order(self, rec_id: str, bus_id: str, stop_id: str, hold_s: float, from_s: float,
                   until_s: float) -> Order | None:
@@ -208,12 +216,23 @@ class HoldPoller:
         self.thread: threading.Thread | None = None
         self.last_id = 0
         self.failed = False
+        self._unresolved: dict[int, Decision] = {}  # applied decisions whose recommendation row is not there yet
+        self._waiting_logged: set[str] = set()
+
+    def unresolved_ids(self) -> list[str]:
+        return [d.rec_id.lower() for _, d in sorted(self._unresolved.items())]
 
     def poll_once(self) -> None:
         try:
             if self._conn is None:
                 self._conn = self._connect(self._dsn)
-            decisions = fetch_decisions(self._conn, self.last_id)
+            fresh = fetch_decisions(self._conn, self.last_id)
+            todo = {**self._unresolved, **{d.id: d for d in fresh}}
+            ids = sorted({d.rec_id.lower() for d in todo.values() if d.action == "apply"})
+            rows = {}
+            if ids:
+                for rec_id, doc, params in self._conn.execute(_REC_SQL, {"ids": ids}).fetchall():
+                    rows[str(rec_id).lower()] = rec_action(str(rec_id), doc, params, self._start)
         except (psycopg.Error, OSError) as exc:
             self._drop()
             if not self.failed:
@@ -223,10 +242,19 @@ class HoldPoller:
         if self.failed:
             self.failed = False
             log_event("hold_poll_recovered")
-        for d in decisions:  # board writes take the lock briefly; no input or output happens under it
+        self._unresolved = {}
+        for did in sorted(todo):  # board writes take the lock briefly; no input or output happens under it
+            d = todo[did]
             from_s = -math.inf if d.decided_at is None else (d.decided_at - self._start).total_seconds()
-            self._board.apply_decision(d.rec_id, d.action, from_s)
-            self.last_id = max(self.last_id, d.id)
+            rec = rows.get(d.rec_id.lower())
+            if d.action == "apply" and rec is None:
+                self._unresolved[did] = d  # the row may be written by a cycle that has not committed yet
+                if d.rec_id.lower() not in self._waiting_logged:
+                    self._waiting_logged.add(d.rec_id.lower())
+                    log_event("hold_order_waiting", rec_id=d.rec_id.lower(), reason="recommendation_not_found")
+            else:
+                self._board.apply_decision(d.rec_id, d.action, from_s, rec)
+        self.last_id = max([self.last_id] + [d.id for d in fresh])
 
     def _drop(self) -> None:
         conn, self._conn = self._conn, None

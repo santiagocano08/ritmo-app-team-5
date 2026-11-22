@@ -111,7 +111,7 @@ def test_rerun_and_rebuild_give_identical_rows(gold_conn, load) -> None:
     assert sorted(map(repr, gold_conn.execute("SELECT * FROM gold.stop_boarding_band").fetchall())) == before
 
     gold_conn.execute("DELETE FROM gold.stop_boarding_band")
-    for table in ("incident", "service_metric", "service_metric_stop", "stop_ewt_band", "decision_inputs",
+    for table in ("mpc_projection", "incident", "service_metric", "service_metric_stop", "stop_ewt_band", "decision_inputs",
                   "corridor_now", "source_status", "snapshots"):
         gold_conn.execute(f"DELETE FROM gold.{table}")  # noqa: S608 - fixed names
     gold_conn.commit()
@@ -190,7 +190,7 @@ def test_flags_with_the_band_still_open_and_with_no_snapshot(gold_conn, load) ->
         "SELECT DISTINCT band, closed, final FROM gold.stop_boarding_band_v").fetchall()}
     assert flags[70] == (False, False) and flags[69] == (True, False) and flags[68] == (True, True)
     # no snapshot: both false
-    for table in ("incident", "service_metric", "service_metric_stop", "stop_ewt_band", "decision_inputs",
+    for table in ("mpc_projection", "incident", "service_metric", "service_metric_stop", "stop_ewt_band", "decision_inputs",
                   "corridor_now", "source_status", "snapshots"):
         gold_conn.execute(f"DELETE FROM gold.{table}")  # noqa: S608 - fixed names
     gold_conn.commit()

@@ -26,8 +26,9 @@ def _validator(schema_path: Path) -> Draft202012Validator:
     return Draft202012Validator(_load(schema_path), format_checker=FormatChecker())
 
 
-def test_there_are_18_fixtures() -> None:
-    assert len(FIXTURES) == 18
+def test_there_are_20_fixtures() -> None:
+    """18 of the first release (unchanged) + c1_slow_down and c2_skip_stop (006 phase 2, FR-029)."""
+    assert len(FIXTURES) == 20
 
 
 @pytest.mark.parametrize("fixture", FIXTURES, ids=lambda p: f"{p.parent.name}/{p.name}")

@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.1.0",
+  "rec_id": "cccc0003-0000-4000-8000-000000000031",
+  "case": "C1",
+  "action": {
+    "type": "slow_down",
+    "bus_id": "B-103",
+    "stop_id": "P-888",
+    "duration_s": 300,
+    "speed_reduction_pct": 20
+  },
+  "reason": "slow down B-103 by 20 % for 5 min at P-888 saves 16.4 s per rider",
+  "ewt_saving_s": 16.4,
+  "horizon_s": 600,
+  "data_quality": "live",
+  "expires_ts": "2026-11-24T22:12:00Z",
+  "conflicts_with": [],
+  "rank": 2,
+  "status": "proposed",
+  "lineage": {
+    "model_version": "1.0.0",
+    "rule_version": "1.6.0",
+    "snapshot_id": "cccc0003-0000-4000-8000-000000000003"
+  }
+}

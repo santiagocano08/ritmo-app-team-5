@@ -27,12 +27,7 @@ WHERE i.snapshot_id = (
     LIMIT 1);
 
 -- === Phase 2: hold loop (US2; data-model E3, E7) ====================================================
--- Seed recommendations: demo and test data, loaded from src/data/seeds/recommendations.json by
--- pipeline/seeds.py (DELETE + INSERT). Removed when the recommendation door exists.
-CREATE TABLE IF NOT EXISTS config.seed_recommendation (
-    rec_id  UUID  PRIMARY KEY,
-    doc     JSONB NOT NULL
-);
+-- (The story-004 seed recommendations table was retired in 006: the hold executor reads gold.recommendation.)
 
 -- Instruction status per approved hold, rebuilt each cycle from bronze, silver and config (no row while
 -- pending). `ts_by_status` has exactly one key, the status itself, with an RFC 3339 UTC time.

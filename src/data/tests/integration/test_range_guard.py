@@ -182,10 +182,15 @@ def test_a_bus_with_no_in_range_position_has_no_position_and_is_not_in_the_corri
 def test_no_contract_or_adr_changed() -> None:
     if shutil.which("git") is None or not (ROOT / ".git").exists():
         pytest.skip("needs a git checkout")
-    ref = subprocess.run(["git", "rev-parse", "--verify", "-q", "feature/004-scenario-injectors"],
+    ref = subprocess.run(["git", "rev-parse", "--verify", "-q", "main"],
                          cwd=ROOT, capture_output=True, text=True)
     if ref.returncode != 0:
         pytest.skip("reference branch not available")
-    diff = subprocess.run(["git", "diff", "feature/004-scenario-injectors", "--", "contracts", "docs/adr"],
+    # 006 FR-029 authorises exactly these contract files (recommendation 1.1.0, its README, two new fixtures);
+    # every other contract file and every ADR must still be identical to main (the 004 branch it used to
+    # compare with predates contract v0.3 and the team ADRs 0004/0005 that main now carries).
+    allowed = [f":(exclude){p}" for p in ("contracts/read/recommendation.schema.json", "contracts/read/README.md",
+                                          "contracts/read/fixtures/c1_slow_down", "contracts/read/fixtures/c2_skip_stop")]
+    diff = subprocess.run(["git", "diff", "main", "--", "contracts", "docs/adr", *allowed],
                           cwd=ROOT, capture_output=True, text=True)
     assert diff.stdout == ""

@@ -2,26 +2,24 @@
 
 Crafted `decision` rows go into `bronze.events` as the backend writes them; the simulator runs with
 `--holds on` against the same throwaway database (pace 0); its events go through the real ingestion
-boundary; gold is computed with the cycle path. The seed file is the fixture (B-103 at P-887 arrives at
-1,650 s, expires at 2,100 s).
+boundary; gold is computed with the cycle path. The recommendations are `gold.recommendation` rows made by
+`rec_support` (B-103 at P-887 arrives at 1,650 s, expires at 2,100 s).
 """
 from __future__ import annotations
 
 import io
 import json
-from pathlib import Path
 
 import pytest
 from psycopg.types.json import Jsonb
 
 from src.data.ingestion.bronze import ingest
-from src.data.pipeline.seeds import load_seeds
 from src.data.simulator.engine import run
 from src.data.simulator.main import main
 from src.data.tests.fixtures.bronze_builders import Builder, iso
 from src.data.tests.fixtures.gold_support import cycle
+from src.data.tests.fixtures.rec_support import insert_seed_like
 
-SEEDS_FILE = Path(__file__).resolve().parents[1] / "fixtures" / "scenarios" / "seed_recommendations.json"
 REC1 = "11111111-1111-4111-8111-111111111111"
 REC4 = "44444444-4444-4444-8444-444444444444"
 REC5 = "55555555-5555-4555-8555-555555555555"
@@ -44,15 +42,13 @@ def write_decision(conn, cmd: dict) -> None:
 
 @pytest.fixture
 def conn(gold_conn):
-    load_seeds(gold_conn, SEEDS_FILE)
-    gold_conn.commit()
+    insert_seed_like(gold_conn)
     return gold_conn
 
 
 @pytest.fixture
 def simulate(module_db_dsn, monkeypatch: pytest.MonkeyPatch, tmp_path):
     monkeypatch.setenv("DATABASE_URL", module_db_dsn)
-    monkeypatch.setenv("SEED_RECOMMENDATIONS_PATH", str(SEEDS_FILE))
     monkeypatch.setenv("SIM_TRUTH_PATH", str(tmp_path / "truth.jsonl"))
     monkeypatch.delenv("SIM_SCENARIO_FILE", raising=False)
 

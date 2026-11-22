@@ -265,3 +265,16 @@ def test_as_of_is_stored_on_every_row(silver_conn) -> None:
     assert {r["as_of_ts"] for r in state(silver_conn).values()} == {at(3000)}
     assert at(3000) - at(2875) == timedelta(seconds=125)
     assert state(silver_conn)["B-103"]["data_quality"] == "estimated"
+
+
+def test_occupancy_comes_from_the_newest_in_range_position_and_is_null_without_one(silver_conn) -> None:
+    """006 M4: `occupancy` is read from the same bus_position row that gives `distance_along_m`."""
+    b = bb.Builder("occupancy")
+    b.position("B-101", bb.trip_id("B-101"), 10, 100.0, occupancy=7)
+    b.position("B-101", bb.trip_id("B-101"), 20, 200.0, occupancy=19)
+    b.stop_arrival("B-102", bb.trip_id("B-102"), "P-885", 15, occupancy=3)  # reports, but never a position
+    _load(silver_conn, b)
+    build(silver_conn, 30)
+    rows = state(silver_conn)
+    assert rows["B-101"]["occupancy"] == 19 and float(rows["B-101"]["distance_along_m"]) == 200.0
+    assert rows["B-102"]["occupancy"] is None and rows["B-102"]["distance_along_m"] is None

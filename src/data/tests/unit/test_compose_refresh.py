@@ -55,3 +55,10 @@ def test_no_service_depends_on_refresh_and_ingestion_depends_only_on_db(services
         if name != "refresh":
             assert "refresh" not in _depends(svc), name
     assert set(_depends(services["ingestion"])) == {"db"}
+
+
+def test_model_switch_reaches_the_refresh_loop_with_the_model_on_by_default(services: dict) -> None:
+    """006 T044: `MPC_ENABLED` is passed to the loop that runs the model; the default is on."""
+    env = services["refresh"]["environment"]
+    assert env["MPC_ENABLED"] == "${MPC_ENABLED:-on}"
+    assert "SEED_" + "RECOMMENDATIONS_PATH" not in env

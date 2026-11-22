@@ -27,6 +27,7 @@ _BUILD_ORDER = (
     ("bus_current_state", "silver_bus_current_state.sql"),
     ("stop_visits", "silver_stop_visits.sql"),
     ("segment_traversals", "silver_segment_traversals.sql"),
+    ("stop_queue", "silver_stop_queue.sql"),  # 006: last, it reads only bronze and config
 )
 SILVER_TABLES = tuple(table for table, _ in _BUILD_ORDER)
 

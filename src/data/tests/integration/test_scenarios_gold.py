@@ -180,7 +180,7 @@ def test_d1_duplicates_are_recorded_and_change_nothing(gold_conn) -> None:
     with_dups = _state(gold_conn, 1800)
 
     gold_conn.execute("TRUNCATE bronze.events, bronze.rejections RESTART IDENTITY")
-    for table in ("incident", "service_metric", "service_metric_stop", "stop_ewt_band", "stop_boarding_band", "decision_inputs", "corridor_now",
+    for table in ("mpc_projection", "incident", "service_metric", "service_metric_stop", "stop_ewt_band", "stop_boarding_band", "decision_inputs", "corridor_now",
                   "source_status", "snapshots"):
         gold_conn.execute(f"DELETE FROM gold.{table}")  # noqa: S608 - fixed names
     gold_conn.commit()
@@ -200,7 +200,7 @@ def test_truth_never_changes_gold(gold_conn, tmp_path) -> None:
     before = _state(gold_conn, 2500)
     path.unlink()  # delete, then alter, the truth: nothing the pipeline computes may move
     path.write_text("tampered\n", encoding="utf-8")
-    for table in ("incident", "service_metric", "service_metric_stop", "stop_ewt_band", "stop_boarding_band", "decision_inputs", "corridor_now",
+    for table in ("mpc_projection", "incident", "service_metric", "service_metric_stop", "stop_ewt_band", "stop_boarding_band", "decision_inputs", "corridor_now",
                   "source_status", "snapshots"):
         gold_conn.execute(f"DELETE FROM gold.{table}")  # noqa: S608 - fixed names
     gold_conn.commit()

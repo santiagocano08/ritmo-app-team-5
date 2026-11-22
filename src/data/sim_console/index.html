@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Consola de simulación</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --text: #1b1f24; --muted: #5d6673; --line: #dde1e6;
+  --accent: #2457c5; --accent-text: #ffffff; --ok: #1f7a46; --warn: #a15c00; --bad: #b42318;
+  --chip: #eef1f5; --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111418; --panel: #191d23; --text: #e6e9ee; --muted: #9aa4b2; --line: #2b313a;
+    --accent: #6f9cff; --accent-text: #0b1020; --ok: #4cc38a; --warn: #f0a640; --bad: #ff7b72; --chip: #232932;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { padding: 16px; border-bottom: 1px solid var(--line); background: var(--panel); display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; }
+header h1 { font-size: 18px; margin: 0; }
+header .sub { color: var(--muted); }
+main { padding: 16px; display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); max-width: 1400px; margin: 0 auto; }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+section.wide { grid-column: 1 / -1; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 10px; }
+form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+label.check { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 14px; }
+input, select { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; width: 100%; }
+label.check input { width: auto; }
+.buttons { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+button { font: inherit; border: 1px solid var(--line); background: var(--chip); color: var(--text); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+button.danger { color: var(--bad); }
+button:disabled { opacity: .5; cursor: default; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
+.kpi { background: var(--chip); border-radius: 8px; padding: 8px 10px; }
+.kpi .v { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.kpi .k { font-size: 12px; color: var(--muted); }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-size: 12px; color: var(--muted); font-weight: 500; }
+td.reason { white-space: normal; min-width: 220px; color: var(--muted); }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; background: var(--chip); }
+.ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); } .muted { color: var(--muted); }
+.mono { font-family: var(--mono); font-size: 12px; }
+#msg { min-height: 1.4em; }
+.note { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+.presets { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.preset { text-align: left; padding: 10px 12px; display: grid; gap: 4px; }
+.preset b { font-size: 15px; }
+.preset span { color: var(--muted); font-size: 12px; }
+.preset.active { border-color: var(--accent); }
+.countdown { margin: 12px 0 0; display: grid; gap: 6px; }
+.countdown .next { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.countdown .next .in { color: var(--accent); }
+.countdown ol { margin: 0; padding-left: 20px; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.countdown li.done { text-decoration: line-through; opacity: .6; }
+.countdown li.now { color: var(--warn); font-weight: 600; }
+details summary { cursor: pointer; margin-bottom: 8px; }
+a { color: var(--accent); }
+@media (max-width: 420px) { form { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Consola de simulación · PulsoFlota</h1>
+  <span class="sub">Banco de pruebas de datos (proyecto <span class="mono">pfsim</span>). No es la consola del despachador.</span>
+</header>
+<main>
+  <section class="wide">
+    <h2>Demo con un clic</h2>
+    <div class="presets" id="presets"></div>
+    <div class="countdown" id="countdown"></div>
+    <p class="note" id="preset-help">Elige qué quieres mostrar. Cada botón borra la corrida anterior de <span class="mono">pfsim</span> y arranca una nueva con parámetros ya probados. Mira el resultado en la consola del despachador: <a href="http://localhost:58080" target="_blank" rel="noopener">localhost:58080</a>.</p>
+  </section>
+
+  <section>
+    <h2>Corrida</h2>
+    <details id="advanced">
+    <summary class="note">Parámetros avanzados (solo si sabes qué cambiar)</summary>
+    <form id="run">
+      <label>Escenario <select name="scenario" id="scenario"></select></label>
+      <label>Escala de demanda <input name="demand_scale" type="number" step="0.5" min="0.1" max="10"></label>
+      <label>Semilla <input name="seed" type="number" min="0"></label>
+      <label>Duración (s simulados) <input name="duration_s" type="number" step="300" min="300" max="14400"></label>
+      <label>Ritmo (s reales por paso de 5 s) <input name="pace_s" type="number" step="0.5" min="0" max="5"></label>
+      <div></div>
+      <label class="check"><input name="holds" type="checkbox"> Ejecutar retenciones</label>
+      <label class="check"><input name="mpc" type="checkbox"> Modelo de decisión</label>
+      <div class="buttons">
+        <button class="primary" type="submit" id="btn-run">Iniciar corrida</button>
+      </div>
+    </form>
+    </details>
+    <div class="buttons" style="margin-top:10px">
+      <button type="button" id="btn-stop">Detener simulador</button>
+      <button type="button" class="danger" id="btn-down">Borrar stack</button>
+    </div>
+    <p id="msg" class="note"></p>
+    <p id="last" class="note"></p>
+    <p class="note">Con ritmo 1 la simulación va 5× más rápido: una recomendación vigente 2 min simulados dura ~24 s reales. Para decidir con calma en vivo, usa ritmo 5 (tiempo real).</p>
+  </section>
+
+  <section>
+    <h2>Estado</h2>
+    <div class="kpis" id="kpis"></div>
+    <div class="table-wrap"><table id="services"></table></div>
+    <p class="note" id="cfg"></p>
+  </section>
+
+  <section class="wide">
+    <h2>Recomendaciones (gold.recommendation)</h2>
+    <div class="table-wrap"><table id="recs"></table></div>
+    <p class="note">Aprobar o descartar inserta un evento <span class="mono">decision</span> en <span class="mono">bronze.events</span> (contrato §4.2), validado contra el esquema. El siguiente ciclo (≤ 5 s) lo refleja.</p>
+  </section>
+
+  <section class="wide">
+    <h2>Corredor ahora (gold.corridor_now)</h2>
+    <div class="table-wrap"><table id="buses"></table></div>
+  </section>
+
+  <section>
+    <h2>Retenciones ejecutadas (gold.instruction_status)</h2>
+    <div class="table-wrap"><table id="holds"></table></div>
+  </section>
+
+  <section>
+    <h2>Error de la proyección (gold.v_projection_accuracy)</h2>
+    <div class="table-wrap"><table id="acc"></table></div>
+    <p class="note">Error = salida real − proyectada. Excluye filas afectadas por una decisión aplicada.</p>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const fmt = (v, d = 0) => v === null || v === undefined ? "—" : Number(v).toFixed(d);
+const t = (iso) => iso ? new Date(iso).toLocaleTimeString("es-CO", { hour12: false }) : "—";
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+let busy = false;
+
+// Only touch the DOM when the content changed, so buttons (Aprobar) stay put between refreshes.
+function table(el, head, rows, empty) {
+  const html = !rows.length ? `<tr><td class="muted">${empty}</td></tr>`
+    : `<thead><tr>${head.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody>`;
+  if (el.dataset.html !== html) { el.innerHTML = html; el.dataset.html = html; }
+}
+
+// Demo presets: parameters rehearsed on 2026-11-22. Pace 1 = 5x faster than real time.
+const PRESETS = [
+  { id: "full", title: "Demo completa (una sola corrida, 12 min)",
+    what: "Incidentes en los primeros 7 min, luego operación normal: ~1 min B-101 deja de reportar («Estimated»); ~3:30 recomendaciones para aprobar, ~4:50 apelotonamiento B-102/B-103; ~6:40 B-104 se vara 4 min simulados.",
+    cfg: { scenario: "demo_full", demand_scale: 3, seed: 42, duration_s: 3600, pace_s: 1, holds: true, mpc: true } },
+  { id: "bunching", title: "Apelotonamiento y recomendación",
+    what: "B-102 se retrasa 400 s. A los ~4 min reales la consola marca B-102 «Gap» y B-103 «Bunched»; aquí aparece una recomendación para aprobar (dura ~24 s, vuelven a salir).",
+    cfg: { scenario: "c1_bunching", demand_scale: 3, seed: 42, duration_s: 2700, pace_s: 1, holds: true, mpc: true } },
+  { id: "breakdown", title: "Bus varado",
+    what: "B-102 se vara 4 min hacia las 17:20 simuladas (~4 min reales). La consola lo marca como varado y los de atrás se acercan.",
+    cfg: { scenario: "c5_breakdown", demand_scale: 3, seed: 42, duration_s: 2700, pace_s: 1, holds: true, mpc: true } },
+  { id: "normal", title: "Operación normal",
+    what: "Sin incidentes: los buses salen cada 10 min simulados y se ve la flota sana. Útil para empezar la demo.",
+    cfg: { scenario: "none", demand_scale: 3, seed: 42, duration_s: 2700, pace_s: 1, holds: true, mpc: true } },
+];
+
+// Event calendar per scenario, in simulated seconds after the 17:00 start. `at` is when the
+// incident is injected (scenario file); the "visible" entries are when the dispatcher console
+// shows it, measured in the 2026-11-22 rehearsals. Countdown in real time = Δsim × pace / 5.
+const SCHEDULES = {
+  demo_full: [
+    { at: 250, label: "B-101 deja de reportar" },
+    { at: 370, label: "B-101 aparece «Estimated» en la consola" },
+    { at: 550, label: "B-101 vuelve a reportar (Live)" },
+    { at: 700, label: "B-102 se retrasa 400 s en P-884" },
+    { at: 1065, label: "Primeras recomendaciones para aprobar" },
+    { at: 1200, label: "B-102 aparece con hueco («Gap»)" },
+    { at: 1435, label: "Apelotonamiento: B-103 «Bunched»" },
+    { at: 1980, label: "B-104 se vara (4 min simulados)" },
+    { at: 2220, label: "B-104 vuelve a circular; operación normal" },
+  ],
+  phase1_live: [
+    { at: 250, label: "B-101 deja de reportar" },
+    { at: 700, label: "B-102 se retrasa 400 s en P-884" },
+    { at: 1065, label: "Primeras recomendaciones para aprobar" },
+    { at: 1200, label: "B-102 aparece con hueco («Gap»)" },
+    { at: 1435, label: "Apelotonamiento: B-103 «Bunched»" },
+    { at: 2400, label: "B-104 se vara (4 min simulados)" },
+  ],
+  c1_bunching: [
+    { at: 700, label: "B-102 se retrasa 400 s en P-884" },
+    { at: 1065, label: "Primeras recomendaciones para aprobar" },
+    { at: 1200, label: "B-102 aparece con hueco («Gap»)" },
+    { at: 1435, label: "Apelotonamiento: B-103 «Bunched»" },
+  ],
+  c5_breakdown: [
+    { at: 1240, label: "B-102 se vara (4 min simulados)" },
+    { at: 1480, label: "B-102 vuelve a circular" },
+  ],
+};
+const SIM_START_UTC = "T22:00:00Z"; // 17:00 America/Bogota, the fixed calibration start of every run
+
+function mmss(sec) { const s = Math.max(0, Math.round(sec)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
+function simClock(sec) { const s = 17 * 3600 + sec; return `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`; }
+
+function renderCountdown(run, snap) {
+  const el = $("countdown");
+  const cfg = run.config, sched = cfg && SCHEDULES[cfg.scenario];
+  if (!sched || run.phase !== "running" || !snap) { el.innerHTML = sched && run.phase === "starting" ? '<div class="next">Arrancando… la cuenta empieza con el primer dato.</div>' : ""; return; }
+  const asOf = new Date(snap.as_of_ts);
+  const elapsed = (asOf - new Date(snap.as_of_ts.slice(0, 10) + SIM_START_UTC)) / 1000;
+  const toReal = (dSim) => cfg.pace_s > 0 ? dSim * cfg.pace_s / 5 : null;
+  const next = sched.find((e) => e.at > elapsed);
+  const head = next
+    ? `<div class="next">Próximo: ${esc(next.label)} <span class="in">${toReal(next.at - elapsed) === null ? "" : "en " + mmss(toReal(next.at - elapsed))}</span></div>`
+    : '<div class="next">Ya pasaron todos los eventos: operación normal hasta el final.</div>';
+  const items = sched.map((e) => {
+    const d = e.at - elapsed, cls = d <= 0 && d > -30 ? "now" : d <= 0 ? "done" : "";
+    const when = d > 0 && toReal(d) !== null ? ` · en ${mmss(toReal(d))}` : "";
+    return `<li class="${cls}">${simClock(e.at)} — ${esc(e.label)}${when}</li>`;
+  }).join("");
+  const html = `${head}<ol>${items}</ol>`;
+  if (el.dataset.html !== html) { el.innerHTML = html; el.dataset.html = html; }
+}
+
+function renderPresets(available) {
+  $("presets").innerHTML = PRESETS.filter((p) => available.includes(p.cfg.scenario)).map((p) =>
+    `<button type="button" class="preset" data-preset="${p.id}"><b>${esc(p.title)}</b><span>${esc(p.what)}</span></button>`).join("");
+}
+
+async function startRun(body, label) {
+  if (!confirm(`${label}: borra la corrida anterior de pfsim y empieza una nueva. ¿Seguir?`)) return;
+  try { await api("/api/run", body); $("last").textContent = ""; } catch (e) { $("last").innerHTML = `<span class="bad">No se pudo iniciar:</span> ${esc(e.message)}`; }
+  refresh();
+}
+
+function fillForm(cfg) {
+  const f = $("run");
+  for (const [k, v] of Object.entries(cfg)) {
+    const el = f.elements[k]; if (!el) continue;
+    if (el.type === "checkbox") el.checked = v; else el.value = v;
+  }
+}
+
+async function api(path, body) {
+  const res = await fetch(path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail || data));
+  return data;
+}
+
+async function init() {
+  const o = await api("/api/options");
+  $("scenario").innerHTML = o.scenarios.map((s) => `<option>${esc(s)}</option>`).join("");
+  fillForm(o.defaults);
+  renderPresets(o.scenarios);
+  refresh(); setInterval(refresh, 2000);
+}
+
+function stateClass(s) { return /healthy|running/.test(s) ? "ok" : /starting|created|restarting/.test(s) ? "warn" : /exited|dead|unhealthy/.test(s) ? "bad" : "muted"; }
+
+async function refresh() {
+  let st; try { st = await api("/api/status"); } catch (e) { $("msg").textContent = "Consola sin respuesta: " + e.message; return; }
+  const run = st.run, db = st.db;
+  const phaseCls = { running: "ok", starting: "warn", stopping: "warn", error: "bad" }[run.phase] || "muted";
+  $("msg").innerHTML = `<span class="${phaseCls}">${esc(run.phase)}</span> ${esc(run.message)}`;
+  $("btn-run").disabled = $("btn-stop").disabled = $("btn-down").disabled = run.phase === "starting" || busy;
+  document.querySelectorAll(".preset").forEach((x) => { x.disabled = run.phase === "starting" || busy; });
+  const cfg = run.config;
+  $("cfg").textContent = cfg ? `Última corrida: ${cfg.scenario}, escala ${cfg.demand_scale}, semilla ${cfg.seed}, ${cfg.duration_s} s, retenciones ${cfg.holds ? "sí" : "no"}, modelo ${cfg.mpc ? "sí" : "no"}${run.started_at ? " · iniciada " + t(run.started_at) : ""}` : "Sin corrida desde que abrió la consola.";
+  table($("services"), ["Servicio", "Estado"], st.services.map((s) => `<tr><td>${esc(s.service)}</td><td class="${stateClass(s.health || s.state)}">${esc(s.status)}</td></tr>`), "Stack pfsim apagado.");
+
+  const snap = db && db.snapshot, sum = db && db.corridor && db.corridor.summary, svc = db && db.service, src = db && db.source_status;
+  renderCountdown(run, snap);
+  const age = snap ? Number(snap.age_s) : null;
+  const kpi = (k, v, cls = "") => `<div class="kpi"><div class="v ${cls}">${v}</div><div class="k">${k}</div></div>`;
+  $("kpis").innerHTML = !db ? kpi("Base de datos", "sin conexión", "muted") : [
+    kpi("Hora simulada", snap ? t(snap.as_of_ts) : "—"),
+    kpi("Edad del dato (s)", fmt(age), age === null ? "" : age > 15 ? "bad" : "ok"),
+    kpi("Fuente", src ? esc(src.status) : "—", src && src.status === "live" ? "ok" : "warn"),
+    kpi("Buses en servicio", sum ? sum.buses_in_service : "—"),
+    kpi("Apelotonados", sum ? sum.n_bunched : "—", sum && sum.n_bunched ? "warn" : ""),
+    kpi("Huecos", sum ? sum.n_gaps : "—", sum && sum.n_gaps ? "warn" : ""),
+    kpi("EWT (s)", svc && svc.computable ? fmt(svc.ewt_s) : "—"),
+    kpi("Eventos bronze", db.bronze_events),
+  ].join("");
+
+  const recs = (db && db.recommendations) || [];
+  table($("recs"), ["Decidir", "#", "Estado", "Acción", "Bus", "Parada", "Ahorro (s/pasajero)", "Propuesta", "Vence", "Motivo"], recs.map((r) => {
+    const live = r.status === "proposed" && !r.stale;
+    const st = r.stale ? `${r.status} · desactualizada` : r.status;
+    const cls = { proposed: "warn", applied: "ok", discarded: "muted", expired: "muted" }[r.status] || "";
+    const btns = live ? `<button class="primary" data-rec="${r.rec_id}" data-act="apply">Aprobar</button> <button data-rec="${r.rec_id}" data-act="discard">Descartar</button>` : "";
+    return `<tr><td>${btns || '<span class="muted">—</span>'}</td><td>${r.rank}</td><td><span class="pill ${cls}">${esc(st)}</span></td><td>${esc(r.action)}</td><td>${esc(r.bus_id)}</td><td>${esc(r.stop_id || "—")}</td><td>${fmt(r.saving_s, 1)}</td><td>${t(r.proposed_ts)}</td><td>${t(r.expires_ts)}</td><td class="reason">${esc(r.reason)}</td></tr>`;
+  }), "Sin recomendaciones todavía.");
+
+  const buses = (db && db.corridor && db.corridor.buses) || [];
+  table($("buses"), ["Bus", "Estado", "Intervalo adelante (s)", "Plan (s)", "Distancia (m)", "Próxima parada", "Dato"], buses.map((b) => {
+    const cls = { bunched: "warn", gap: "warn", broken_down: "bad" }[b.bus_state] || "";
+    return `<tr><td>${esc(b.bus_id)}</td><td class="${cls}">${esc(b.bus_state)}</td><td>${fmt(b.headway_ahead_s)}</td><td>${fmt(b.headway_planned_s)}</td><td>${fmt(b.distance_along_m)}</td><td>${esc(b.next_stop_id || "—")}</td><td class="${b.data_quality === "live" ? "" : "warn"}">${esc(b.data_quality)}</td></tr>`;
+  }), "Sin buses en el último snapshot.");
+
+  table($("holds"), ["Bus", "Parada", "Retención (s)", "Parada observada (s)", "Estado"], ((db && db.holds) || []).map((h) =>
+    `<tr><td>${esc(h.bus_id)}</td><td>${esc(h.stop_id)}</td><td>${fmt(h.hold_s)}</td><td>${fmt(h.observed_dwell_s)}</td><td class="${h.status === "executed" ? "ok" : "warn"}">${esc(h.status)}</td></tr>`), "Ninguna retención aprobada todavía.");
+
+  table($("acc"), ["Anticipación", "Comparadas", "Error medio (s)", "Mediana (s)", "Peor (s)", "Sesgo (s)"], ((db && db.accuracy) || []).map((a) =>
+    `<tr><td>${esc(a.lead_bucket)}</td><td>${a.n_compared}</td><td>${fmt(a.mae_s, 1)}</td><td>${fmt(a.median_s, 1)}</td><td>${fmt(a.worst_s)}</td><td>${fmt(a.mean_error_s, 1)}</td></tr>`), "Sin datos.");
+}
+
+$("run").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const f = ev.target;
+  const body = { scenario: f.scenario.value, demand_scale: +f.demand_scale.value, seed: +f.seed.value, duration_s: +f.duration_s.value, pace_s: +f.pace_s.value, holds: f.holds.checked, mpc: f.mpc.checked };
+  await startRun(body, "Corrida personalizada");
+});
+$("presets").addEventListener("click", async (ev) => {
+  const b = ev.target.closest("button[data-preset]"); if (!b) return;
+  const p = PRESETS.find((x) => x.id === b.dataset.preset);
+  document.querySelectorAll(".preset").forEach((x) => x.classList.toggle("active", x === b));
+  fillForm(p.cfg);
+  await startRun(p.cfg, p.title);
+});
+$("btn-stop").addEventListener("click", async () => { busy = true; try { await api("/api/stop", {}); } catch (e) { $("last").textContent = e.message; } busy = false; refresh(); });
+$("btn-down").addEventListener("click", async () => {
+  if (!confirm("Borra el stack pfsim y sus datos. ¿Seguir?")) return;
+  busy = true; try { await api("/api/teardown", {}); } catch (e) { $("last").textContent = e.message; } busy = false; refresh();
+});
+$("recs").addEventListener("click", async (ev) => {
+  const b = ev.target.closest("button[data-rec]"); if (!b) return;
+  b.disabled = true;
+  try { const r = await api("/api/decision", { rec_id: b.dataset.rec, action: b.dataset.act }); $("last").innerHTML = `<span class="ok">Decisión ${esc(b.dataset.act)} registrada</span> · bronze id ${r.bronze_id} · hora simulada ${t(r.sim_ts)}`; }
+  catch (e) { $("last").innerHTML = `<span class="bad">Decisión rechazada:</span> ${esc(e.message)}`; }
+  refresh();
+});
+init();
+</script>
+</body>
+</html>
