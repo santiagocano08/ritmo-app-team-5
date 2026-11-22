@@ -54,6 +54,12 @@ td.reason { white-space: normal; min-width: 220px; color: var(--muted); }
 .preset b { font-size: 15px; }
 .preset span { color: var(--muted); font-size: 12px; }
 .preset.active { border-color: var(--accent); }
+.countdown { margin: 12px 0 0; display: grid; gap: 6px; }
+.countdown .next { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.countdown .next .in { color: var(--accent); }
+.countdown ol { margin: 0; padding-left: 20px; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.countdown li.done { text-decoration: line-through; opacity: .6; }
+.countdown li.now { color: var(--warn); font-weight: 600; }
 details summary { cursor: pointer; margin-bottom: 8px; }
 a { color: var(--accent); }
 @media (max-width: 420px) { form { grid-template-columns: 1fr; } }
@@ -68,6 +74,7 @@ a { color: var(--accent); }
   <section class="wide">
     <h2>Demo con un clic</h2>
     <div class="presets" id="presets"></div>
+    <div class="countdown" id="countdown"></div>
     <p class="note" id="preset-help">Elige qué quieres mostrar. Cada botón borra la corrida anterior de <span class="mono">pfsim</span> y arranca una nueva con parámetros ya probados. Mira el resultado en la consola del despachador: <a href="http://localhost:58080" target="_blank" rel="noopener">localhost:58080</a>.</p>
   </section>
 
@@ -143,6 +150,9 @@ function table(el, head, rows, empty) {
 
 // Demo presets: parameters rehearsed on 2026-11-22. Pace 1 = 5x faster than real time.
 const PRESETS = [
+  { id: "full", title: "Demo completa (una sola corrida, 12 min)",
+    what: "Incidentes en los primeros 7 min, luego operación normal: ~1 min B-101 deja de reportar («Estimated»); ~3:30 recomendaciones para aprobar, ~4:50 apelotonamiento B-102/B-103; ~6:40 B-104 se vara 4 min simulados.",
+    cfg: { scenario: "demo_full", demand_scale: 3, seed: 42, duration_s: 3600, pace_s: 1, holds: true, mpc: true } },
   { id: "bunching", title: "Apelotonamiento y recomendación",
     what: "B-102 se retrasa 400 s. A los ~4 min reales la consola marca B-102 «Gap» y B-103 «Bunched»; aquí aparece una recomendación para aprobar (dura ~24 s, vuelven a salir).",
     cfg: { scenario: "c1_bunching", demand_scale: 3, seed: 42, duration_s: 2700, pace_s: 1, holds: true, mpc: true } },
@@ -153,6 +163,65 @@ const PRESETS = [
     what: "Sin incidentes: los buses salen cada 10 min simulados y se ve la flota sana. Útil para empezar la demo.",
     cfg: { scenario: "none", demand_scale: 3, seed: 42, duration_s: 2700, pace_s: 1, holds: true, mpc: true } },
 ];
+
+// Event calendar per scenario, in simulated seconds after the 17:00 start. `at` is when the
+// incident is injected (scenario file); the "visible" entries are when the dispatcher console
+// shows it, measured in the 2026-11-22 rehearsals. Countdown in real time = Δsim × pace / 5.
+const SCHEDULES = {
+  demo_full: [
+    { at: 250, label: "B-101 deja de reportar" },
+    { at: 370, label: "B-101 aparece «Estimated» en la consola" },
+    { at: 550, label: "B-101 vuelve a reportar (Live)" },
+    { at: 700, label: "B-102 se retrasa 400 s en P-884" },
+    { at: 1065, label: "Primeras recomendaciones para aprobar" },
+    { at: 1200, label: "B-102 aparece con hueco («Gap»)" },
+    { at: 1435, label: "Apelotonamiento: B-103 «Bunched»" },
+    { at: 1980, label: "B-104 se vara (4 min simulados)" },
+    { at: 2220, label: "B-104 vuelve a circular; operación normal" },
+  ],
+  phase1_live: [
+    { at: 250, label: "B-101 deja de reportar" },
+    { at: 700, label: "B-102 se retrasa 400 s en P-884" },
+    { at: 1065, label: "Primeras recomendaciones para aprobar" },
+    { at: 1200, label: "B-102 aparece con hueco («Gap»)" },
+    { at: 1435, label: "Apelotonamiento: B-103 «Bunched»" },
+    { at: 2400, label: "B-104 se vara (4 min simulados)" },
+  ],
+  c1_bunching: [
+    { at: 700, label: "B-102 se retrasa 400 s en P-884" },
+    { at: 1065, label: "Primeras recomendaciones para aprobar" },
+    { at: 1200, label: "B-102 aparece con hueco («Gap»)" },
+    { at: 1435, label: "Apelotonamiento: B-103 «Bunched»" },
+  ],
+  c5_breakdown: [
+    { at: 1240, label: "B-102 se vara (4 min simulados)" },
+    { at: 1480, label: "B-102 vuelve a circular" },
+  ],
+};
+const SIM_START_UTC = "T22:00:00Z"; // 17:00 America/Bogota, the fixed calibration start of every run
+
+function mmss(sec) { const s = Math.max(0, Math.round(sec)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
+function simClock(sec) { const s = 17 * 3600 + sec; return `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`; }
+
+function renderCountdown(run, snap) {
+  const el = $("countdown");
+  const cfg = run.config, sched = cfg && SCHEDULES[cfg.scenario];
+  if (!sched || run.phase !== "running" || !snap) { el.innerHTML = sched && run.phase === "starting" ? '<div class="next">Arrancando… la cuenta empieza con el primer dato.</div>' : ""; return; }
+  const asOf = new Date(snap.as_of_ts);
+  const elapsed = (asOf - new Date(snap.as_of_ts.slice(0, 10) + SIM_START_UTC)) / 1000;
+  const toReal = (dSim) => cfg.pace_s > 0 ? dSim * cfg.pace_s / 5 : null;
+  const next = sched.find((e) => e.at > elapsed);
+  const head = next
+    ? `<div class="next">Próximo: ${esc(next.label)} <span class="in">${toReal(next.at - elapsed) === null ? "" : "en " + mmss(toReal(next.at - elapsed))}</span></div>`
+    : '<div class="next">Ya pasaron todos los eventos: operación normal hasta el final.</div>';
+  const items = sched.map((e) => {
+    const d = e.at - elapsed, cls = d <= 0 && d > -30 ? "now" : d <= 0 ? "done" : "";
+    const when = d > 0 && toReal(d) !== null ? ` · en ${mmss(toReal(d))}` : "";
+    return `<li class="${cls}">${simClock(e.at)} — ${esc(e.label)}${when}</li>`;
+  }).join("");
+  const html = `${head}<ol>${items}</ol>`;
+  if (el.dataset.html !== html) { el.innerHTML = html; el.dataset.html = html; }
+}
 
 function renderPresets(available) {
   $("presets").innerHTML = PRESETS.filter((p) => available.includes(p.cfg.scenario)).map((p) =>
@@ -202,6 +271,7 @@ async function refresh() {
   table($("services"), ["Servicio", "Estado"], st.services.map((s) => `<tr><td>${esc(s.service)}</td><td class="${stateClass(s.health || s.state)}">${esc(s.status)}</td></tr>`), "Stack pfsim apagado.");
 
   const snap = db && db.snapshot, sum = db && db.corridor && db.corridor.summary, svc = db && db.service, src = db && db.source_status;
+  renderCountdown(run, snap);
   const age = snap ? Number(snap.age_s) : null;
   const kpi = (k, v, cls = "") => `<div class="kpi"><div class="v ${cls}">${v}</div><div class="k">${k}</div></div>`;
   $("kpis").innerHTML = !db ? kpi("Base de datos", "sin conexión", "muted") : [

@@ -16,16 +16,19 @@ cp src/data/sim_console/.pfsim.env.example src/data/sim_console/.pfsim.env   # o
 uv run --frozen python -m src.data.sim_console.app                           # http://127.0.0.1:8090
 ```
 
-Then press one of the **one-click demo** buttons (rehearsed parameters) or open
+Then press one of the **one-click demo** buttons (rehearsed parameters; each one resets `pfsim` and starts a new run, because scenarios are loaded at start so a seed always replays the same stream) or open
 *Parámetros avanzados* for a custom run. The UI text is in Spanish, like the dispatcher console.
 
 | Demo button | Scenario | What you see (pace 1 = 5× real time) |
 |---|---|---|
+| Demo completa (una sola corrida, 12 min) | `demo_full` | No restart; incidents in the first ~7 real minutes, then normal operation: 0:50 B-101 goes silent («Estimated» ~1:15, back at 1:50); 2:20 B-102 delayed 400 s; ~3:30 first recommendations; ~4:50 B-103 bunched; 6:36 B-104 breaks down for 4 simulated minutes; 7:24 normal until 12:00 |
 | Operación normal | `none` | Healthy fleet, one departure every 10 simulated minutes |
 | Apelotonamiento y recomendación | `c1_bunching` | B-102 delayed 400 s → gap; B-103 bunched; first recommendation after ~3 real minutes |
 | Bus varado | `c5_breakdown` | B-102 breaks down for 4 min around 17:20 simulated time |
 
-All presets: demand scale 3, seed 42, 2700 s, holds and decision model on.
+All presets: demand scale 3, seed 42, holds and decision model on; 2700 s (Demo completa: 3600 s). The console shows a **countdown to the next event** of the running scenario (real time = Δsimulated × pace / 5).
+
+**Approving is recorded, not always executed.** An approved recommendation becomes `applied` through the command door, but today the simulator only executes **holds** (story 004). Reserve dispatch, slow down, skip stop and departure changes are executed from phases 3a–3c (#28–#30).
 
 ## Ports (`pfsim` never touches the default stack or its `db_data` volume)
 
