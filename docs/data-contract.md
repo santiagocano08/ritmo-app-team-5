@@ -1,7 +1,7 @@
 # PulsoFlota — Data Contract for the Backend (v0.2, draft)
 
 - **Owner:** data owner (see `.github/CODEOWNERS`). **Consumer:** backend (BE).
-- **Status:** Proposed, 2026-11-21. Decisions recorded in ADR-0006 (backend data consumption) and ADR-0007 (recommendation effect rule); both Proposed until accepted.
+- **Status:** Proposed, 2026-11-21. Decisions recorded in ADR-0006 (backend data consumption; Proposed until the backend owner accepts items 1–5) and ADR-0007 (recommendation effect rule; Accepted by the data owner).
   - v0.2 adds the freshness rule (§2.1), history and reporting (§3B), the recommendation door (§4.5) and the discard reason (§4.6). It was aligned with the team's "PulsoFlota · Mock-ups v2 (MVP and improvements)".
   - It also records the new "worked" rule (H3); ADR-0007 proposes it to replace ADR-0003 gate decision 6.
 - **Scope:** Turn 1. Corridor C6-008, direction 1, buses B-101..B-105 in service and B-106/B-107 in reserve, stops P-883..P-900.

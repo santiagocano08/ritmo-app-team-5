@@ -1,6 +1,6 @@
 # ADR-0007: Recommendation effect rule: observed saving versus expected saving
 
-- Status: Proposed
+- Status: Accepted (data owner, 2026-11-21; this rule depends only on data)
 - Date: 2026-11-21
 - Decided by: data owner, 2026-11-21 (rule H3 in `docs/data-contract.md` v0.2)
 - Amends: **ADR-0003, gate decision 6** (`recommendation_effect.result` thresholds). Gate decision 6
