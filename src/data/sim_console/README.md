@@ -28,7 +28,7 @@ Then press one of the **one-click demo** buttons (rehearsed parameters; each one
 
 All presets: demand scale 3, seed 42, holds and decision model on; 2700 s (Demo completa: 3600 s). The console shows a **countdown to the next event** of the running scenario (real time = Δsimulated × pace / 5).
 
-**Approving is recorded, not always executed.** An approved recommendation becomes `applied` through the command door, but today the simulator only executes **holds** (story 004). Reserve dispatch, slow down, skip stop and departure changes are executed from phases 3a–3c (#28–#30).
+**What approving does.** An approved recommendation becomes `applied` through the command door. The simulator executes **holds** (story 004) and **reserve dispatches** (006 phase 3c): the reserve bus B-106 starts reporting at P-883 about 120 simulated seconds after the approval and shows in the dispatcher console once it leaves P-883 (rehearsal 2026-11-22: approved 17:17:05, first event 17:19:20, on screen 17:21:10, 51 real seconds after the click at pace 1). `adjust_departure` and `skip_stop` stay `applied` without execution; `slow_down` comes with phase 3b (#30). See `docs/data-contract.md` §4.5.
 
 ## Ports (`pfsim` never touches the default stack or its `db_data` volume)
 

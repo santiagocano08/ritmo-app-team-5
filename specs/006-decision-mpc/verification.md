@@ -575,3 +575,92 @@ Decisions (details in research R17; each is one line of the view or one conditio
 - `RULES_VERSION` 1.7.0 (phase 4 and 6 move to 1.8.0 and 1.9.0 in the task list).
 - Phase 5 reduced from 0.60 h to 0.35 h; committed scope 6.45 h.
 - Phase 2 exit gate T049 is left unchecked in `tasks.md` (it is the data owner's confirmation); the data owner committed phase 2 and asked for 2b, which I took as the go-ahead.
+
+## Phase 3a and 3c: execution of approved actions (branch `feature/006-phase3-execution`)
+
+**Time**: start 2026-11-22T21:09Z, end 2026-11-22T23:05Z (UTC). Order decided by the data owner: 3a, then 3c. **3b (T053 to T056) is not built** (workshop priority of 2026-11-22); it stays in the backlog (issue #30).
+**Environment**: host suite against the Postgres server on 5432 (throwaway databases only, as in the phase 2 runs); CI-ready and live checks in compose project `pf006` only, Postgres 55432, API 58200. The first CI-ready attempt used the worktree's default project name and failed with "port 5432 already allocated" (another stack holds it); it started nothing and touched nothing. Two containers and a volume of the default project name (`ritmo-006-mpc-*`, created at 11:53 today, before this session) were left as they were.
+
+### Commands
+
+```text
+host:  set -a; . ./.env; set +a; export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:${POSTGRES_PORT:-5432}/${POSTGRES_DB}"
+       uv run --extra dev pytest -m "not slow and not live" -p no:cacheprovider -q
+CI:    docker compose -p pf006 --env-file /tmp/pf006.env --profile tools build tests
+       docker compose -p pf006 --env-file /tmp/pf006.env --profile tools run --rm tests
+live:  docker compose -p pf006 --env-file /tmp/pf006_{3a,3c,A,B}.env up -d db / up -d refresh
+       docker compose -p pf006 --env-file ... run -d --no-deps --rm --name pf006-ingest-X -v "$PWD/src/data/tests/fixtures/scenarios:/scn:ro" ingestion
+       (SIM_SEED=42 SIM_DURATION_S=2700 SIM_SCENARIO_FILE=/scn/c1_bunching.json SIM_DEMAND_SCALE=3 SIM_HOLD_NONCOMPLIANCE=0, pace 0.5 for the checks, 1 for the cycle-time runs; B adds MPC_ENABLED=off)
+       the `decision` rows were written with the test helpers (`write_decision`), as the backend would
+```
+
+### Results
+
+| Gate | Host suite | CI-ready |
+|---|---|---|
+| 3a (only `test_hold_loop_model.py` added) | 1179 passed, 22 skipped, 7 deselected; 97.57 % (21:13 to 21:25Z) | 1168 passed, 27 skipped; 96.84 % (21:25 to 21:32Z) |
+| 3c, first run (T060) | 1194 passed, 22 skipped, 7 deselected; 97.54 % (21:41 to 21:53Z) | 1183 passed, 27 skipped; 96.83 % (21:53 to 22:02Z) |
+| Final, after one typing fix in `actions.py` | **1194 passed, 22 skipped, 7 deselected; 97.54 %** (22:41 to 22:54Z) | **1183 passed, 27 skipped; 96.83 %** (22:54 to 23:04Z) |
+
+New or changed modules: `scenarios/actions.py` 95 % (uncovered: the `already_running` branch and the missing-id guard), `scenarios/holds.py` 98 %, `engine.py` 100 %, `main.py` 96 %.
+Red step: `test_action_reserve.py` and `test_reserve_in_corridor_now.py` failed at collection with `ModuleNotFoundError: src.data.simulator.scenarios.actions` (the stated reason) before the module existed. `test_hold_loop_model.py` (T050) was **green by design**: phase 2 already moved the poller to `gold.recommendation`, so T051 needed no change ("no change needed"). Its first run failed on my own test data (B-104 has no visit at P-890 in 2,400 s); the test now uses B-103.
+
+### Golden hash (seed 42, 3,600 s)
+
+`SIM_DEMAND_SCALE` unset: `8bae0e5229b2e547fac181f0f87176809d71be7a80600a4b066832b6274690bc`; `=1.0`: the same; the 004/005 reference in `test_simulator_golden_hash.py`: the same. Unchanged after 3a and after 3c. With an empty board, `run(actions=ActionBoard())` equals `run()` (unit test).
+
+### Phase 3a live check (T052 step 4), C1 seed 42, scale 3
+
+A hold row in `gold.recommendation` (B-103, P-890, 60 s, built with `rec_support` because the model never reaches 15 s with a hold on C1, see Phase 2) and an `apply` decision written while the run was at about 22:12Z.
+- First attempt: expiry 22:31:35Z. At scale 3 B-103 arrives at P-890 at **22:31:50Z** (22:30:35Z at scale 1, the time I had used), so the order expired first and `gold.instruction_status` said `not_executed` at 22:31:35Z. Correct behaviour; my hand time was wrong for scale 3.
+- Second attempt, expiry 22:33:00Z: B-103 at P-890 arrived 22:31:50Z, left 22:32:50Z. **Observed dwell 60 s against 60 s recommended; `instruction_status = executed`** (ts 22:32:50Z).
+- The ingestion image used there (built 08:28) predates phase 3; phase 3a changes no production code, so it is the same code.
+
+### Phase 3c live check (T060 step 5), C1 seed 42, scale 3, model-published rows (no builder row)
+
+Reserve `reserve_dispatch B-106` published by the model (saving 20.8 s per rider, `params {"ready_s": 120}`) and an `adjust_departure B-103` (16.7 s) approved with `apply` decisions.
+
+| | Run 1 (pace 0.5) | Run A (pace 1, cycle-time run) |
+|---|---|---|
+| Decision seen by the simulator (`decided_at_sim`) | 22:17:25Z | 22:17:15Z |
+| **B-106 first event** | **22:19:25Z = decision + 120 s** | **22:19:15Z = decision + 120 s** |
+| B-106 events | 88 in the first 7 minutes: bus_position, 3 stop_arrival, 3 stop_departure | |
+| **B-106 in `gold.corridor_now`** | yes in the latest snapshot | yes, in 59 snapshots |
+| Recommendation status | both rows `applied` | both rows `applied` |
+| `adjust_departure` | one `not_executed_in_this_story` line for its `rec_id`; stream unchanged (unit test) | |
+
+### Cycle time (SC-011), C1 seed 42, 2,700 s, scale 3, pace 1, one cycle per distinct snapshot (109 to 110 cycles)
+
+| Run | `duration_ms` median / p95 / max | `model_ms` median / p95 / max | Conditions |
+|---|---|---|---|
+| B, model off | 93.5 / 275 / 496 | 0.9 / 3.8 / 10.4 | load average 3 to 7 |
+| A2, model on, reserve and adjust approved | 126 / 397 / 512 | 14.8 / 31.8 / 65.6 | load average about 3 |
+| A1 (discarded) | 168 / 1,423 / 6,705 | 28.9 / 75.6 / 349.2 | load average 22: other stacks and a browser were running |
+| (phase 2b, quiet machine, for comparison) A / B at scale 3 | 93 / 187 / 193 (A) | 9.8 / 12.2 / 15.1 | |
+
+Added by the model step (A2 minus B): **median +13.9 ms, max +55 ms**; whole cycle median +32.5 ms, max +16 ms. Targets: added median ≤ 60 ms met; added max ≤ 150 ms met; **demo p95 ≤ 250 ms not shown**: A2's p95 is 397 ms, and B (model off) is 275 ms in the same noisy conditions, so the excess is the machine, not the model. Phase 3 does not change the model step, the cycle or the pipeline (only simulator files), so the 3a and 3c figures are the phase 2b ones plus noise. Max `duration_ms` 512 < 5,000 and no cycle skipped (SC-011 met). The 3a cycle-time runs were not made separately: 3a changed no production code, so one pair at the 3c gate stands for both. A repeat on a quiet machine is recommended before quoting a p95.
+
+### Untouched check
+
+`git status --short` shows only: `specs/006-decision-mpc/tasks.md`, `verification.md`, `src/data/simulator/engine.py`, `main.py`, `scenarios/__init__.py`, `scenarios/holds.py`, new `scenarios/actions.py`, and three new test files. Nothing under `.kiro/`, `.specify/`, `.github/`, `CODEOWNERS`, `docs/`, `contracts/`, `src/api/`, the frontend, `src/data/rules/`, `src/data/pipeline/` or the database init files. No `RULES_VERSION` bump (simulator only). **No CODEOWNERS path changed.**
+
+### Files changed
+
+Source: `src/data/simulator/scenarios/actions.py` (new: `ActionBoard`, reserve part), `src/data/simulator/engine.py` (`actions` argument; reserve starts at its step with one profile draw; `Bus.reserve`; phase `off` after its last stop; guarded, inert without orders), `src/data/simulator/main.py` (builds the board and passes it), `src/data/simulator/scenarios/__init__.py` (`actions` passthrough), `src/data/simulator/scenarios/holds.py` (`HoldBoard(actions=...)`; an approved `reserve_dispatch` goes to the board; without a board it is ignored as before).
+Tests (new): `unit/test_action_reserve.py` (11), `integration/test_reserve_in_corridor_now.py` (3, one end to end through poller, bronze, board and engine), `integration/test_hold_loop_model.py` (4). No existing test changed.
+Documents: `tasks.md` (T050, T051, T052, T057, T058, T059, T060 marked `[x]`; 3b note: backlog, issue #30; the order change and the T054, T055 and T059 wording were already in the file from the earlier commit), this section.
+
+### Rework and decisions
+
+- Rework: (1) my hand time for the 3a live check (scale 3 differs from scale 1); (2) test data in T050 (B-104 vs B-103); (3) a mypy error in `actions.py` (`ready_s` narrowing) fixed after the first full runs, then both suites were run again in full; (4) cycle-time run A1 discarded for machine load.
+- Decisions: an approved `reserve_dispatch` without `params.ready_s`, for a bus that is not B-106 or B-107, or for a reserve already ordered is refused with one `reserve_order_ignored` log line (the execution contract says nothing about those cases); the reserve emits its last `stop_departure` at P-900 and nothing afterwards, so by the usual silence rule it should turn `estimated` afterwards (not observed in these runs, which ended before it mattered); the 3a hold row of the live check is builder-made (no model hold exists on C1).
+- Not done: 3b (by the data owner's order); the p95 target at the demo scale was not demonstrated on this machine.
+
+### Phase 3a/3c: independent verification (Claude, 2026-11-22)
+
+- Code review of the diff: the reserve is gated by an approved order (inert otherwise), the baseline path is unchanged, `adjust_departure`/`skip_stop` stay not executed; no CODEOWNERS path changed.
+- Spot tests on the host with the database: `test_action_reserve.py`, `test_reserve_in_corridor_now.py`, `test_hold_loop_model.py` and the golden-hash test: **29 passed**. Quick host suite without `DATABASE_URL`: 782 passed, 441 skipped, coverage 80.47 %.
+- Live check through the data simulation console (`pfsim`, scenario `demo_full`, seed 42, scale 3, pace 1): the model's `reserve_dispatch B-106` was approved at 22:17:05Z; B-106's first bronze event was at 22:19:20Z (120 s readiness plus one poll and one 5 s step); B-106 appeared in `gold.corridor_now` at 22:21:10Z, once it left P-883, 51 real seconds after the click. The recommendation stayed `applied`.
+- Observation for the data owner (not a defect of the executor): B-106 left P-883 right behind the scheduled B-103 (17:20) and was classified `bunched`. The model recommended the reserve at 17:17 for the gap behind B-102; the 120 s readiness and the terminal departure put it behind B-103 instead. Worth revisiting in the model's reserve timing (phase 4).
+- A first live run was void: the host went to sleep from 18:09 to 18:23 local and froze every container; rerun with `caffeinate`.
+- Contract impact: `docs/data-contract.md` v0.4 (§4.5 step 5 and "What is executed in turn 1"); no schema change.

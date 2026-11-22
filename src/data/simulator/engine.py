@@ -51,6 +51,7 @@ class Bus:
     profile: Profile | None = None
     load: list[Rider] = field(default_factory=list)
     pending: tuple[int, int, int, int] = (0, 0, 0, 0)  # boarded, alighted, rejected, occupancy_in
+    reserve: bool = False  # a reserve makes one trip and then goes off (006 FR-023)
 
     @property
     def trip_id(self) -> str:
@@ -63,9 +64,9 @@ def sim_start(start_hour: int = 17) -> datetime:
 
 
 def run(seed: int, duration: int, start_hour: int = 17, demand_scale: float = 1.0,
-        ref: Reference | None = None, hooks=None, holds=None) -> Iterator[dict]:
-    """`hooks` (004): optional scenario hooks; `holds` (004): optional hold board.
-    `None` for both runs exactly the baseline statements."""
+        ref: Reference | None = None, hooks=None, holds=None, actions=None) -> Iterator[dict]:
+    """`hooks` (004): optional scenario hooks; `holds` (004): optional hold board; `actions` (006): optional
+    approved-action board (reserve dispatch). `None` for all runs exactly the baseline statements."""
     ref = ref or load_reference()
     rng = random.Random(seed)
     base = datetime(*SIM_DATE, start_hour, tzinfo=LOCAL_TZ)
@@ -147,6 +148,11 @@ def run(seed: int, duration: int, start_hour: int = 17, demand_scale: float = 1.
         # 4. Buses
         if hooks is not None:
             hooks.on_step(t, buses, out, env)
+        if actions is not None:
+            for bus_id in actions.start_reserves(t, {b.bus_id for b in buses}):
+                reserve = Bus(bus_id, start_at=t, first_start=t, reserve=True)
+                start_trip(reserve, t)
+                buses.append(reserve)
         for b in buses:
             halted = hooks is not None and hooks.halted(b, t)
             if b.phase == "driving" and not halted:
@@ -166,12 +172,15 @@ def run(seed: int, duration: int, start_hour: int = 17, demand_scale: float = 1.
                 out.append(env("stop_departure", t, _stop_payload(b, ref, boarded, alighted, rejected, len(b.load))))
                 if hooks is not None:
                     hooks.on_departure(b, t, ref.stops[b.idx].stop_id)
-                if b.idx == last:
+                if b.idx == last and b.reserve:
+                    b.phase = "off"
+                elif b.idx == last:
                     # R14: next trip leaves P-883 at its scheduled time, or now if already late
                     b.phase, b.phase_end = "layover", max(t, b.first_start + b.trip_n * cycle)
                 else:
                     b.phase, b.next_idx = "driving", b.idx + 1
-            out.append(env("bus_position", t, _position_payload(b, ref, halted)))
+            if b.phase != "off":
+                out.append(env("bus_position", t, _position_payload(b, ref, halted)))
 
         yield from out
 
