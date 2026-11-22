@@ -23,6 +23,9 @@ data/raw/
 docs/
 specs/
 contracts/
+# Exception: the frontend image build type-checks mocks/tests that import the
+# committed read-contract fixtures (dev-only; not shipped in the final stage).
+!contracts/read/fixtures/
 scripts/
 
 # Env files (secrets must not enter images)
@@ -36,6 +39,11 @@ docker-compose*.yml
 # Test files
 tests/
 src/data/tests/
+
+# Frontend build artifacts and deps (the console image runs a fresh npm ci + build)
+src/frontend/node_modules/
+src/frontend/dist/
+src/frontend/coverage/
 
 # Logs
 *.log

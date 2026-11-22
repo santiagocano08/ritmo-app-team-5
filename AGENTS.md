@@ -58,14 +58,15 @@ Application code lives under `src/`. The target layout above (`src/backend/`,
 `src/frontend/`) is the destination; the current Turn-1 tree is not yet
 reorganized into it — backend code sits in `src/api/` (FastAPI app),
 `src/data/` (ingestion, pipeline, rules, simulator) and `src/pulsoflota/`
-(shared DB/config/models), and there is no frontend code yet. Build tooling
-(Node / Python) is already covered in `.gitignore`.
+(shared DB/config/models), and the dispatcher console lives in `src/frontend/`
+(React 19 + TypeScript + Vite SPA, packaged as the `frontend` Nginx service).
+Build tooling (Node / Python) is already covered in `.gitignore`.
 
 ## Repository layout
 
 | Path | What it is |
 |------|------------|
-| `src/` | Application code. Target: `src/backend/` + `src/frontend/`; current Turn-1 tree: `src/api/`, `src/data/`, `src/pulsoflota/` (no frontend yet). |
+| `src/` | Application code. Target: `src/backend/` + `src/frontend/`; current Turn-1 tree: `src/api/`, `src/data/`, `src/pulsoflota/` (backend) + `src/frontend/` (dispatcher console SPA). |
 | `docs/` | Source-of-truth documentation (OMD, PRD, SRD — in Spanish). |
 | `docs/turns-ritmo.md` | **Turn map:** which norms are mandatory in the active turn and which are deferred. |
 | `specs/` | Generated per-feature artifacts (spec, plan, tasks, checklists). |
