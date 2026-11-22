@@ -102,3 +102,38 @@ def test_no_buses_gives_no_headways() -> None:
 def test_headway_is_zero_without_history_and_without_a_position_time_for_the_bus_ahead() -> None:
     # T072: the last uncovered rule branch (no pass time can be found at all).
     assert headway_s(100.0, t(50), 300.0, (), None) == 0.0
+
+
+# ---- US2: pass time at the origin (FR-020, FR-021, FR-022) -------------------------------------------
+
+def test_pass_time_at_the_origin_is_the_departure_never_a_waiting_sample() -> None:
+    waiting = ((t(0), 0.0), (t(5), 0.0), (t(10), 0.0), (t(15), 50.0))
+    assert pass_time(waiting, 0.0, origin_m=0.0, departure_ts=t(12)) == t(12)
+
+
+def test_follower_at_the_origin_gets_its_time_minus_the_departure() -> None:
+    leader = bus("A", 500.0, 600, history=[(0, 0.0), (300, 0.0), (310, 50.0), (600, 500.0)])
+    follower = bus("B", 0.0, 925, history=[(0, 0.0), (925, 0.0)])
+    leader_dep = BusObs(**{**leader.__dict__, "departure_ts": t(310)})
+    result = compute_headways([leader_dep, follower])
+    assert result["B"].seconds == 615.0 and result["B"].ahead_bus_id == "A"
+
+
+def test_leader_that_has_not_left_gives_no_evidence_and_no_negative_value() -> None:
+    waiting = ((t(0), 0.0), (t(5), 0.0))
+    assert pass_time(waiting, 0.0) is None
+    assert headway_s(0.0, t(100), 10.0, waiting) is None
+
+
+def test_without_departure_the_last_sample_at_or_below_the_origin_is_used() -> None:
+    history = ((t(0), 0.0), (t(5), 0.0), (t(10), 0.0), (t(15), 40.0))
+    assert pass_time(history, 0.0) == t(10)
+
+
+def test_above_the_origin_the_behaviour_is_unchanged() -> None:
+    history = ((t(0), 0.0), (t(100), 100.0))
+    assert pass_time(history, 50.0, origin_m=0.0, departure_ts=t(10)) == t(50)
+
+
+def test_busobs_without_departure_ts_still_builds() -> None:
+    assert bus("A", 10.0, 0).departure_ts is None

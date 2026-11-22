@@ -5,13 +5,14 @@ from src.data.tests.fixtures import bronze_builders as bb
 from src.data.tests.fixtures.gold_support import count, cycle
 from src.data.tests.fixtures.silver_support import dump
 
-GOLD_TABLES = ("snapshots", "source_status", "corridor_now", "service_metric", "decision_inputs")
+GOLD_TABLES = ("snapshots", "source_status", "corridor_now", "service_metric", "decision_inputs",
+               "service_metric_stop", "stop_ewt_band", "stop_boarding_band")
 
 
 def _gold_dump(conn) -> dict[str, list]:
     out = {}
     for table in GOLD_TABLES:
-        rows = conn.execute(f"SELECT * FROM gold.{table} ORDER BY 1").fetchall()  # noqa: S608 - fixed names
+        rows = conn.execute(f"SELECT * FROM gold.{table} ORDER BY 1, 2, 3").fetchall()  # noqa: S608 - fixed names
         out[table] = [tuple(repr(v) for v in r) for r in rows]
     return out
 

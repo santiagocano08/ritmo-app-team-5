@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from src.data.rules import RULES_VERSION
 from src.data.tests.fixtures import bronze_builders as bb
 from src.data.tests.fixtures.gold_support import cycle
 
@@ -89,7 +90,7 @@ def test_m1_without_history_is_the_reference_formula_for_all_408_rows(gold_conn)
     for (segment, hour), (value, source, n, rules_version, max_id) in m1.items():
         assert source == "reference" and n == 0
         assert abs(Decimal(value) - _m1_reference(segment, hour)) <= Decimal("0.1"), (segment, hour)
-        assert rules_version == "1.0.0" and max_id == result.max_bronze_id
+        assert rules_version == RULES_VERSION and max_id == result.max_bronze_id
 
 
 def test_m1_observed_is_the_median_of_eligible_traversals(gold_conn) -> None:
@@ -156,7 +157,7 @@ def test_m2_without_history_is_the_reference_formula_for_all_96_bands(gold_conn)
     for band, (value, source, n, stop_id, rules_version, max_id) in m2.items():
         assert (source, n, stop_id) == ("reference", 0, "P-883")
         assert value == _m2_reference(band // 4), band
-        assert rules_version == "1.0.0" and max_id == result.max_bronze_id
+        assert rules_version == RULES_VERSION and max_id == result.max_bronze_id
 
 
 def _days(b: bb.Builder, counts: list[int], start_day: int = 0, running: bool = True) -> None:

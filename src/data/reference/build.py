@@ -382,13 +382,17 @@ def build_congestion_factor(raw_dir: Path, output_dir: Path, segments_path: Path
     total_len = sum(float(r["largo_m"]) for r in seg_rows)
     free_flow = sum(float(r["v_libre_kmh"]) * float(r["largo_m"]) for r in seg_rows) / total_len
 
-    # Group SIMM VELOCIDAD by hour
+    # Group SIMM VELOCIDAD by LOCAL hour: FECHAHORA is UTC; timebands owns the single UTC-5 offset (FR-010)
     from collections import defaultdict
+    from datetime import datetime, timezone
+
+    from src.data.rules.timebands import local_hour_band
     hour_speeds: dict[int, list[float]] = defaultdict(list)
     with open(simm_path, newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
             try:
-                hour = int(row["FECHAHORA"][11:13])
+                stamp = datetime.strptime(row["FECHAHORA"][:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+                hour = local_hour_band(stamp)
                 v = float(row["VELOCIDAD"])
                 hour_speeds[hour].append(v)
             except (ValueError, IndexError, KeyError):

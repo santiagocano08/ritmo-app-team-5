@@ -16,10 +16,11 @@ INIT = ROOT / "src" / "data" / "db" / "init"
 
 TABLES = {
     "config": ["corridor_settings", "fleet_roster", "enabled_stops", "ref_stops", "ref_segments",
-               "ref_congestion_factor", "ref_demand_shape", "ref_demand_volume"],
+               "ref_congestion_factor", "ref_demand_shape", "ref_demand_volume", "seed_recommendation"],
     "silver": ["position_history", "incidents", "bus_current_state", "stop_visits", "segment_traversals"],
     "gold": ["snapshots", "source_status", "corridor_now", "decision_inputs", "service_metric",
-             "m1_baseline", "m2_baseline"],
+             "m1_baseline", "m2_baseline", "incident", "instruction_status",
+             "service_metric_stop", "stop_ewt_band", "stop_boarding_band"],
 }
 GOLD_TABLES = TABLES["gold"]
 
@@ -40,6 +41,78 @@ def test_all_tables_exist(conn) -> None:
         for name in names:
             assert conn.execute("SELECT to_regclass(%s)", (f"{schema}.{name}",)).fetchone()[0] is not None, \
                 f"{schema}.{name} missing"
+
+
+def test_incident_current_view_exists(conn) -> None:
+    """004: the view over the newest snapshot of gold.incident (init script 007)."""
+    assert conn.execute("SELECT to_regclass('gold.incident_current')").fetchone()[0] is not None
+    assert conn.execute("SELECT relkind FROM pg_class WHERE oid = 'gold.incident_current'::regclass").fetchone()[0] == "v"
+
+
+def _columns(conn, schema: str, table: str) -> dict[str, tuple]:
+    rows = conn.execute(
+        "SELECT column_name, data_type, is_nullable, column_default FROM information_schema.columns "
+        "WHERE table_schema = %s AND table_name = %s", (schema, table)).fetchall()
+    return {r[0]: (r[1], r[2], r[3]) for r in rows}
+
+
+def test_min_stop_headways_column_default_5_and_check(conn) -> None:
+    """005 E2: minimum stop headways for a computable corridor EWT."""
+    col = _columns(conn, "config", "corridor_settings")["min_stop_headways"]
+    assert col[0] == "integer" and col[1] == "NO" and col[2] == "5"
+    assert conn.execute("SELECT min_stop_headways FROM config.corridor_settings").fetchone()[0] == 5
+    with pytest.raises(psycopg.errors.CheckViolation):
+        conn.execute("UPDATE config.corridor_settings SET min_stop_headways = 0")
+    conn.rollback()
+
+
+def test_stop_visits_estimated_at_departure_and_index(conn) -> None:
+    """005 E3."""
+    col = _columns(conn, "silver", "stop_visits")["estimated_at_departure"]
+    assert col[0] == "boolean" and col[1] == "NO" and col[2] == "false"
+    idx = conn.execute("SELECT indexdef FROM pg_indexes WHERE schemaname = 'silver' "
+                       "AND indexname = 'silver_stop_visits_stop_dep_idx'").fetchone()
+    assert idx is not None and "(stop_id, departure_ts)" in idx[0]
+
+
+_SUMS = ("sum_headway_s", "sum_headway_sq_s", "sum_planned_s", "sum_planned_sq_s")
+
+
+def test_service_metric_stop_shape(conn) -> None:
+    """005 E5."""
+    cols = _columns(conn, "gold", "service_metric_stop")
+    assert set(cols) == {"snapshot_id", "stop_id", "n_headways", *_SUMS, "n_excluded", "computable",
+                         "rules_version", "max_bronze_id"}
+    assert cols["snapshot_id"][0] == "uuid" and cols["stop_id"][0] == "text"
+    assert cols["n_headways"][0] == "integer" and cols["n_excluded"][0] == "integer"
+    assert all(cols[c][0] == "numeric" for c in _SUMS) and cols["computable"][0] == "boolean"
+    assert cols["max_bronze_id"][0] == "bigint" and all(v[1] == "NO" for v in cols.values())
+    pk = [r[0] for r in conn.execute(
+        "SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) "
+        "WHERE i.indrelid = 'gold.service_metric_stop'::regclass AND i.indisprimary ORDER BY a.attname")]
+    assert pk == ["snapshot_id", "stop_id"]
+    assert conn.execute("SELECT count(*) FROM pg_constraint WHERE conrelid = 'gold.service_metric_stop'::regclass "
+                        "AND contype = 'f' AND confrelid = 'gold.snapshots'::regclass").fetchone()[0] == 1
+
+
+def test_stop_ewt_band_shape_and_checks(conn) -> None:
+    """005 E6."""
+    cols = _columns(conn, "gold", "stop_ewt_band")
+    assert set(cols) == {"local_date", "band", "stop_id", "n_headways", *_SUMS, "n_excluded",
+                         "rules_version", "max_bronze_id"}
+    assert cols["local_date"][0] == "date" and cols["band"][0] == "smallint"
+    assert all(v[1] == "NO" for v in cols.values())
+    pk = [r[0] for r in conn.execute(
+        "SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) "
+        "WHERE i.indrelid = 'gold.stop_ewt_band'::regclass AND i.indisprimary ORDER BY a.attname")]
+    assert pk == ["band", "local_date", "stop_id"]
+    insert = ("INSERT INTO gold.stop_ewt_band (local_date, band, stop_id, n_headways, sum_headway_s, sum_headway_sq_s, "
+              "sum_planned_s, sum_planned_sq_s, n_excluded, rules_version, max_bronze_id) "
+              "VALUES ('2026-11-24', %s, 'P-884', %s, 0, 0, 0, 0, 0, '1.3.0', 1)")
+    for band, n in ((96, 0), (-1, 0), (10, -1)):
+        with pytest.raises(psycopg.errors.CheckViolation):
+            conn.execute(insert, (band, n))
+        conn.rollback()
 
 
 def test_corridor_settings_seed(conn) -> None:
@@ -165,3 +238,41 @@ def test_adr_0001_has_the_ops_addendum_after_the_config_one() -> None:
            "(ingestion freshness). It holds no tables and no secrets.")
     assert ops in text
     assert text.index("a fourth schema, `config`") < text.index(ops)
+
+
+def test_stop_boarding_band_shape_and_checks(conn) -> None:
+    """005 E7."""
+    cols = _columns(conn, "gold", "stop_boarding_band")
+    assert set(cols) == {"local_date", "band", "stop_id", "n_riders", "n_board_le_5", "n_board_le_10",
+                         "n_board_le_15", "rules_version", "max_bronze_id"}
+    assert cols["local_date"][0] == "date" and cols["band"][0] == "smallint" and cols["stop_id"][0] == "text"
+    assert all(cols[c][0] == "integer" for c in ("n_riders", "n_board_le_5", "n_board_le_10", "n_board_le_15"))
+    assert cols["rules_version"][0] == "text" and cols["max_bronze_id"][0] == "bigint"
+    assert all(v[1] == "NO" for v in cols.values())
+    pk = [r[0] for r in conn.execute(
+        "SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) "
+        "WHERE i.indrelid = 'gold.stop_boarding_band'::regclass AND i.indisprimary ORDER BY a.attname")]
+    assert pk == ["band", "local_date", "stop_id"]
+    insert = ("INSERT INTO gold.stop_boarding_band (local_date, band, stop_id, n_riders, n_board_le_5, n_board_le_10, "
+              "n_board_le_15, rules_version, max_bronze_id) VALUES ('2026-11-24', %s, 'P-884', %s, %s, %s, %s, '1.4.0', 1)")
+    # column order: le_5 <= le_10 <= le_15 <= n_riders, counts >= 0, band 0..95
+    for args in ((10, 5, 4, 3, 5), (10, 5, 1, 2, 6), (10, 5, 1, 5, 4), (10, 2, 0, 1, 3), (96, 0, 0, 0, 0),
+                 (10, -1, -1, -1, -1)):
+        with pytest.raises(psycopg.errors.CheckViolation):
+            conn.execute(insert, args)
+        conn.rollback()
+    with pytest.raises(psycopg.errors.NotNullViolation):
+        conn.execute("INSERT INTO gold.stop_boarding_band (local_date, band, stop_id, n_riders, n_board_le_5, "
+                     "n_board_le_10, n_board_le_15, rules_version, max_bronze_id) "
+                     "VALUES ('2026-11-24', 10, 'P-884', 1, 0, 0, 0, NULL, 1)")
+    conn.rollback()
+
+
+def test_stop_boarding_band_view_flags(conn) -> None:
+    """005 E8: closed = band_end <= newest as_of; final = band_end + 15 min <= newest as_of; no snapshot: both false."""
+    assert conn.execute("SELECT relkind FROM pg_class WHERE oid = 'gold.stop_boarding_band_v'::regclass").fetchone()[0] == "v"
+    cols = [r[0] for r in conn.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_schema = 'gold' "
+        "AND table_name = 'stop_boarding_band_v'")]
+    assert {"local_date", "band", "stop_id", "n_riders", "n_board_le_5", "n_board_le_10", "n_board_le_15",
+            "rules_version", "max_bronze_id", "band_start_ts", "band_end_ts", "closed", "final"} <= set(cols)

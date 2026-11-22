@@ -18,7 +18,10 @@ import psycopg
 from psycopg import pq
 
 from src.data.pipeline import gold
+from src.data.pipeline.holds import build_instruction_status
+from src.data.pipeline.incidents import build_incidents
 from src.data.pipeline.silver import rebuild_silver
+from src.data.pipeline.stop_metrics import rebuild_boarding_bands, rebuild_ewt_bands
 
 CHANNEL = "gold_snapshot"
 ADVISORY_LOCK_KEY = 7_203_002  # arbitrary constant: "pulsoflota 002 gold cycle"
@@ -47,9 +50,11 @@ def _log(level: int, **fields: object) -> None:
     logger.log(level, json.dumps(fields, sort_keys=True, default=str))
 
 
-def run_cycle(conn: psycopg.Connection, as_of_ts: datetime, notify: bool = True) -> CycleResult | None:
+def run_cycle(conn: psycopg.Connection, as_of_ts: datetime, notify: bool = True,
+              untrusted_buses: frozenset[str] = frozenset()) -> CycleResult | None:
     """Run one cycle at `as_of_ts` (timezone-aware). None when another cycle holds the lock.
 
+    `untrusted_buses` are the buses the clock guard distrusts (005 US6): Estimated, no alert.
     The connection must be idle and not in autocommit mode: the cycle owns the transaction.
     """
     if as_of_ts.tzinfo is None:
@@ -64,9 +69,14 @@ def run_cycle(conn: psycopg.Connection, as_of_ts: datetime, notify: bool = True)
             _log(logging.INFO, event="cycle_skipped", reason="lock_held", as_of_ts=as_of.isoformat())
             return None
         max_id = conn.execute("SELECT coalesce(max(id), 0) FROM bronze.events").fetchone()[0]
-        rebuild_silver(conn, as_of, max_id)
+        rebuild_silver(conn, as_of, max_id, untrusted_buses)
         gold.rebuild_baselines(conn, as_of, max_id)
+        rebuild_ewt_bands(conn, as_of, max_id)  # 005: closed 15-minute bands, replaced every cycle
+        rebuild_boarding_bands(conn, as_of, max_id)  # 005 US4: P(board <= t) counts, open band included
         snap = gold.build_snapshot(conn, as_of, max_id)
+        if snap.created:
+            build_incidents(conn, snap.snapshot_id, as_of, max_id)
+        build_instruction_status(conn, as_of, max_id)  # 004: rebuilt every cycle, not per snapshot
         if snap.created and notify:
             conn.execute("SELECT pg_notify(%s, %s)", (CHANNEL, json.dumps({"snapshot_id": str(snap.snapshot_id)})))
         conn.commit()

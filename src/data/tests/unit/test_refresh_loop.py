@@ -31,19 +31,25 @@ class FakeClock:
 
 
 class FakeConn:
-    """Answers `SELECT max(event_ts) ...` with a fixed value."""
+    """Answers the per-bus newest-report query with fixed rows `(bus_id, event_ts)`.
 
-    def __init__(self, value) -> None:
-        self.value = value
+    `FakeConn(ts)` is one bus reporting at `ts`; `FakeConn(None)` is no report at all.
+    """
+
+    def __init__(self, value=None, rows=None) -> None:
+        if rows is None:
+            rows = [] if value is None else [("B-101", value)]
+        self.rows = rows
         self.sql: list[str] = []
+        self.rollbacks = 0
 
     def rollback(self) -> None:
-        pass
+        self.rollbacks += 1
 
     def execute(self, query, params=None):
         self.sql.append(query)
         cur = MagicMock()
-        cur.fetchone.return_value = (self.value,)
+        cur.fetchall.return_value = list(self.rows)
         return cur
 
 
@@ -123,14 +129,31 @@ def test_data_mode_uses_newest_non_backend_bus_report() -> None:
     newest = NOW - timedelta(hours=3)
     conn = FakeConn(newest)
     assert refresh.resolve_as_of(conn, "data", lambda: NOW) == newest
+    assert conn.rollbacks == 1
     query = conn.sql[0]
-    assert "<> 'backend'" in query
+    assert "<> 'backend'" in query and "ORDER BY" in query and "id DESC" in query  # newest by arrival, per bus
     assert "bus_position" in query and "stop_arrival" in query and "stop_departure" in query
     assert "rider_arrival" not in query and "incident" not in query
 
 
 def test_data_mode_without_bus_reports_falls_back_to_wall_clock() -> None:
     assert refresh.resolve_as_of(FakeConn(None), "data", lambda: NOW) == NOW
+
+
+def test_data_mode_returns_a_clock_decision_with_the_untrusted_buses() -> None:
+    rows = [("B-101", NOW + timedelta(days=900)), ("B-102", NOW), ("B-103", NOW - timedelta(seconds=3))]
+    decision = refresh.resolve_clock(FakeConn(rows=rows), "data", lambda: NOW + timedelta(days=1))
+    assert decision.as_of == NOW and decision.untrusted == frozenset({"B-101"})
+
+
+def test_resolve_as_of_returns_only_the_trusted_clock() -> None:
+    rows = [("B-101", NOW + timedelta(days=900)), ("B-102", NOW), ("B-103", NOW - timedelta(seconds=3))]
+    assert refresh.resolve_as_of(FakeConn(rows=rows), "data", lambda: NOW + timedelta(days=1)) == NOW
+
+
+def test_wall_mode_has_no_untrusted_bus() -> None:
+    decision = refresh.resolve_clock(FakeConn(NOW), "wall", lambda: NOW)
+    assert decision.as_of == NOW and decision.untrusted == frozenset()
 
 
 def test_wall_mode_uses_injected_clock_and_ignores_the_database() -> None:
@@ -187,20 +210,22 @@ def test_refresh_once_logs_one_json_line_with_the_cycle_fields(
     result = CycleResult(snapshot_id=__import__("uuid").UUID(int=7), as_of_ts=NOW, max_bronze_id=42,
                          status="ok", created=True)
     seen = {}
-    monkeypatch.setattr(refresh, "run_cycle", lambda conn, as_of: seen.setdefault("as_of", as_of) and result)
+    monkeypatch.setattr(refresh, "run_cycle", lambda conn, as_of, untrusted_buses=frozenset(): seen.setdefault("as_of", as_of) and result)
     clock = FakeClock(start=100.0)
     with caplog.at_level(logging.INFO, logger="pulsoflota.refresh"):
         refresh.refresh_once(FakeConn(None), "wall", time_fn=clock.time, now_fn=lambda: NOW)
     assert seen["as_of"] == NOW
     line = json.loads([r.getMessage() for r in caplog.records if "refresh_cycle" in r.getMessage()][0])
-    assert set(line) >= {"event", "snapshot_id", "as_of_ts", "max_bronze_id", "duration_ms", "status"}
+    assert set(line) >= {"event", "snapshot_id", "as_of_ts", "max_bronze_id", "duration_ms", "status",
+                         "untrusted_buses"}
+    assert line["untrusted_buses"] == []
     assert line["event"] == "refresh_cycle" and line["max_bronze_id"] == 42 and line["status"] == "ok"
     assert line["snapshot_id"] == str(result.snapshot_id)
 
 
 def test_refresh_once_logs_skip_when_lock_is_held(
         monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
-    monkeypatch.setattr(refresh, "run_cycle", lambda conn, as_of: None)
+    monkeypatch.setattr(refresh, "run_cycle", lambda conn, as_of, untrusted_buses=frozenset(): None)
     with caplog.at_level(logging.INFO, logger="pulsoflota.refresh"):
         refresh.refresh_once(FakeConn(None), "wall", time_fn=lambda: 0.0, now_fn=lambda: NOW)
     line = json.loads([r.getMessage() for r in caplog.records if "refresh_cycle" in r.getMessage()][0])
@@ -209,7 +234,7 @@ def test_refresh_once_logs_skip_when_lock_is_held(
 
 def test_refresh_once_failure_logs_class_and_correlation_id_only(
         monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
-    def boom(conn, as_of):
+    def boom(conn, as_of, untrusted_buses=frozenset()):
         raise CycleError("abc123")
 
     monkeypatch.setattr(refresh, "run_cycle", boom)
@@ -219,6 +244,47 @@ def test_refresh_once_failure_logs_class_and_correlation_id_only(
     assert line["status"] == "error" and line["error_class"] == "CycleError"
     assert line["correlation_id"] == "abc123"
     assert "Traceback" not in json.dumps(line)
+
+
+def _guard_fixture(monkeypatch: pytest.MonkeyPatch, seen: dict) -> None:
+    result = CycleResult(snapshot_id=__import__("uuid").UUID(int=7), as_of_ts=NOW, max_bronze_id=1,
+                         status="ok", created=True)
+
+    def fake(conn, as_of, untrusted_buses=frozenset()):
+        seen["untrusted"] = untrusted_buses
+        return result
+
+    monkeypatch.setattr(refresh, "run_cycle", fake)
+
+
+def test_untrusted_buses_reach_the_cycle_and_the_log_line_sorted(
+        monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    seen: dict = {}
+    _guard_fixture(monkeypatch, seen)
+    rows = [("B-102", NOW + timedelta(days=900)), ("B-101", NOW + timedelta(days=800)),
+            ("B-103", NOW), ("B-104", NOW), ("B-105", NOW)]
+    with caplog.at_level(logging.INFO, logger="pulsoflota.refresh"):
+        refresh.refresh_once(FakeConn(rows=rows), "data", time_fn=lambda: 0.0, now_fn=lambda: NOW,
+                             guard_state={"untrusted": frozenset()})
+    assert seen["untrusted"] == frozenset({"B-101", "B-102"})
+    line = json.loads([r.getMessage() for r in caplog.records if '"refresh_cycle"' in r.getMessage()][0])
+    assert line["untrusted_buses"] == ["B-101", "B-102"]
+
+
+def test_clock_guard_warning_is_written_only_when_the_set_changes(
+        monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    _guard_fixture(monkeypatch, {})
+    state = {"untrusted": frozenset()}
+    bad = [("B-101", NOW + timedelta(days=900)), ("B-102", NOW), ("B-103", NOW)]
+    good = [("B-101", NOW), ("B-102", NOW), ("B-103", NOW)]
+    with caplog.at_level(logging.INFO, logger="pulsoflota.refresh"):
+        for rows in (good, bad, bad, good):
+            refresh.refresh_once(FakeConn(rows=rows), "data", time_fn=lambda: 0.0, now_fn=lambda: NOW,
+                                 guard_state=state)
+    warnings = [json.loads(r.getMessage()) for r in caplog.records
+                if r.levelno == logging.WARNING and "clock_guard" in r.getMessage()]
+    assert [w["untrusted_buses"] for w in warnings] == [["B-101"], []]
+    assert all(set(w) == {"event", "untrusted_buses"} for w in warnings)  # no payloads, no secrets
 
 
 def test_json_formatter_passes_json_through_and_wraps_text() -> None:

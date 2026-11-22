@@ -11,7 +11,8 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[4]
-SCANNED = [ROOT / "src" / "data" / "rules", ROOT / "src" / "data" / "pipeline", ROOT / "src" / "data" / "refresh"]
+SCANNED = [ROOT / "src" / "data" / "rules", ROOT / "src" / "data" / "pipeline", ROOT / "src" / "data" / "refresh",
+           ROOT / "src" / "data" / "simulator"]
 
 WRITE = re.compile(
     r"\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?(?:\s+ONLY)?)\s+(?:\"?bronze\"?\s*\.)",

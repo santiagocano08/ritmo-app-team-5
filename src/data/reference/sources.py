@@ -31,7 +31,7 @@ REGISTRY: list[SourceEntry] = [
         license="Uso interno / Internal use",
         download_date="2026-11-17",
         transformation=(
-            "Grouped FECHAHORA by UTC hour; computed mean(VELOCIDAD) per hour. "
+            "FECHAHORA is UTC and is converted to the local hour (UTC-5) before grouping; computed mean(VELOCIDAD) per local hour. "
             "Corridor free-flow speed = length-weighted mean of v_libre_kmh across "
             "17 segments from tramos_c6008_s1_osm.csv. "
             "congestion_factor[h] = mean(VELOCIDAD[h]) / free_flow_speed. "

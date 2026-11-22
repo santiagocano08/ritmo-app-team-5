@@ -34,7 +34,7 @@ RAW_DIR = REPO_ROOT / "data" / "raw"
 
 # Skip all tests if raw sources are not present (the build requires them).
 # In CI without raw data, these are skipped — not failed.
-pytestmark = pytest.mark.skipif(
+requires_raw = pytest.mark.skipif(
     not RAW_DIR.exists() or not any(RAW_DIR.iterdir()),
     reason="data/raw/ sources not present — skipping reference build tests",
 )
@@ -67,6 +67,7 @@ def _run_build(output_dir: Path) -> None:
         )
 
 
+@requires_raw
 class TestBuildDeterminism:
     """FR-001, SC-007: two rebuilds are byte-identical."""
 
@@ -87,6 +88,7 @@ class TestBuildDeterminism:
         )
 
 
+@requires_raw
 class TestBuildSize:
     """FR-001: total reference size < 1 MB."""
 
@@ -101,6 +103,7 @@ class TestBuildSize:
         )
 
 
+@requires_raw
 class TestSegments:
     """FR-002: exactly 17 direction-1 segments."""
 
@@ -129,6 +132,7 @@ class TestSegments:
             assert col in cols, f"segments.csv missing column '{col}'"
 
 
+@requires_raw
 class TestCongestionFactor:
     """FR-005 (M2 fix): 24 rows; 0.43–0.56 is a sanity BAND (warn, keep computed).
 
@@ -196,6 +200,7 @@ class TestCongestionFactor:
             assert isinstance(val, float)
 
 
+@requires_raw
 class TestSourcesMd:
     """FR-007: SOURCES.md has one line per output file."""
 
@@ -223,6 +228,7 @@ class TestSourcesMd:
             )
 
 
+@requires_raw
 class TestStops:
     """FR-003, FR-008, R6: real stop ids in P-<objectid> format."""
 
@@ -276,6 +282,7 @@ class TestStops:
             assert col in cols, f"stops.csv missing column '{col}'"
 
 
+@requires_raw
 class TestMissingRawSource:
     """Edge case: build fails with a named message when a raw source is missing."""
 
@@ -308,6 +315,7 @@ class TestMissingRawSource:
         )
 
 
+@requires_raw
 class TestDemandVolume:
     """Data fix: direction-1 daily demand derived from raw data (triangulation step A)."""
 
@@ -321,3 +329,72 @@ class TestDemandVolume:
         assert (rows[0]["stops_basin6"], rows[0]["stops_prado"], rows[0]["stops_c6008"]) == (
             "1191", "343", "35")
         assert "demand_volume.csv" in (out / "SOURCES.md").read_text()
+
+
+class TestCommittedCongestionFactor:
+    """US1 (FR-010, FR-011, SC-001): the committed CSV is on the local hour. Runs in CI without data/raw/."""
+
+    def _rows(self):
+        with open(REFERENCE_DIR / "congestion_factor.csv", newline="") as f:
+            return {int(r["hour"]): float(r["congestion_factor"]) for r in csv.DictReader(f)}
+
+    def test_24_hours_and_anchors(self):
+        rows = self._rows()
+        assert sorted(rows) == list(range(24))
+        assert rows[17] == 0.4816
+        assert min(rows, key=rows.get) == 18 and rows[18] == 0.4575
+        assert max(rows, key=rows.get) == 3 and rows[3] == 0.5656
+
+
+@requires_raw
+class TestCongestionFactorLocalHour:
+    """US1: factors equal the raw SIMM file grouped by UTC hour - 5 (independent recomputation)."""
+
+    def test_build_matches_independent_recomputation(self, tmp_path):
+        from collections import defaultdict
+        from datetime import datetime, timedelta, timezone
+
+        with open(RAW_DIR / "plata" / "tramos_c6008_s1_osm.csv", newline="", encoding="utf-8") as f:
+            segs = list(csv.DictReader(f))
+        total = sum(float(r["largo_m"]) for r in segs)
+        free = sum(float(r["v_libre_kmh"]) * float(r["largo_m"]) for r in segs) / total
+        by_hour = defaultdict(list)
+        with open(RAW_DIR / "plata" / "simm_corredor_c6008.csv", newline="", encoding="utf-8") as f:
+            for r in csv.DictReader(f):
+                try:
+                    ts = datetime.strptime(r["FECHAHORA"][:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+                    v = float(r["VELOCIDAD"])
+                except (ValueError, KeyError):
+                    continue
+                by_hour[(ts - timedelta(hours=5)).hour].append(v)
+        expected = {h: round(sum(v) / len(v) / free, 4) for h, v in by_hour.items()}
+
+        out = tmp_path / "out"
+        out.mkdir()
+        _run_build(out)
+        with open(out / "congestion_factor.csv", newline="") as f:
+            got = {int(r["hour"]): float(r["congestion_factor"]) for r in csv.DictReader(f)}
+        assert set(expected) == set(range(24))
+        assert max(abs(got[h] - expected[h]) for h in range(24)) == 0
+
+    def test_hour_without_data_uses_overall_mean(self, tmp_path):
+        import warnings
+
+        from src.data.reference.build import build_congestion_factor
+
+        raw = tmp_path / "raw" / "plata"
+        raw.mkdir(parents=True)
+        (raw / "tramos_c6008_s1_osm.csv").write_text("largo_m,v_libre_kmh\n100,50\n")
+        (raw / "simm_corredor_c6008.csv").write_text(
+            "FECHAHORA,VELOCIDAD\n2021-01-01T15:00:00.000Z,20.0\n2021-01-01T16:00:00.000Z,30.0\n"
+        )
+        out = tmp_path / "o"
+        out.mkdir()
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            build_congestion_factor(tmp_path / "raw", out, out / "segments.csv")
+        with open(out / "congestion_factor.csv", newline="") as f:
+            got = {int(r["hour"]): float(r["congestion_factor"]) for r in csv.DictReader(f)}
+        assert got[10] == 0.4 and got[11] == 0.6  # 15Z and 16Z are local 10 and 11
+        assert got[0] == 0.5  # overall mean 25 / 50
+        assert any("No SIMM data" in str(x.message) for x in w)

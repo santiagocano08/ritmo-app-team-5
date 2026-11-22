@@ -57,8 +57,15 @@ class Bus:
         return f"C6-008-{self.bus_id}-{self.trip_n:03d}"
 
 
+def sim_start(start_hour: int = 17) -> datetime:
+    """UTC instant of simulated second 0 (used by the D1 channel layer, 004)."""
+    return datetime(*SIM_DATE, start_hour, tzinfo=LOCAL_TZ).astimezone(timezone.utc)
+
+
 def run(seed: int, duration: int, start_hour: int = 17, demand_scale: float = 1.0,
-        ref: Reference | None = None) -> Iterator[dict]:
+        ref: Reference | None = None, hooks=None, holds=None) -> Iterator[dict]:
+    """`hooks` (004): optional scenario hooks; `holds` (004): optional hold board.
+    `None` for both runs exactly the baseline statements."""
     ref = ref or load_reference()
     rng = random.Random(seed)
     base = datetime(*SIM_DATE, start_hour, tzinfo=LOCAL_TZ)
@@ -96,6 +103,9 @@ def run(seed: int, duration: int, start_hour: int = 17, demand_scale: float = 1.
 
     for b in buses:
         start_trip(b, 0)
+
+    if hooks is not None:
+        hooks.bind(lambda ts: (base + timedelta(seconds=ts)).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
 
     for t in range(0, duration, STEP_S):
         hour = hour_of(t)
@@ -135,28 +145,33 @@ def run(seed: int, duration: int, start_hour: int = 17, demand_scale: float = 1.
             out.append(env("rider_arrival", ts, payload))
 
         # 4. Buses
+        if hooks is not None:
+            hooks.on_step(t, buses, out, env)
         for b in buses:
-            if b.phase == "driving":
+            halted = hooks is not None and hooks.halted(b, t)
+            if b.phase == "driving" and not halted:
                 b.drive_t += STEP_S
                 target = b.profile.time_at(ref.stops[b.next_idx].distance_m)
                 if b.drive_t >= target:
                     b.drive_t, b.idx = target, b.next_idx
-                    _arrive(b, t, ref, queues, last, out, env)
+                    _arrive(b, t, ref, queues, last, out, env, hooks, holds)
             if b.phase == "layover" and t >= b.phase_end:
                 b.trip_n += 1
                 start_trip(b, t)
                 b.phase, b.start_at = "waiting", t
             if b.phase == "waiting" and t >= b.start_at:
-                _arrive(b, t, ref, queues, last, out, env)
+                _arrive(b, t, ref, queues, last, out, env, hooks, holds)
             elif b.phase == "dwell" and t >= b.phase_end:
                 boarded, alighted, rejected, occ_in = b.pending
                 out.append(env("stop_departure", t, _stop_payload(b, ref, boarded, alighted, rejected, len(b.load))))
+                if hooks is not None:
+                    hooks.on_departure(b, t, ref.stops[b.idx].stop_id)
                 if b.idx == last:
                     # R14: next trip leaves P-883 at its scheduled time, or now if already late
                     b.phase, b.phase_end = "layover", max(t, b.first_start + b.trip_n * cycle)
                 else:
                     b.phase, b.next_idx = "driving", b.idx + 1
-            out.append(env("bus_position", t, _position_payload(b, ref)))
+            out.append(env("bus_position", t, _position_payload(b, ref, halted)))
 
         yield from out
 
@@ -166,7 +181,8 @@ def _stop_payload(b: Bus, ref: Reference, boarded: int, alighted: int, rejected:
             "boarded": boarded, "alighted": alighted, "rejected": rejected, "occupancy": occupancy}
 
 
-def _arrive(b: Bus, t: int, ref: Reference, queues: list[deque], last: int, out: list[dict], env) -> None:
+def _arrive(b: Bus, t: int, ref: Reference, queues: list[deque], last: int, out: list[dict], env,
+            hooks=None, holds=None) -> None:
     occ_in = len(b.load)
     staying = [r for r in b.load if b.idx != last and r.dest_idx != b.idx]
     alighted = occ_in - len(staying)
@@ -180,11 +196,17 @@ def _arrive(b: Bus, t: int, ref: Reference, queues: list[deque], last: int, out:
     out.append(env("stop_arrival", t, _stop_payload(b, ref, nb, alighted, rejected, occ_in)))
     b.pending = (nb, alighted, rejected, occ_in)
     b.phase, b.phase_end = "dwell", t + dwell_s(nb, alighted)
+    if hooks is not None:
+        b.phase_end += hooks.dwell_extra(b, t, ref.stops[b.idx].stop_id)
+    if holds is not None:
+        b.phase_end = holds.dwell_end(b.bus_id, t, ref.stops[b.idx].stop_id, b.phase_end)
 
 
-def _position_payload(b: Bus, ref: Reference) -> dict:
+def _position_payload(b: Bus, ref: Reference, halted: bool = False) -> dict:
     if b.phase == "driving":
         dist, speed = b.profile.pos_at(b.drive_t)
+        if halted:
+            speed = 0.0  # broken down on the road (004 C5): still reporting, not moving
     else:
         dist, speed = ref.stops[b.idx].distance_m, 0.0
     return {"bus_id": b.bus_id, "operator": OPERATOR, "trip_id": b.trip_id, "direction": 1,

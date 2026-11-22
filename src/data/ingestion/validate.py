@@ -52,8 +52,12 @@ def _reason_for(error: dict[str, Any]) -> str:
     return "value_out_of_range"
 
 
-def validate_envelope(message: Any) -> ValidationResult:
-    """Validate one decoded message; never raises for bad input."""
+def validate_envelope(message: Any, route_end_m: float | None = None) -> ValidationResult:
+    """Validate one decoded message; never raises for bad input.
+
+    `route_end_m` (005 US5): when given, a `bus_position` beyond it is rejected as `value_out_of_range`.
+    None means the bound is unreadable and the event is accepted (contracts/guards.md G1).
+    """
     if not isinstance(message, dict):
         return ValidationResult(False, "wrong_type", detail="message is not a JSON object")
 
@@ -71,4 +75,7 @@ def validate_envelope(message: Any) -> ValidationResult:
         first = exc.errors()[0]
         loc = ".".join(str(p) for p in first.get("loc", ()))
         return ValidationResult(False, _reason_for(first), detail=f"{loc}: {first.get('msg', '')}")
+    root = envelope.root
+    if route_end_m is not None and root.event_type == "bus_position" and root.payload.distance_along_m > route_end_m:
+        return ValidationResult(False, "value_out_of_range", detail="payload.distance_along_m: beyond the route end")
     return ValidationResult(True, envelope=envelope)

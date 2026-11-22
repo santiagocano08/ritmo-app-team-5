@@ -18,10 +18,10 @@ from psycopg.types.json import Jsonb
 from src.pulsoflota.models.read.corridor_now import CorridorNowV100
 from src.pulsoflota.models.read.decision_inputs import DecisionInputsV100
 from src.pulsoflota.models.read.source_status import SourceStatusV100
+from src.data.pipeline.stop_metrics import insert_snapshot_rows
 from src.data.rules import RULES_VERSION
 from src.data.rules.classify import classify_buses, corridor_status, summarize
 from src.data.rules.headway import BusObs, compute_headways, order_buses
-from src.data.rules.service_metric import service_metric
 from src.data.rules.snapshot_id import snapshot_id as make_snapshot_id
 from src.data.rules.timebands import local_hour_band, m2_band, next_window
 
@@ -73,7 +73,7 @@ def build_snapshot(conn: psycopg.Connection, as_of_ts: datetime, max_bronze_id: 
 
         settings = cur.execute(
             "SELECT corridor_id, direction, headway_planned_s, drivers_free, hold_penalty_s, "
-            "early_departure_penalty_s FROM config.corridor_settings").fetchone()
+            "early_departure_penalty_s, min_stop_headways FROM config.corridor_settings").fetchone()
         planned = float(settings["headway_planned_s"])
         state_rows = cur.execute(
             "SELECT bus_id, distance_along_m, position_ts, prev_stop_id, next_stop_id, last_report_ts, "
@@ -88,15 +88,26 @@ def build_snapshot(conn: psycopg.Connection, as_of_ts: datetime, max_bronze_id: 
         for r in history_rows:
             history.setdefault(r["bus_id"], []).append((_utc(r["event_ts"]), float(r["distance_along_m"])))
 
+        # Departure from the first stop on the trip each bus is positioned on (US2, research R3): a bus waiting at
+        # the terminal reports the same distance until it leaves, so the headway counts from the departure.
+        origin = cur.execute("SELECT distance_along_m FROM config.ref_stops WHERE stop_seq = 1").fetchone()
+        origin_m = float(origin["distance_along_m"]) if origin else 0.0
+        departure_rows = cur.execute(
+            "SELECT s.bus_id, v.departure_ts FROM silver.bus_current_state s "
+            "JOIN silver.stop_visits v ON v.bus_id = s.bus_id AND v.trip_id = s.position_trip_id "
+            "JOIN config.ref_stops r ON r.stop_id = v.stop_id AND r.stop_seq = 1 WHERE s.on_corridor").fetchall()
+        first_departure = {r["bus_id"]: _utc(r["departure_ts"]) for r in departure_rows}
+
         on_corridor = [r for r in state_rows if r["on_corridor"] and r["distance_along_m"] is not None]
         by_id = {r["bus_id"]: r for r in on_corridor}
         ordered = order_buses([
             BusObs(bus_id=r["bus_id"], distance_along_m=float(r["distance_along_m"]),
                    position_ts=_utc(r["position_ts"]), history=tuple(history.get(r["bus_id"], ())),
                    estimated=r["data_quality"] == "estimated",
-                   broken_down=r["operational_status"] == "broken_down")
+                   broken_down=r["operational_status"] == "broken_down",
+                   departure_ts=first_departure.get(r["bus_id"]))
             for r in on_corridor])
-        headways = compute_headways(ordered)
+        headways = compute_headways(ordered, origin_m)
         states = classify_buses(ordered, headways, planned)
         in_service, n_bunched, n_gaps = summarize(states)
 
@@ -124,8 +135,6 @@ def build_snapshot(conn: psycopg.Connection, as_of_ts: datetime, max_bronze_id: 
                 "ts": b.position_ts} for b in ordered],
             "summary": {"buses_in_service": in_service, "n_bunched": n_bunched, "n_gaps": n_gaps}})
 
-        metric = service_metric([h.seconds for h in headways.values() if h.seconds is not None], planned)
-
         decision_inputs = _decision_inputs(cur, sid, as_of, settings, corridor_now,
                                            {r["bus_id"] for r in on_corridor})
 
@@ -142,6 +151,9 @@ def build_snapshot(conn: psycopg.Connection, as_of_ts: datetime, max_bronze_id: 
             "INSERT INTO gold.decision_inputs (snapshot_id, doc, rules_version, max_bronze_id) "
             "VALUES (%s, %s, %s, %s)",
             (sid, Jsonb(decision_inputs.model_dump(mode="json")), *lineage))
+        # EWT from stop headways (005 US3): per-stop rows first, then the corridor row from their sums.
+        metric = insert_snapshot_rows(cur, sid, as_of, settings["headway_planned_s"],
+                                      settings["min_stop_headways"], max_bronze_id)
         cur.execute(
             "INSERT INTO gold.service_metric (snapshot_id, n_headways, mean_wait_s, scheduled_wait_s, ewt_s, "
             "computable, rules_version, max_bronze_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",

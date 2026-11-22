@@ -22,6 +22,7 @@ class BusObs:
     history: tuple[tuple[datetime, float], ...]
     estimated: bool = False
     broken_down: bool = False
+    departure_ts: datetime | None = None  # departure from the first stop on the position trip (US2)
 
 
 @dataclass(frozen=True)
@@ -38,12 +39,27 @@ def order_buses(buses: Sequence[BusObs]) -> list[BusObs]:
     return sorted(buses, key=lambda b: (-b.distance_along_m, b.bus_id))
 
 
-def pass_time(history: History, distance_m: float) -> datetime | None:
+def pass_time(history: History, distance_m: float, origin_m: float = 0.0,
+              departure_ts: datetime | None = None) -> datetime | None:
     """Moment the bus first reached `distance_m`, interpolated linearly between samples.
 
     The first sample at or past the distance gives the time; when it is the first sample of
     the trip its own time is used. None when no sample reaches the distance.
+
+    At or below the origin the bus waits there reporting the same distance, so the first sample is when
+    it started waiting, not when it left. The departure is used when known; otherwise the last sample at
+    or below the origin, provided a later sample shows the bus has left; otherwise None (no evidence).
     """
+    if distance_m <= origin_m:
+        if departure_ts is not None:
+            return departure_ts
+        last_at_origin: datetime | None = None
+        for ts, dist in history:
+            if dist <= origin_m:
+                last_at_origin = ts
+            elif last_at_origin is not None:
+                return last_at_origin
+        return None
     previous: tuple[datetime, float] | None = None
     for ts, dist in history:
         if dist >= distance_m:
@@ -56,22 +72,28 @@ def pass_time(history: History, distance_m: float) -> datetime | None:
 
 
 def headway_s(follower_distance_m: float, follower_ts: datetime, ahead_distance_m: float,
-              ahead_history: History, ahead_ts: datetime | None = None) -> float:
+              ahead_history: History, ahead_ts: datetime | None = None,
+              ahead_departure_ts: datetime | None = None, origin_m: float = 0.0) -> float | None:
     """Seconds between the bus ahead passing the follower's distance and the follower's position time.
 
     Equal distances give exactly 0; a negative difference (stale follower) is clamped to 0
     (R8, decided). Without usable history the bus ahead's own position time is used.
+    None means no evidence (the leader has not left the origin yet): never an exception, never negative.
     """
     if follower_distance_m == ahead_distance_m:
         return 0.0
-    passed = pass_time(ahead_history, follower_distance_m) or ahead_ts
-    if passed is None:
-        return 0.0
+    passed = pass_time(ahead_history, follower_distance_m, origin_m, ahead_departure_ts)
+    if follower_distance_m > origin_m:
+        passed = passed or ahead_ts
+        if passed is None:
+            return 0.0  # unchanged behaviour above the origin
+    elif passed is None:
+        return None
     seconds = (follower_ts - passed) / timedelta(seconds=1)
     return round(max(0.0, seconds), 3)
 
 
-def compute_headways(ordered: Sequence[BusObs]) -> dict[str, Headway]:
+def compute_headways(ordered: Sequence[BusObs], origin_m: float = 0.0) -> dict[str, Headway]:
     """Headway of every bus in `ordered` (leader first) to the nearest operational bus ahead."""
     result: dict[str, Headway] = {}
     nearest_ahead: BusObs | None = None
@@ -83,7 +105,8 @@ def compute_headways(ordered: Sequence[BusObs]) -> dict[str, Headway]:
             result[bus.bus_id] = Headway(None, None)
         else:
             seconds = headway_s(bus.distance_along_m, bus.position_ts, nearest_ahead.distance_along_m,
-                                nearest_ahead.history, nearest_ahead.position_ts)
-            result[bus.bus_id] = Headway(seconds, nearest_ahead.bus_id)
+                                nearest_ahead.history, nearest_ahead.position_ts,
+                                nearest_ahead.departure_ts, origin_m)
+            result[bus.bus_id] = Headway(seconds, nearest_ahead.bus_id if seconds is not None else None)
         nearest_ahead = bus
     return result

@@ -21,7 +21,7 @@ generate:
 # Regenerate the Pydantic V2 models of the three gold read objects (research R9).
 # One module per schema under src/pulsoflota/models/read/. Never hand-edited;
 # running it twice must leave `git diff` empty.
-READ_SCHEMAS := source_status corridor_now decision_inputs
+READ_SCHEMAS := source_status corridor_now decision_inputs incident recommendation
 generate-read:
 	mkdir -p src/pulsoflota/models/read
 	touch src/pulsoflota/models/read/__init__.py

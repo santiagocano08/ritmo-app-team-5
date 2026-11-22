@@ -35,11 +35,12 @@ def _prepare(conn) -> None:
 
 
 def _recreate_silver(conn: psycopg.Connection) -> None:
-    """Drop every silver table and recreate it from src/data/db/init/004_silver.sql."""
+    """Drop every silver table and recreate it from 004_silver.sql plus the 005 column of 008 (idempotent)."""
     for table in SILVER_TABLES:
         conn.execute(f"DROP TABLE silver.{table}")  # noqa: S608 - fixed names
     from src.data.tests.db_helpers import INIT_DIR
     conn.execute((INIT_DIR / "004_silver.sql").read_text(encoding="utf-8"))
+    conn.execute((INIT_DIR / "008_data_fixes_metrics.sql").read_text(encoding="utf-8"))
     conn.commit()
 
 
@@ -150,19 +151,34 @@ def test_dropping_silver_and_gold_and_recomputing_gives_the_same_snapshot(gold_c
         for t in baselines:
             out[t] = [tuple(repr(v) for v in r) for r in gold_conn.execute(
                 f"SELECT * FROM gold.{t} ORDER BY 1, 2").fetchall()]  # noqa: S608
+        for t in ("service_metric_stop", "stop_ewt_band", "stop_boarding_band"):  # 005: all rows of the snapshot / of the closed bands
+            out[t] = sorted(tuple(repr(v) for v in r) for r in gold_conn.execute(
+                f"SELECT * FROM gold.{t}" + (" WHERE snapshot_id = %s" if t == "service_metric_stop" else ""),  # noqa: S608
+                (snap,) if t == "service_metric_stop" else ()).fetchall())
+        out["incident"] = [tuple(repr(v) for v in r) for r in gold_conn.execute(
+            "SELECT * FROM gold.incident WHERE snapshot_id = %s ORDER BY 1, 2", (snap,)).fetchall()]
         return out
 
     before = last_state()
-    assert all(before[t] for t in gold_tables + baselines)
+    assert all(before[t] for t in gold_tables + baselines + ("service_metric_stop", "stop_ewt_band", "stop_boarding_band"))
     last_as_of_s = 30 * 60
 
     gold_conn.commit()
+    # 004: gold.incident references gold.snapshots, so it goes first and its init script is replayed
+    gold_conn.execute("DROP VIEW gold.incident_current")
+    gold_conn.execute("DROP TABLE gold.incident")
+    gold_conn.execute("DROP TABLE gold.service_metric_stop")  # 005: references gold.snapshots
+    gold_conn.execute("DROP TABLE gold.stop_ewt_band")
+    gold_conn.execute("DROP VIEW gold.stop_boarding_band_v")
+    gold_conn.execute("DROP TABLE gold.stop_boarding_band")
     for t in baselines + tuple(reversed(gold_tables)):
         gold_conn.execute(f"DROP TABLE gold.{t}")  # noqa: S608 - fixed names
     for t in SILVER_TABLES:
         gold_conn.execute(f"DROP TABLE silver.{t}")  # noqa: S608 - fixed names
     gold_conn.execute((INIT_DIR / "004_silver.sql").read_text(encoding="utf-8"))
     gold_conn.execute((INIT_DIR / "005_gold.sql").read_text(encoding="utf-8"))
+    gold_conn.execute((INIT_DIR / "007_scenarios.sql").read_text(encoding="utf-8"))
+    gold_conn.execute((INIT_DIR / "008_data_fixes_metrics.sql").read_text(encoding="utf-8"))
     gold_conn.commit()
 
     result = cycle(gold_conn, last_as_of_s)

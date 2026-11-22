@@ -78,8 +78,12 @@ def test_gold_ignores_waiting_buses_for_ahead_summary_and_metric(gold_conn) -> N
     assert 300 <= buses[1]["headway_ahead_s"] <= 900
     assert [b["bus_state"] for b in buses] == ["leader", "regular"]
     assert d["corridor_now"]["summary"] == {"buses_in_service": 2, "n_bunched": 0, "n_gaps": 0}
-    assert gold_conn.execute("SELECT n_headways FROM gold.service_metric WHERE snapshot_id = %s",
-                             (result.snapshot_id,)).fetchone()[0] == 1
+    # 005: the metric is measured at stops from departures. Waiting buses have none, and this timeline has
+    # departures without arrivals (no stop visit), so nothing is measured: not computable, no value, not 0.
+    assert gold_conn.execute("SELECT n_headways, ewt_s, computable FROM gold.service_metric WHERE snapshot_id = %s",
+                             (result.snapshot_id,)).fetchone() == (0, None, False)
+    assert gold_conn.execute("SELECT count(*) FROM gold.service_metric_stop WHERE snapshot_id = %s AND "
+                             "(n_headways <> 0 OR computable)", (result.snapshot_id,)).fetchone()[0] == 0
     # The silent waiting bus is still a silent source.
     assert d["source_status"]["status"] == "estimated"
     assert [s["bus_id"] for s in d["source_status"]["sources_down"]] == ["B-105"]

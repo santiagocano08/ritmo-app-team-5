@@ -1,5 +1,10 @@
 """Helpers shared by the silver integration tests (002, Phase 1).
 
+An open-ended incident has `end_ts = 'infinity'` (004 R6), which psycopg cannot load
+(`DataError: timestamp too large`): `incidents()` therefore returns `end_ts` as None for such a row
+and flags it with `open_ended`. `dump()` selects every column, so it is only used on bronze
+without open-ended incidents.
+
 `at(t)` turns seconds after the simulated start into a UTC datetime; `build` runs the silver
 rebuild with `M = max(bronze.events.id)` the way the cycle does (research R4); `dump` returns an
 ordered, comparable copy of every silver table.
@@ -59,4 +64,8 @@ def traversals(conn: psycopg.Connection) -> list[dict]:
 
 
 def incidents(conn: psycopg.Connection) -> list[dict]:
-    return _dicts(conn, "SELECT * FROM silver.incidents ORDER BY start_ts, inc_id")
+    return _dicts(
+        conn,
+        "SELECT inc_id, incident_type, target_id, start_ts, "
+        "CASE WHEN isfinite(end_ts) THEN end_ts END AS end_ts, NOT isfinite(end_ts) AS open_ended, "
+        "reported_by, source, bronze_id FROM silver.incidents ORDER BY start_ts, inc_id")
