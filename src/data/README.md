@@ -14,6 +14,7 @@
 | `pipeline/` | Silver rebuild, gold snapshot and the `compute` CLI. |
 | `refresh/` | Gold refresh loop and its freshness healthcheck. |
 | `tests/` | Data tests (`unit/`, `integration/`, `contract/`, `fixtures/`). |
+| `sim_console/` | Local simulation console for the data team (isolated `pfsim` stack, demo presets); see its README. |
 
 Shared code stays in `src/pulsoflota/` (config, DB connection, generated contract models);
 the backend is in `src/api/`.

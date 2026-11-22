@@ -59,3 +59,7 @@ drill-out/
 !docs/ops/drill-baseline/*.log
 # Workflow run artifacts (reports, review verdicts); throwaway, per-run scratch
 .agents/
+
+# Data simulation console (src/data/sim_console): local secrets and run history
+src/data/sim_console/.pfsim.env
+src/data/sim_console/runs/

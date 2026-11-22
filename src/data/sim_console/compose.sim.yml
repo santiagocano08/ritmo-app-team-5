@@ -1,0 +1,12 @@
+# Overlay for the local simulation console: mounts the scenario fixtures (the image excludes
+# src/data/tests/) and runs the simulator once instead of restarting it when the day ends.
+services:
+  ingestion:
+    restart: "no"
+    volumes:
+      - ./src/data/tests/fixtures/scenarios:/scn:ro
+  # The frontend's nginx proxies to api:8000 (fixed), so the pfsim api listens on 8000 inside
+  # the network and is published on host port 58100 to avoid the main stack's 8000.
+  api:
+    ports: !override
+      - "58100:8000"
