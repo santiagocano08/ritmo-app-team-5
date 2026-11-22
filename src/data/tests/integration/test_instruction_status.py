@@ -217,7 +217,7 @@ def test_lineage_columns_and_table_shape(conn) -> None:
     visit(conn, 1650, 1740)
     result = cycle(conn, 1800)
     rv, mx = conn.execute("SELECT rules_version, max_bronze_id FROM gold.instruction_status").fetchone()
-    assert rv == "1.4.0" and mx == result.max_bronze_id
+    assert rv == "1.5.0" and mx == result.max_bronze_id
     pk = conn.execute("SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid "
                       "AND a.attnum = ANY(i.indkey) WHERE i.indrelid = 'gold.instruction_status'::regclass "
                       "AND i.indisprimary").fetchall()

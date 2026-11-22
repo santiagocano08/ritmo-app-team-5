@@ -17,6 +17,7 @@ from typing import Any
 import psycopg
 from psycopg.types.json import Jsonb
 
+from src.data.ingestion import route_bounds
 from src.data.ingestion.validate import validate_envelope
 
 _INSERT_EVENT = """
@@ -48,9 +49,21 @@ def _reject(conn: psycopg.Connection, message: Any, reason: str) -> IngestResult
     return IngestResult(False, reason)
 
 
-def ingest(conn: psycopg.Connection, message: Any) -> IngestResult:
-    """Validate one decoded message and land it in bronze or bronze.rejections."""
-    result = validate_envelope(message)
+def _route_end(conn: psycopg.Connection, message: Any, bounds: "route_bounds.RouteBounds") -> float | None:
+    """The route end, read only for a `bus_position` (other events never touch the bound)."""
+    if isinstance(message, dict) and message.get("event_type") == "bus_position":
+        return bounds.get(conn)
+    return None
+
+
+def ingest(conn: psycopg.Connection, message: Any,
+           bounds: "route_bounds.RouteBounds | None" = None) -> IngestResult:
+    """Validate one decoded message and land it in bronze or bronze.rejections.
+
+    A `bus_position` beyond the route end is rejected as `value_out_of_range` (005 US5).
+    """
+    bounds = bounds or route_bounds.DEFAULT
+    result = validate_envelope(message, _route_end(conn, message, bounds))
     if not result.ok:
         return _reject(conn, message, result.reason or "wrong_type")
 

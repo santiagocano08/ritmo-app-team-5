@@ -20,6 +20,8 @@ import psycopg
 from src.data.pipeline.cycle import CycleError, run_cycle
 from src.data.pipeline.reference import load_reference
 from src.data.pipeline.seeds import load_seeds
+from src.data.rules import ESTIMATED_AFTER_S
+from src.data.rules.clock import ClockDecision, trusted_clock
 from src.pulsoflota.config import get_db_dsn, get_log_level
 
 log = logging.getLogger("pulsoflota.refresh")
@@ -28,6 +30,13 @@ DEFAULT_INTERVAL_S = 5.0
 _NEWEST_BUS_REPORT = (
     "SELECT max(event_ts) FROM bronze.events "
     "WHERE event_type IN ('bus_position', 'stop_arrival', 'stop_departure') AND source <> 'backend'")
+# 005 US6: per bus, the event_ts of its newest report by arrival (largest bronze id).
+_LATEST_BY_BUS = (
+    "SELECT DISTINCT ON (payload->>'bus_id') payload->>'bus_id' AS bus_id, event_ts FROM bronze.events "
+    "WHERE event_type IN ('bus_position', 'stop_arrival', 'stop_departure') AND source <> 'backend' "
+    "ORDER BY payload->>'bus_id', id DESC")
+# What the last cycle logged as untrusted, so the clock_guard WARNING is written only when the set changes.
+_GUARD_STATE: dict = {"untrusted": frozenset()}
 
 
 class JsonFormatter(logging.Formatter):
@@ -68,14 +77,23 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def resolve_as_of(conn, mode: str, now_fn: Callable[[], datetime] = utc_now) -> datetime:
-    """Reference time of this cycle. `data`: newest non-backend bus report, wall clock if none."""
+def resolve_clock(conn, mode: str, now_fn: Callable[[], datetime] = utc_now) -> ClockDecision:
+    """Reference time and untrusted buses of this cycle (contracts/guards.md G3).
+
+    `data`: the newest report among trusted buses; wall clock if no bus ever reported. `wall`: the wall clock.
+    """
     if mode == "data":
-        newest = conn.execute(_NEWEST_BUS_REPORT).fetchone()[0]
+        rows = conn.execute(_LATEST_BY_BUS).fetchall()
         conn.rollback()
-        if newest is not None:
-            return newest
-    return now_fn()
+        decision = trusted_clock({bus_id: ts for bus_id, ts in rows}, ESTIMATED_AFTER_S)
+        if decision.as_of is not None:
+            return decision
+    return ClockDecision(now_fn(), frozenset())
+
+
+def resolve_as_of(conn, mode: str, now_fn: Callable[[], datetime] = utc_now) -> datetime:
+    """Reference time of this cycle (see `resolve_clock`)."""
+    return resolve_clock(conn, mode, now_fn).as_of
 
 
 def next_tick(now: float, interval_s: float) -> float:
@@ -96,24 +114,30 @@ def connect_with_retry(dsn: str, attempts: int = 30, wait_s: float = 2.0,
 
 
 def refresh_once(conn, mode: str, time_fn: Callable[[], float] = time.monotonic,
-                 now_fn: Callable[[], datetime] = utc_now) -> None:
+                 now_fn: Callable[[], datetime] = utc_now, guard_state: dict | None = None) -> None:
     """One cycle with its one log line. CycleError is logged here and swallowed (FR-040)."""
+    guard_state = _GUARD_STATE if guard_state is None else guard_state
     started = time_fn()
-    as_of = resolve_as_of(conn, mode, now_fn)
+    decision = resolve_clock(conn, mode, now_fn)
+    as_of, untrusted = decision.as_of, sorted(decision.untrusted)
+    if decision.untrusted != guard_state["untrusted"]:
+        guard_state["untrusted"] = decision.untrusted
+        _event(logging.WARNING, event="clock_guard", untrusted_buses=untrusted)
     try:
-        result = run_cycle(conn, as_of)
+        result = run_cycle(conn, as_of, untrusted_buses=decision.untrusted)
     except CycleError as exc:
         _event(logging.ERROR, event="refresh_cycle", status="error", error_class=type(exc).__name__,
                correlation_id=exc.correlation_id, as_of_ts=as_of.isoformat(), snapshot_id=None,
-               max_bronze_id=None, duration_ms=round((time_fn() - started) * 1000))
+               max_bronze_id=None, untrusted_buses=untrusted, duration_ms=round((time_fn() - started) * 1000))
         return
     duration_ms = round((time_fn() - started) * 1000)
     if result is None:
         _event(logging.INFO, event="refresh_cycle", status="skipped", snapshot_id=None,
-               as_of_ts=as_of.isoformat(), max_bronze_id=None, duration_ms=duration_ms)
+               as_of_ts=as_of.isoformat(), max_bronze_id=None, untrusted_buses=untrusted,
+               duration_ms=duration_ms)
         return
     _event(logging.INFO, event="refresh_cycle", status=result.status, snapshot_id=str(result.snapshot_id),
-           as_of_ts=result.as_of_ts.isoformat(), max_bronze_id=result.max_bronze_id, duration_ms=duration_ms)
+           as_of_ts=result.as_of_ts.isoformat(), max_bronze_id=result.max_bronze_id, untrusted_buses=untrusted, duration_ms=duration_ms)
 
 
 def run_loop(cycle: Callable[[], None], interval_s: float, time_fn: Callable[[], float] = time.time,

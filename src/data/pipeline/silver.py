@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from typing import Iterable
 
 import psycopg
 
@@ -30,10 +31,14 @@ _BUILD_ORDER = (
 SILVER_TABLES = tuple(table for table, _ in _BUILD_ORDER)
 
 
-def rebuild_silver(conn: psycopg.Connection, as_of_ts: datetime, max_bronze_id: int) -> None:
-    """Rebuild all silver tables for `as_of_ts`, reading bronze rows with id <= max_bronze_id."""
+def rebuild_silver(conn: psycopg.Connection, as_of_ts: datetime, max_bronze_id: int,
+                   untrusted_buses: Iterable[str] = ()) -> None:
+    """Rebuild all silver tables for `as_of_ts`, reading bronze rows with id <= max_bronze_id.
+
+    `untrusted_buses` (005 US6): buses the clock guard distrusts; they are Estimated in `bus_current_state`.
+    """
     params = {"as_of_ts": as_of_ts, "max_bronze_id": max_bronze_id,
-              "estimated_after_s": ESTIMATED_AFTER_S}
+              "estimated_after_s": ESTIMATED_AFTER_S, "untrusted_buses": sorted(untrusted_buses)}
     with conn.cursor() as cur:
         for table in reversed(SILVER_TABLES):
             cur.execute(f"DELETE FROM silver.{table}")  # noqa: S608 - fixed table names

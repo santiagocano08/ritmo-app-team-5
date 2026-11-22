@@ -293,3 +293,225 @@ p95 <= 250 ms at demo length: met (about 94-96 ms; the boarding step adds about 
 Created: `src/data/rules/boarding.py` (CODEOWNERS: rules), `src/data/tests/unit/test_boarding.py`, `src/data/tests/integration/test_stop_boarding_gold.py`.
 
 Modified: `src/data/db/init/008_data_fixes_metrics.sql` (CODEOWNERS: db; adds `gold.stop_boarding_band` and `gold.stop_boarding_band_v`), `src/data/rules/__init__.py` (RULES_VERSION 1.4.0, CODEOWNERS: rules), `src/data/pipeline/stop_metrics.py`, `src/data/pipeline/cycle.py`; tests `fixtures/oracle_stop_metrics.py`, `fixtures/gold_support.py`, `unit/test_rules_version.py`, `integration/test_schema_init.py`, `test_idempotency.py`, `test_incident_gold.py`, `test_scenarios_gold.py`, `test_rebuild.py`, `test_instruction_status.py`; `specs/005-data-fixes-metrics/tasks.md` (marks), `specs/005-data-fixes-metrics/verification.md`.
+
+## Phase 4 (US5 + US6: position range guard and clock guard), T045 to T056
+
+Start 2026-11-22T05:35Z. End 2026-11-22T06:05Z (UTC). Agent: implement-code. Nothing committed.
+`.specify/extensions.yml` does not exist, so no hooks applied. Checklists: approved by the data owner (2026-11-21), not edited.
+`docs/turns-ritmo.md` lists "impossible position" as deferred for turn 1. The approved spec and tasks.md (US5) call for it, so
+it was built as specified; the data owner may want to record it as pulled forward.
+
+### Red first
+
+Seen failing for the stated reason before any implementation:
+
+| Test file | Red reason |
+|---|---|
+| `unit/test_route_bounds.py`, `unit/test_clock_guard.py` | module missing (`ModuleNotFoundError` / `ImportError`) |
+| `unit/test_refresh_loop.py` (new and changed cases), `unit/test_rules_version.py` | `resolve_clock` missing, `untrusted_buses` missing in the log line, `guard_state` unknown, `1.4.0 != 1.5.0` |
+| `integration/test_clock_guard_refresh.py` | `refresh.resolve_clock` missing |
+| `integration/test_range_guard.py` | after the ingestion module existed, I put the two unfixed silver SQL files back for one run: `CycleError` (cause `ValidationError` in `CorridorNowV100`, as research R10 measured). The fixed SQL was restored from a copy and is what the suite ran |
+
+### Guard results (all exact; no oracle changed)
+
+| Check | Plan | Measured |
+|---|---|---|
+| 99,999 m and 5,119.5 m through ingestion | rejected, `value_out_of_range`, original message kept, nothing in `bronze.events` | same (1 row in `bronze.rejections` each, 0 in events) |
+| 0 m and 5,119.4 m through ingestion | accepted | accepted |
+| Unreadable bound (fake bound that returns None) | event accepted | accepted, stored in bronze |
+| 99,999 m inserted straight into bronze as the newest report of B-105 (C1 seed 42, as_of 22:44:15Z) | cycle completes, snapshot written, B-105 `estimated`, in `sources_down` with `since` = its last report time, no alert | same. B-105 keeps its last valid distance, `bus_state = regular`, no `gold.incident` row mentions it |
+| Other buses (SC-012) | keep their state | the silver rows of B-101..B-104 are identical before and after the insert (all columns); the corridor buses of gold keep state, quality and distance |
+| Later valid position of B-105 | back to `live` | `live`, distance 4,300.0 |
+| Bus with no in-range position | NULL position columns, absent from `corridor_now.buses`, in `sources_down` | same |
+| C1 seed 42 positions outside 0 to 5,119.4 m | 0 | 0 of 2,700 (min 0.0, max 5,119.4) |
+| 2030-01-01 `bus_position` of B-101 (injected at 1,300 s while B-101 is on the corridor) | `as_of` stays in the simulated day, other buses `live` in every later cycle | first cycle after the injection: `as_of` in 2026-11-24, `untrusted = {B-101}`, B-101 `estimated` and in `sources_down`, no alert; every later cycle (every 25 events): the other buses `live`, 0 snapshots in 2027 or later |
+| Later valid B-101 report | `live` again, 2030 event stays in bronze | clock decision has no untrusted bus; 1 bronze row dated 2030 |
+| 0 buses | wall clock | wall clock (`ClockDecision(now, {})`) |
+| 1 bus alone (its only report is dated 2030) | its own newest report, nobody untrusted (limit documented) | `as_of` = 2030-01-01, nobody untrusted |
+| 2 buses (one dated 2030) | guard applies | the 2030 bus is untrusted, clock = the other |
+| No bad event (C1, 1,200 s) | nobody excluded, `as_of` = old `max(event_ts)` | identical to the old query |
+| Simulator at normal pace, C1 full run, a cycle every 25 events | no untrusted bus in any cycle | none in more than 50 cycles |
+
+Notes on two plan figures that do not match this stream (not oracle values, reported):
+
+1. SC-012 says "the 4 other in-service buses". On C1 seed 42 at most 3 buses are on the corridor at once (probe every 100 s,
+   1,200 to 2,700 s), so the test checks the 4 other buses of the fleet in `silver.bus_current_state` (unchanged) and the other
+   corridor buses in gold. B-105 is on the corridor at 22:44:15Z with 1 other bus (B-104).
+2. B-101 finishes its trip at about 1,550 s, so the future-event test injects at 1,300 s; at 2,200 s B-101 is not on the corridor
+   and cannot be in `sources_down` (that list is for buses on the corridor or waiting).
+3. A leading bus that is `estimated` stays `leader`; only `bunched` and `gap` are forced to `regular` (`classify.py`, unchanged).
+   The tests accept `regular` or `leader` and check there is no alert.
+
+### Test runs (one at a time)
+
+| # | Command | Result | Time (UTC) |
+|---|---|---|---|
+| 1 | `uv run --extra dev pytest -m "not slow and not live" -p no:cacheprovider -q` (host, `DATABASE_URL` to localhost) | **933 passed, 0 failed, 0 skipped**, 5 deselected, 1 warning; coverage **96.84 %** (gate 80 %); `rules/clock.py` 100 %, `ingestion/route_bounds.py` 98 %, `ingestion/validate.py` 96 %, `ingestion/bronze.py` 98 %, `refresh/run.py` 85 % (loop `main()` is not unit tested) | 05:42:57Z to 05:51:19Z |
+| 2 | `docker compose --profile tools build tests && docker compose --profile tools run --rm tests`, run as `POSTGRES_PORT=5433 API_PORT=8001 docker compose -p pulsoflota-verify --profile tools ...` (the default project has a running stack on 5432/8000, never touched) | **929 passed, 9 skipped, 0 failed**; coverage **96.84 %**. The 9 skips are the 8 container-only ones plus the new `git diff` check (no git in the image) | 05:51:25Z to 05:56:33Z |
+
+Passed count 933 vs 887 at the end of Phase 3: +46 new tests.
+
+T055: running the whole host suite after the version bump found **no** existing test that ingests a position above 5,119.4 m.
+The only test touched by the bump is the literal `rules_version == "1.4.0"` in `integration/test_instruction_status.py`,
+changed to `1.5.0` (same kind of change as `test_rules_version.py`, not in the task list).
+
+### Live check (project `pulsoflota-verify`, ports 5433 / 8001, fixture mounted through `/tmp/verify-override.yml`)
+
+`SIM_SEED=42 SIM_DURATION_S=2700 SIM_PACE_S=0.5 SIM_SCENARIO_FILE=/scn/c1_bunching.json REFRESH_CLOCK=data REFRESH_INTERVAL_S=1`, fresh volume.
+
+| Step | Result |
+|---|---|
+| 99,999 m `bus_position` of B-105 through the ingestion container's stdin (`docker compose -p pulsoflota-verify run --rm -T --no-deps ingestion python -m src.data.ingestion.run`) | `{'accepted': 0, 'rejected': 1, 'by_reason': {'value_out_of_range': 1}}`; 1 row in `bronze.rejections` (`value_out_of_range`, event type `bus_position`, distance 99999.0); 0 events above 5,119.4 m in bronze |
+| ingestion container paused, 99,999 m row for B-101 inserted straight into bronze with psql (id 681, `event_ts` = newest) | next `refresh_cycle`: `status = estimated` (a snapshot, not an error), `max_bronze_id` 681; `sources_down` = `[{"bus_id": "B-101", "since": "2026-11-24T22:10:55Z"}]`; B-101 `estimated` at its last valid distance 2,784.5 m, B-102 `live`; 0 `cycle_failed` |
+| 2030-01-01 `bus_position` of B-101 through the ingestion container | next cycle: `as_of_ts` 2026-11-24T22:10:55Z, `untrusted_buses: ["B-101"]`, B-101 in `sources_down`, B-102 `live` |
+| ingestion resumed | log: WARNING `{"event": "clock_guard", "untrusted_buses": ["B-101"]}` once, then `{"event": "clock_guard", "untrusted_buses": []}` once (after B-101's next real report); last snapshot 22:14:15Z, **0 snapshots after 2027-01-01**; the 2030 row is still in bronze |
+| `cycle_failed` in the refresh log | 0 (checked after the 99,999 m insert and again at the end) |
+| cleanup | `docker compose -p pulsoflota-verify ... down -v`; default stack untouched and still running |
+
+Rework (live check): my first straight-insert statement failed (`event_id` is a uuid column, I passed text); the second stream position was
+already past B-101's bad row, so I paused the ingestion container and inserted again to catch the cycle. No product impact.
+
+### Cycle time (scratch recipe: throwaway database, C1 seed 42, 2,700 s, 108 cycles, 2,881 events)
+
+| Run | Median | p95 | Max |
+|---|---|---|---|
+| Baseline (T001) | 47.7 ms | 67.0 ms | 69.8 ms |
+| After Phase 3, run 1 / run 2 | 65.1 / 65.8 ms | 93.9 / 96.4 ms | 187.2 / 107.3 ms |
+| After Phase 4, run 1 | 66.2 ms | 100.3 ms | 120.2 ms |
+| After Phase 4, run 2 | 67.5 ms | 98.0 ms | 109.8 ms |
+| Live `refresh_cycle` `duration_ms` (about 90 cycles, host also ingesting, pace 0.5) | about 35 to 75 ms | | |
+| 4 simulated hours, 15,388 events, 15 cycles near the end, Phase 4 code, four runs | median 656 (an odd run), 1,547, 1,549, 1,547 / 1,556 ms | | max 1,610 / 1,629 / 1,613 / 1,616 / 1,598 ms |
+| Same stress run with the Phase 3 versions of the two silver SQL files put back, two runs | median 1,430 / 1,442 ms | | max 1,537 / 1,484 ms |
+
+**Phase 4 makes the cycle slower.** At demo length the median is +1 to +2 ms and p95 +4 ms (still far below 250 ms). At 4 hours the
+median goes from about 1.44 s to about 1.55 s (+7 %), and the worst cycle from 1.51 to 1.54 s to 1.60 to 1.63 s. The A/B above
+(Phase 3 SQL versus Phase 4 SQL on the same code and machine) isolates the cause to `silver_bus_current_state.sql` and
+`silver_position_history.sql`: the extra `positions` CTE casts every `bus_position` payload once more and a second
+`DISTINCT ON` finds the newest position. **The 4-hour figure of 1.5 s is now exceeded by the median as well as by the worst
+cycle.** I did not change the SQL to hide it. A possible fix is to compute the range flag once in `silver.position_history`
+(already filtered) and join it instead of casting in `bus_current_state`; it is outside tasks.md, so left to the data owner. The first
+run of the stress series reported median 656 ms; I have no explanation and treated it as an outlier (the other five runs agree).
+
+### Untouched check (final form, SC-014)
+
+`git diff --stat feature/004-scenario-injectors` on `contracts/`, `docs/adr/`, `docs/data-contract.md`, `src/data/db/init/001`-`007`,
+`.github/`, `Dockerfile`, `pyproject.toml`, `uv.lock`, `docker-compose.yml`, `.env.example`, `src/pulsoflota/config.py`,
+`src/data/simulator/`, `.kiro/`, `.specify/`: **empty**. `test_no_contract_or_adr_changed` also asserts it for `contracts` and
+`docs/adr`. `src/data/ingestion/validate.py` changed only for the range check (new optional `route_end_m` argument and one
+predicate). No new environment variable, dependency or config key (`MIN_BUSES_FOR_CLOCK_GUARD` is a named constant; the 120 s is
+`ESTIMATED_AFTER_S`).
+
+### Files changed in Phase 4 (CODEOWNERS paths marked)
+
+Created: `src/data/ingestion/route_bounds.py`, `src/data/rules/clock.py` (CODEOWNERS: rules), `src/data/tests/unit/test_route_bounds.py`,
+`src/data/tests/unit/test_clock_guard.py`, `src/data/tests/integration/test_range_guard.py`, `src/data/tests/integration/test_clock_guard_refresh.py`.
+
+Modified: `src/data/ingestion/validate.py`, `src/data/ingestion/bronze.py`, `src/data/rules/__init__.py` (RULES_VERSION 1.5.0, CODEOWNERS: rules),
+`src/data/rules/sql/silver_position_history.sql` and `src/data/rules/sql/silver_bus_current_state.sql` (CODEOWNERS: silver SQL),
+`src/data/pipeline/silver.py`, `src/data/pipeline/cycle.py`, `src/data/refresh/run.py`; tests `unit/test_refresh_loop.py`, `unit/test_rules_version.py`,
+`integration/test_instruction_status.py`; `specs/005-data-fixes-metrics/tasks.md` (marks), `specs/005-data-fixes-metrics/verification.md`.
+
+## Phase 5 (Polish): closing summary, T057
+
+Nothing is committed. Phases 1 to 3 are committed (`1cc5fb8`, `e8f0eb1`, `e7cca43`); Phase 4 and this file are in the working tree.
+
+### Start of the story and baseline
+
+See "Baseline (T001)" above: 804 passed on the unchanged code, coverage 96.40 %, `RULES_VERSION` 1.1.0, cycle median 47.7 ms.
+Golden hashes (old and new), the 24 factors and the one-off git comparison (maximum difference 0.0): see "Regenerated CSV" and
+"Golden hashes" above. The data owner's Phase 1 verifier output and sign-off are in "T020" above.
+
+### Oracle table, measured values
+
+| Oracle | Plan | Measured | Phase |
+|---|---|---|---|
+| Stop EWT, P-888..P-900, (22:28:55, 22:44:55]Z, no hold | +25.8 s, 27 intervals | +25.82 s, 27 | 2 |
+| Same, 90 s hold | +10.6 s, 28 intervals | +10.6 s, 28 (saving 15.2 s) | 2 |
+| Live value 22:44:55Z, 18 stops, no hold / hold | 33 / +17.6 s, 35 / +2.8 s | 33 / +17.596 s, 35 / +2.8 s | 2 |
+| Bands 69 + 70 sums (n, Σh, Σh²), no hold / hold | 31, 16,950, 12,010,450 / 32, 18,165, 12,361,525 | identical | 2 |
+| Bunched snapshot 22:30:00Z | +116.6 s, 15 headways | +116.636 s, 15 | 2 |
+| Terminal headways 22:20:40Z / 22:30:35Z / 22:40:40Z | 615 / 595 / 605 s | 615 / 595 / 605 s (±1 s) | 1 |
+| US4 band 68 / 69 / 70 riders; ≤5, ≤10, ≤15 min | 9 / 16 / 21; 3/9/9, 10/16/16, 9/14/15 | identical; 46 riders, 37 at P-883; band 70 has 6 open riders in `n_riders` only | 3 |
+| Position range, C1 seed 42 | 0 of 2,700 outside 0 to 5,119.4 m | 0 of 2,700 | 4 |
+| Clock guard | see "Guard results" | all as planned | 4 |
+
+### Cycle time per phase (scratch recipe, median / p95 / max)
+
+| After | Median | p95 | Max | 4 h stress median / max |
+|---|---|---|---|---|
+| Baseline | 47.7 ms | 67.0 ms | 69.8 ms | 1.27 to 1.31 s (plan) |
+| Phase 1 | 48.6 ms | 67.8 ms | 70.2 ms | not measured |
+| Phase 2 | 60.7 ms | 88.7 ms | 96.8 ms | 1.428 s / 1.475 s |
+| Phase 3 | 65.8 ms | 96.4 ms | 107.3 ms | about 1.44 s / 1.51 to 1.54 s |
+| Phase 4 | 67.5 ms | 98.0 ms | 109.8 ms | about 1.55 s / 1.60 to 1.63 s |
+
+Budgets: p95 ≤ 250 ms at demo length is met in every phase. The 4-hour budget of 1.5 s is met only through Phase 2; from Phase 3
+the worst cycle is over it, and in Phase 4 the median is too (see "Cycle time" in Phase 4).
+
+### Coverage per phase
+
+| Phase | Host suite | Andon |
+|---|---|---|
+| Baseline | 804 passed, 96.40 % | not measured on unchanged code |
+| 1 | 820 passed, 96.44 % | 817 passed, 8 skipped, 96.44 % |
+| 2 | 862 passed, 96.66 % | 859 passed, 8 skipped, 96.66 % |
+| 3 | 887 passed, 96.75 % | 884 passed, 8 skipped, 96.75 % |
+| 4 (final) | **933 passed, 96.84 %** | **929 passed, 9 skipped, 96.84 %** |
+
+### `RULES_VERSION` history
+
+1.1.0 (start) → 1.2.0 (Phase 1) → 1.3.0 (Phase 2) → 1.4.0 (Phase 3) → 1.5.0 (Phase 4).
+
+### Known limits
+
+- **Lost departures (decision 1).** A departure that was never reported leaves no `silver.stop_visits` row, so it is not counted in
+  `n_excluded` and the headway across it is a longer, single interval. Only a departure whose previous report is more than 120 s older is
+  flagged and excluded.
+- **H-8, linear cycle growth.** The cycle rebuilds silver from all of bronze, so its time grows with bronze: about 60,000 rows reach 5 s.
+  At 4 simulated hours (15,388 events) a cycle takes about 1.5 s.
+- **Clock guard.** One bus alone uses its own newest report (a bad event from a lone bus hijacks the clock); with a majority of buses
+  far in the future there is no trustworthy reference. The guard needs at least 2 buses.
+- **Range bound.** Read from `config.ref_stops`, which `refresh`/`compute` load. Until then ingestion accepts every position and logs
+  `route_bound_unavailable` once; rows accepted in that window are handled by the silver rule (G2).
+
+### Success criteria
+
+| SC | Result | Evidence |
+|---|---|---|
+| SC-001 | met | 24 factors equal the independent recomputation, maximum difference 0; 17 h = 0.4816 (was 0.5011) |
+| SC-002 | met | new golden hashes seed 42 `8bae0e52…90bc`, seed 7 `27a8206e…df7e`; old ones recorded |
+| SC-003 | met | 615 / 595 / 605 s at the three instants, 0 terminal `gap`; live stack 611 / 596 / 609 s at the nearest snapshots |
+| SC-004 | met | the EWT at those instants is not 211, 467 or 731 s |
+| SC-005 | met | live and band rows equal the oracle, 0 differences, with and without the hold |
+| SC-006 | met | +25.8 s (27) and +10.6 s (28), exact |
+| SC-007 | met in meaning, number not reproduced | the plan's "195 s behind" snapshot does not exist in this stream (B-103 stays 204 to 230 s behind); EWT is above 0 (+80 to +129 s) in all 38 bunched snapshots; at 22:30:00Z it is +116.6 s |
+| SC-008 | met | adding or removing a bus with no departure in the window changes EWT by 0 s |
+| SC-009 | met | counts equal the oracle, 0 differences (9 / 16 / 21 riders, 46 in all) |
+| SC-010 | met | riders without a departure are only in `n_riders` (6 open riders in band 70) |
+| SC-011 | met | two gold rebuilds give identical rows |
+| SC-012 | met, with the note on "4 other buses" above | 99,999 m rejected (host tests and live), straight-inserted row gives a snapshot, other buses unchanged |
+| SC-013 | met | `as_of` stays in 2026-11-24, 0 snapshots in 2027 or later, other buses `live` in every cycle after the injection |
+| SC-014 | met | host 933 passed (96.84 %), Andon 929 passed (96.84 %), `git diff` of `contracts/` and `docs/adr/` against `feature/004-scenario-injectors` empty |
+
+Spec lines that still quote numbers that do not occur: SC-007 ("195 s behind", see above) and SC-012 ("the 4 other in-service buses", at most 3 are on the corridor at once in C1). The spec otherwise carries the post-US1 oracles.
+
+### Data-contract impact list (copied from `contracts/README.md`)
+
+This story edits **none** of these documents. The data owner edits `docs/data-contract.md` and the ADRs later.
+
+| Document | Section | What changes | Number or example |
+|---|---|---|---|
+| `docs/data-contract.md` v0.2 | Q4 (service KPI) | `gold.service_metric` has the same columns but is now stop-based over a trailing 15-minute window and `computable` needs 5 headways. The example row (`n_headways = 1`, `ewt_s = −27.5`, `computable = true`) is no longer possible | one headway now gives `computable = false` and NULL values |
+| `docs/data-contract.md` v0.2 | §3B H4 `report_quality_band` and Q12 | `sum_headway_s`, `sum_headway_sq_s`, `sum_planned_s`, `sum_planned_sq_s`, `n_headways` are sums of stop headways per band, produced by `gold.stop_ewt_band`; `n_riders`, `n_board_le_5/10/15` have a producer in `gold.stop_boarding_band`. H4 is per operator; these tables are per stop (one operator, `OP-01`, today) | band 70, P-888..P-900: 25 headways, Σh 12,180 s (C1 seed 42, no hold) |
+| ADR-0007 | Decision: EWT before and after | EWT before and after are stop-based and trailing-window; "EWT before" early in the day can be not computable (`no_data`). The `c1_bunching` numbers in `recommendation_effect` change meaning | same 90 s hold: −15.2 s on the 16-minute window (+25.8 s → +10.6 s) |
+| ADR-0006 | §6 history layer | The layer that sums these rows consumes new definitions and two new source tables | none |
+| ADR-0003, `contracts/read/` | `service_metric`, gate decision on EWT | No field change. Only the wording of what EWT means may need an update. `distance_along_m` already has `maximum: 5119.4` in `corridor_now` (the cause of US5) | none |
+| ADR-0002, `contracts/turn1-events/` | rejection reason `value_out_of_range` | Now also used for a `bus_position` beyond the route end, a bound that comes from reference data, not from the schema | 5,119.4 m |
+| `specs/002-silver-gold-baselines/` | FR-024, SC-007, US2 scenario 6 | The spatial EWT (300 s and 900 s give +75 s) is superseded; the same arithmetic now applies to stop headways | none |
+| `specs/004-scenario-injectors/` | Phase 3, research R7 | The effect table clamps the corridor EWT at 0. With a stop-based EWT that is often positive and computable only with at least 5 headways; the clamp and the window of "before" and "after" need review before Phase 3 is built | none |
+| `data/reference/SOURCES.md` | `congestion_factor.csv` | Regenerated by this story (the `FECHAHORA` is UTC and is converted) | 17 h: 0.5011 → 0.4816 |
+
+Compatibility summary: `gold.service_metric` keeps its columns and types, with different numbers and many more `computable = false`
+rows in the first minutes of a run. `corridor_now`, `decision_inputs` and `source_status` keep their schemas; `headway_ahead_s` of a bus
+leaving the terminal changes from 1,240 s to 615 s (C1 seed 42, 22:20:40Z), and an unplaceable or untrusted bus is `estimated` and listed
+in `sources_down`. Snapshot ids change (the rules version is part of the hash). No JSON Schema, ADR or `docs/data-contract.md` text was edited.
