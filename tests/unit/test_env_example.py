@@ -92,19 +92,24 @@ def test_compose_passes_scenario_settings_to_ingestion_with_empty_defaults() -> 
 
 def test_hold_loop_settings_documented_with_safe_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     """004 Phase 2: the hold loop is off by default; the documented values are safe and secret-free."""
-    from src.pulsoflota.config import (get_seed_recommendations_path, get_sim_hold_noncompliance,
-                                       get_sim_hold_poll_s, get_sim_holds)
+    from src.pulsoflota.config import get_sim_hold_noncompliance, get_sim_hold_poll_s, get_sim_holds
 
     env = _env_example()
     assert env["SIM_HOLDS"] == "off" and env["SIM_HOLD_POLL_S"] == "1" and env["SIM_HOLD_NONCOMPLIANCE"] == "0.10"
-    assert "SEED_RECOMMENDATIONS_PATH" in env
-    for key in ("SIM_HOLDS", "SIM_HOLD_POLL_S", "SIM_HOLD_NONCOMPLIANCE", "SEED_RECOMMENDATIONS_PATH"):
+    for key in ("SIM_HOLDS", "SIM_HOLD_POLL_S", "SIM_HOLD_NONCOMPLIANCE"):
         monkeypatch.setenv(key, env[key])
     assert get_sim_holds() is False and get_sim_hold_poll_s() == 1.0
-    assert get_sim_hold_noncompliance() == 0.10 and get_seed_recommendations_path() is None
-    for key in ("SIM_HOLDS", "SIM_HOLD_POLL_S", "SIM_HOLD_NONCOMPLIANCE", "SEED_RECOMMENDATIONS_PATH"):
+    assert get_sim_hold_noncompliance() == 0.10
+    for key in ("SIM_HOLDS", "SIM_HOLD_POLL_S", "SIM_HOLD_NONCOMPLIANCE"):
         monkeypatch.delenv(key)
     assert get_sim_holds() is False and get_sim_hold_poll_s() == 1.0 and get_sim_hold_noncompliance() == 0.10
+
+
+def test_decision_model_and_demand_scale_settings_documented_with_safe_defaults() -> None:
+    """006 phase 2: the model is on by default and the demo demand is the real reference demand."""
+    env = _env_example()
+    assert env["MPC_ENABLED"] == "on" and env["SIM_DEMAND_SCALE"] == "1.0"
+    assert "SEED_" + "RECOMMENDATIONS_PATH" not in env
 
 
 @pytest.mark.parametrize("name,value", [("SIM_HOLDS", "maybe"), ("SIM_HOLD_POLL_S", "0"), ("SIM_HOLD_POLL_S", "x"),
@@ -126,6 +131,7 @@ def test_compose_passes_hold_settings_to_ingestion_with_safe_defaults() -> None:
     assert env["SIM_HOLDS"] == "${SIM_HOLDS:-off}"
     assert env["SIM_HOLD_POLL_S"] == "${SIM_HOLD_POLL_S:-1}"
     assert env["SIM_HOLD_NONCOMPLIANCE"] == "${SIM_HOLD_NONCOMPLIANCE:-0.10}"
-    assert env["SEED_RECOMMENDATIONS_PATH"] == "${SEED_RECOMMENDATIONS_PATH:-}"
+    assert "SEED_" + "RECOMMENDATIONS_PATH" not in env
+    assert env["SIM_DEMAND_SCALE"] == "${SIM_DEMAND_SCALE:-1.0}"  # 006: the demo demand reaches the simulator
     refresh = compose["services"]["refresh"]["environment"]
-    assert refresh["SEED_RECOMMENDATIONS_PATH"] == "${SEED_RECOMMENDATIONS_PATH:-}"  # one seed file for both sides
+    assert refresh["MPC_ENABLED"] == "${MPC_ENABLED:-on}"  # 006: the model switch reaches the refresh loop

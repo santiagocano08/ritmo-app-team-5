@@ -19,7 +19,6 @@ import psycopg
 
 from src.data.pipeline.cycle import CycleError, run_cycle
 from src.data.pipeline.reference import load_reference
-from src.data.pipeline.seeds import load_seeds
 from src.data.rules import ESTIMATED_AFTER_S
 from src.data.rules.clock import ClockDecision, trusted_clock
 from src.pulsoflota.config import get_db_dsn, get_log_level
@@ -137,7 +136,8 @@ def refresh_once(conn, mode: str, time_fn: Callable[[], float] = time.monotonic,
                duration_ms=duration_ms)
         return
     _event(logging.INFO, event="refresh_cycle", status=result.status, snapshot_id=str(result.snapshot_id),
-           as_of_ts=result.as_of_ts.isoformat(), max_bronze_id=result.max_bronze_id, untrusted_buses=untrusted, duration_ms=duration_ms)
+           as_of_ts=result.as_of_ts.isoformat(), max_bronze_id=result.max_bronze_id, untrusted_buses=untrusted,
+           duration_ms=duration_ms, model_ms=round(getattr(result, "model_ms", 0.0), 1))
 
 
 def run_loop(cycle: Callable[[], None], interval_s: float, time_fn: Callable[[], float] = time.time,
@@ -164,7 +164,6 @@ def main() -> None:
     dsn = get_db_dsn()
     conn = connect_with_retry(dsn)
     load_reference(conn)
-    load_seeds(conn)
     conn.commit()
     _event(logging.INFO, event="refresh_started", clock=mode, interval_s=interval)
 

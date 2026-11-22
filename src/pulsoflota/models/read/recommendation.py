@@ -4,10 +4,15 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Annotated, Literal
+from typing import Annotated
 from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+
+
+class SchemaVersion(StrEnum):
+    field_1_0_0 = "1.0.0"
+    field_1_1_0 = "1.1.0"
 
 
 class Case(StrEnum):
@@ -21,6 +26,8 @@ class Type(StrEnum):
     hold = "hold"
     adjust_departure = "adjust_departure"
     reserve_dispatch = "reserve_dispatch"
+    slow_down = "slow_down"
+    skip_stop = "skip_stop"
 
 
 class BusId(StrEnum):
@@ -39,7 +46,7 @@ class Action(BaseModel):
     )
     type: Type
     """
-    Action type. hold: keep bus at stop for duration_s. adjust_departure: depart stop early by duration_s. reserve_dispatch: dispatch a reserve bus from the depot.
+    Action type. hold: keep bus at stop for duration_s. adjust_departure: depart stop early by duration_s. reserve_dispatch: dispatch a reserve bus from the depot. slow_down: the bus travels slower for duration_s (speed_reduction_pct). skip_stop: the bus does not stop at stops with an empty queue from stop_id on.
     """
     bus_id: BusId
     """
@@ -51,7 +58,11 @@ class Action(BaseModel):
     """
     duration_s: float | None = None
     """
-    Duration in seconds. hold: 0..90 s (positive delay at stop). adjust_departure: -600..600 s (negative = depart earlier, positive = depart later). reserve_dispatch: always null.
+    Duration in seconds. hold: 0..90 s (positive delay at stop). adjust_departure: -600..600 s (negative = depart earlier, positive = depart later). reserve_dispatch: always null. slow_down: 1..1800 s. skip_stop: always null.
+    """
+    speed_reduction_pct: Annotated[float | None, Field(gt=0.0, le=50.0)] = None
+    """
+    Speed reduction in percent while a slow_down is active (10 means the bus travels at 90 % of its speed). Required when type is slow_down; absent for every other type.
     """
 
 
@@ -85,13 +96,13 @@ class Lineage(BaseModel):
     """
 
 
-class RecommendationV100(BaseModel):
+class RecommendationV110(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    schema_version: Literal["1.0.0"]
+    schema_version: SchemaVersion
     """
-    Read contract version (SemVer). Turn 1 produces only 1.0.0.
+    Read contract version (SemVer). Producers write 1.1.0; 1.0.0 is still read.
     """
     rec_id: UUID
     """

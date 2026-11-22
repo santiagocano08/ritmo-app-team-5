@@ -38,7 +38,7 @@ def test_the_draw_does_not_touch_the_global_random_state() -> None:
 
 def _apply_all(seed: int, p: float):
     truth = TruthSink([])
-    board = HoldBoard({}, seed=seed, noncompliance=p, truth=truth, when=lambda t: f"t{t}")
+    board = HoldBoard(seed=seed, noncompliance=p, truth=truth, when=lambda t: f"t{t}")
     for i, rec in enumerate(REC_IDS):
         board.add_order(rec, f"B-{100 + i % 5}", f"S-{i}", 60, float("-inf"), 1000)
         assert board.dwell_end(f"B-{100 + i % 5}", 10, f"S-{i}", 20) in (20, 70)

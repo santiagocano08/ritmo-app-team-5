@@ -186,6 +186,10 @@ def test_no_contract_or_adr_changed() -> None:
                          cwd=ROOT, capture_output=True, text=True)
     if ref.returncode != 0:
         pytest.skip("reference branch not available")
-    diff = subprocess.run(["git", "diff", "feature/004-scenario-injectors", "--", "contracts", "docs/adr"],
+    # 006 FR-029 authorises exactly these contract files (recommendation 1.1.0, its README, two new fixtures);
+    # every other contract file and every ADR must still be identical to story 004.
+    allowed = [f":(exclude){p}" for p in ("contracts/read/recommendation.schema.json", "contracts/read/README.md",
+                                          "contracts/read/fixtures/c1_slow_down", "contracts/read/fixtures/c2_skip_stop")]
+    diff = subprocess.run(["git", "diff", "feature/004-scenario-injectors", "--", "contracts", "docs/adr", *allowed],
                           cwd=ROOT, capture_output=True, text=True)
     assert diff.stdout == ""

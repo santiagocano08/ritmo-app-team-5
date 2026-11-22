@@ -1,20 +1,19 @@
 """T033 — `gold.instruction_status`: rows, status times and pending rules (004 FR-015, FR-016, FR-019, FR-026, SC-007, SC-012).
 
 Crafted bronze through the real boundary, decisions inserted the way the backend does, one gold cycle.
-Seeds come from the fixture file (B-103 at P-887: 90 s, expires 22:35:00Z; B-102: 120 s; B-106: not a hold).
+The recommendations are `gold.recommendation` rows made by `rec_support` (B-103 at P-887: 90 s, expires 22:35:00Z; B-102: 120 s; B-106: not a hold), as the retired seed file had them.
 """
 from __future__ import annotations
-
-from pathlib import Path
 
 import psycopg
 import pytest
 
-from src.data.pipeline.seeds import load_seeds
+from src.data.rules import RULES_VERSION
+
 from src.data.tests.fixtures.bronze_builders import Builder, ingest_all, insert_backend_commands, iso, trip_id
 from src.data.tests.fixtures.gold_support import cycle, validator
+from src.data.tests.fixtures.rec_support import insert_seed_like
 
-SEEDS_FILE = Path(__file__).resolve().parents[1] / "fixtures" / "scenarios" / "seed_recommendations.json"
 REC = {n: f"{str(n) * 8}-{str(n) * 4}-4{str(n) * 3}-8{str(n) * 3}-{str(n) * 12}" for n in range(1, 6)}
 TRIP = trip_id("B-103")
 EXPIRES_1 = "2026-11-24T22:35:00Z"  # 2,100 s
@@ -27,8 +26,7 @@ def decision(n: int, action: str = "apply", tag: str = "is") -> dict:
 
 @pytest.fixture
 def conn(gold_conn):
-    load_seeds(gold_conn, SEEDS_FILE)
-    gold_conn.commit()
+    insert_seed_like(gold_conn)
     return gold_conn
 
 
@@ -217,7 +215,7 @@ def test_lineage_columns_and_table_shape(conn) -> None:
     visit(conn, 1650, 1740)
     result = cycle(conn, 1800)
     rv, mx = conn.execute("SELECT rules_version, max_bronze_id FROM gold.instruction_status").fetchone()
-    assert rv == "1.5.0" and mx == result.max_bronze_id
+    assert rv == RULES_VERSION and mx == result.max_bronze_id  # 1.6.0 since 006 (hand value was 1.5.0)
     pk = conn.execute("SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid "
                       "AND a.attnum = ANY(i.indkey) WHERE i.indrelid = 'gold.instruction_status'::regclass "
                       "AND i.indisprimary").fetchall()

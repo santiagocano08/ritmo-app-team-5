@@ -10,6 +10,9 @@ non-zero before any event. The hidden truth goes to `--truth-path` (or SIM_TRUTH
 backend `decision` rows, then a read-only daemon thread. With it off (the default) the simulator never
 touches the database. With it on and an empty bronze the stream is byte-identical to the baseline.
 
+`SIM_DEMAND_SCALE` (006, demo setting, default 1.0 = the reference demand; accepted 0.1 to 10, anything else exits
+before the first event) scales how many riders the simulator creates. It is not a field of any message.
+
 `--pace` only throttles output in wall-clock seconds per 5 s sim step so a
 long-running container produces a steady stream; it never changes the bytes.
 """
@@ -17,6 +20,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import os
 import sys
 import time
 from datetime import timedelta
@@ -27,10 +32,26 @@ from src.data.simulator.model import STEP_S
 from src.data.simulator.scenarios import scenario_events
 from src.data.simulator.scenarios.config import ScenarioConfigError, load_scenarios
 from src.data.simulator.scenarios.truth import TruthSink
-from src.data.seeds import SeedError
-from src.data.simulator.scenarios.holds import HoldBoard, HoldPoller, load_seeds
+from src.data.simulator.scenarios.holds import HoldBoard, HoldPoller
 from src.pulsoflota.config import (get_db_dsn, get_sim_hold_noncompliance, get_sim_hold_poll_s, get_sim_holds,
                                    get_sim_scenario_file, get_sim_truth_path)
+
+
+DEMAND_SCALE_MIN, DEMAND_SCALE_MAX = 0.1, 10.0
+
+
+def get_demand_scale() -> float:
+    """SIM_DEMAND_SCALE: unset or empty is 1.0; a number from 0.1 to 10; anything else is an error."""
+    raw = os.environ.get("SIM_DEMAND_SCALE")
+    if raw is None or raw.strip() == "":
+        return 1.0
+    try:
+        value = float(raw)
+    except ValueError:
+        raise RuntimeError(f"SIM_DEMAND_SCALE must be a number, got: {raw!r}") from None
+    if not math.isfinite(value) or not DEMAND_SCALE_MIN <= value <= DEMAND_SCALE_MAX:
+        raise RuntimeError(f"SIM_DEMAND_SCALE must be between {DEMAND_SCALE_MIN} and {DEMAND_SCALE_MAX}, got: {raw!r}")
+    return value
 
 
 def main(argv: list[str] | None = None, out: TextIO | None = None) -> None:
@@ -48,6 +69,11 @@ def main(argv: list[str] | None = None, out: TextIO | None = None) -> None:
     args = parser.parse_args(argv)
     out = out or sys.stdout
     try:
+        demand_scale = get_demand_scale()
+    except RuntimeError as exc:
+        print(f"demand scale rejected: {exc}", file=sys.stderr)
+        raise SystemExit(2) from None
+    try:
         scenarios = load_scenarios(args.scenario_file or get_sim_scenario_file())
     except ScenarioConfigError as exc:
         print(f"scenario file rejected: {exc}", file=sys.stderr)
@@ -58,17 +84,17 @@ def main(argv: list[str] | None = None, out: TextIO | None = None) -> None:
         holds_on = (args.holds == "on") if args.holds else get_sim_holds()
         if holds_on:
             start = sim_start()
-            board = HoldBoard(load_seeds(None, start), args.seed, get_sim_hold_noncompliance(), truth=truth,
+            board = HoldBoard(args.seed, get_sim_hold_noncompliance(), truth=truth,
                               when=lambda t: (start + timedelta(seconds=t)).strftime("%Y-%m-%dT%H:%M:%SZ"))
             poller = HoldPoller(get_db_dsn(), board, start, get_sim_hold_poll_s())
-    except (RuntimeError, SeedError) as exc:
+    except RuntimeError as exc:
         print(f"hold loop rejected: {exc}", file=sys.stderr)
         raise SystemExit(2) from None
     if poller is not None:
         poller.poll_once()  # the only blocking call (2 s timeouts): decisions already written are known from step 0
         poller.start()
-    events = scenario_events(scenarios, args.seed, args.duration, truth, holds=board) if scenarios or board \
-        else run(args.seed, args.duration)
+    events = scenario_events(scenarios, args.seed, args.duration, truth, holds=board, demand_scale=demand_scale) \
+        if scenarios or board else run(args.seed, args.duration, demand_scale=demand_scale)
     last_ts = None
     try:
         for event in events:

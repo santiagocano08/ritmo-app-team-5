@@ -14,7 +14,6 @@ from decimal import Decimal
 import pytest
 
 from src.data.ingestion.bronze import ingest
-from src.data.pipeline.seeds import load_seeds
 from src.data.rules import RULES_VERSION
 from src.data.rules.service_metric import ewt_from_sums
 from src.data.rules.stop_metrics import Departure, window_sums
@@ -25,7 +24,8 @@ from src.data.simulator.scenarios.truth import TruthSink
 from src.data.tests.fixtures import bronze_builders as bb
 from src.data.tests.fixtures import oracle_stop_metrics as oracle
 from src.data.tests.fixtures.gold_support import cycle, docs
-from src.data.tests.integration.test_hold_loop import REC1, SEEDS_FILE, decision, write_decision
+from src.data.tests.fixtures.rec_support import insert_seed_like
+from src.data.tests.integration.test_hold_loop import REC1, decision, write_decision
 from src.data.tests.integration.test_scenarios_gold import FIXTURES
 
 T0 = oracle.epoch("2026-11-24T22:00:00Z")
@@ -43,11 +43,9 @@ def load(gold_conn, module_db_dsn, monkeypatch, tmp_path):
     def go(hold: bool = False, scenario: str = "c1_bunching") -> list[dict]:
         path = FIXTURES / f"{scenario}.json"
         if hold:
-            load_seeds(gold_conn, SEEDS_FILE)
-            gold_conn.commit()
+            insert_seed_like(gold_conn)
             write_decision(gold_conn, decision(REC1))
             monkeypatch.setenv("DATABASE_URL", module_db_dsn)
-            monkeypatch.setenv("SEED_RECOMMENDATIONS_PATH", str(SEEDS_FILE))
             monkeypatch.setenv("SIM_TRUTH_PATH", str(tmp_path / "truth.jsonl"))
             monkeypatch.setenv("SIM_SCENARIO_FILE", str(path))
             monkeypatch.setenv("SIM_HOLD_NONCOMPLIANCE", "0.0")

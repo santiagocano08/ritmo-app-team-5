@@ -65,3 +65,14 @@ def inputs(buses, *, n: int = 4, queues=None, rates=None, batches=None, m1=None,
 
 def with_params(**kw) -> MpcParams:
     return replace(MpcParams(), **kw)
+
+
+def facts(states: dict[str, str] | None = None, *, drivers: int = 2, n: int = 4, enabled=None, down=(),
+          quality: str = "live", snapshot_id: str = "00000000-0000-4000-8000-000000000001"):
+    """`mpc.Facts` of a crafted snapshot: `states` maps bus id to its corridor_now `bus_state`."""
+    from src.data.rules.mpc import Facts
+
+    return Facts(snapshot_id=snapshot_id, rules_version="1.6.0",
+                 bus_states=tuple(sorted((states or {}).items())), drivers_free=drivers,
+                 enabled_stops=frozenset(range(n) if enabled is None else enabled),
+                 sources_down=frozenset(down), data_quality=quality)

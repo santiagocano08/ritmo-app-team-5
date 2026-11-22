@@ -35,12 +35,13 @@ def _prepare(conn) -> None:
 
 
 def _recreate_silver(conn: psycopg.Connection) -> None:
-    """Drop every silver table and recreate it from 004_silver.sql plus the 005 column of 008 (idempotent)."""
+    """Drop every silver table and recreate it from 004_silver.sql, 008 (005) and 009 (006) (idempotent)."""
     for table in SILVER_TABLES:
         conn.execute(f"DROP TABLE silver.{table}")  # noqa: S608 - fixed names
     from src.data.tests.db_helpers import INIT_DIR
     conn.execute((INIT_DIR / "004_silver.sql").read_text(encoding="utf-8"))
     conn.execute((INIT_DIR / "008_data_fixes_metrics.sql").read_text(encoding="utf-8"))
+    conn.execute((INIT_DIR / "009_decision_mpc.sql").read_text(encoding="utf-8"))  # silver.stop_queue, occupancy
     conn.commit()
 
 
@@ -179,6 +180,7 @@ def test_dropping_silver_and_gold_and_recomputing_gives_the_same_snapshot(gold_c
     gold_conn.execute((INIT_DIR / "005_gold.sql").read_text(encoding="utf-8"))
     gold_conn.execute((INIT_DIR / "007_scenarios.sql").read_text(encoding="utf-8"))
     gold_conn.execute((INIT_DIR / "008_data_fixes_metrics.sql").read_text(encoding="utf-8"))
+    gold_conn.execute((INIT_DIR / "009_decision_mpc.sql").read_text(encoding="utf-8"))  # 006: silver.stop_queue, gold.recommendation
     gold_conn.commit()
 
     result = cycle(gold_conn, last_as_of_s)

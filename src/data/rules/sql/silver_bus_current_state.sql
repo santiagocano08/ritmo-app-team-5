@@ -1,7 +1,7 @@
 -- S3 silver.bus_current_state (FR-008-FR-011, R7). Run after silver_incidents.sql.
 -- Parameters: %(as_of_ts)s, %(max_bronze_id)s, %(estimated_after_s)s (the single 120 s
 -- threshold, src.data.rules.ESTIMATED_AFTER_S), %(untrusted_buses)s (text[], buses the clock guard distrusts,
--- 005 US6). A position outside 0..route end is ignored (005 US5): the position columns and the waiting test come
+-- 005 US6; 006 adds `occupancy` from the same row). A position outside 0..route end is ignored (005 US5): the position columns and the waiting test come
 -- from the newest in-range position, and a bus whose newest bus_position is out of range is Estimated.
 WITH reports AS (
     SELECT e.id, e.event_ts, e.event_type,
@@ -32,7 +32,8 @@ positions AS (  -- every bus_position with its range flag
     WHERE r.event_type = 'bus_position'
 ),
 latest_position AS (  -- newest in-range position
-    SELECT DISTINCT ON (bus_id) bus_id, trip_id, event_ts, dist_m AS distance_along_m
+    SELECT DISTINCT ON (bus_id) bus_id, trip_id, event_ts, dist_m AS distance_along_m,
+           (payload->>'occupancy')::int AS occupancy
     FROM positions
     WHERE in_range
     ORDER BY bus_id, event_ts DESC, id DESC
@@ -86,7 +87,7 @@ status AS (
 )
 INSERT INTO silver.bus_current_state
     (bus_id, trip_id, distance_along_m, position_ts, position_trip_id, prev_stop_id, next_stop_id,
-     last_report_ts, data_quality, on_corridor, waiting, operational_status, as_of_ts)
+     last_report_ts, data_quality, on_corridor, waiting, operational_status, as_of_ts, occupancy)
 SELECT s.bus_id,
        l.trip_id,
        p.distance_along_m,
@@ -114,7 +115,8 @@ SELECT s.bus_id,
                THEN 'reserve'
            ELSE 'off_corridor'
        END,
-       %(as_of_ts)s
+       %(as_of_ts)s,
+       p.occupancy  -- 006 M4: from the same newest in-range position row as distance_along_m
 FROM last_seen s
 JOIN latest_report l USING (bus_id)
 JOIN status st USING (bus_id)

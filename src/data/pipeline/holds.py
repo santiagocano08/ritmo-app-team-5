@@ -1,7 +1,8 @@
 """`gold.instruction_status` builder (004 FR-015, FR-016, FR-019, FR-026; research R5; data-model E7).
 
 Rebuilt every cycle (DELETE + INSERT) from bronze (backend `decision` rows, read-only), silver
-(`stop_visits`, `incidents`) and `config.seed_recommendation`, so the same inputs give the same rows.
+(`stop_visits`, `incidents`) and `gold.recommendation` (006: the model's table, which replaced the seed file), so the
+same inputs give the same rows.
 One row per approved hold that has a status; an order that is still pending has no row. The rule itself
 (matching, cap, tolerance, conflict, breakdown) lives in `src.data.rules.holds`. Data writes nothing to
 bronze and never writes a `confirmation`. The caller owns the transaction.
@@ -16,7 +17,8 @@ from psycopg.types.json import Jsonb
 from src.data.rules import RULES_VERSION
 from src.data.rules.holds import HOLD_ORDERS_SQL, Order, Visit, observe
 
-_SEEDS = "SELECT rec_id::text, doc FROM config.seed_recommendation"
+_HOLDS = ("SELECT rec_id::text, doc, expires_ts FROM gold.recommendation "
+          "WHERE doc->'action'->>'type' = 'hold'")
 _COMPLETED = ("SELECT bus_id, stop_id, arrival_ts, departure_ts FROM silver.stop_visits "
               "WHERE bus_id = ANY(%(buses)s) AND stop_id = ANY(%(stops)s)")
 # Arrivals that have no completed visit yet: the bus is at the stop (same arrival choice as silver).
@@ -39,20 +41,15 @@ _INSERT = ("INSERT INTO gold.instruction_status (rec_id, bus_id, stop_id, hold_s
            "ts_by_status, rules_version, max_bronze_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)")
 
 
-def _utc(text: str) -> datetime:
-    return datetime.fromisoformat(text.replace("Z", "+00:00")).astimezone(timezone.utc)
-
-
 def _rfc3339(ts: datetime) -> str:
     return ts.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def build_orders(conn: psycopg.Connection, max_bronze_id: int) -> list[Order]:
     """Approved holds in bronze id order: known hold recommendations only, the first decision per `rec_id`."""
-    holds: dict[str, dict] = {}
-    for rec_id, doc in conn.execute(_SEEDS).fetchall():
-        if doc["action"]["type"] == "hold":
-            holds[rec_id.lower()] = doc
+    holds: dict[str, tuple[dict, datetime]] = {}
+    for rec_id, doc, expires_ts in conn.execute(_HOLDS).fetchall():
+        holds[rec_id.lower()] = (doc, expires_ts.astimezone(timezone.utc))
     orders: list[Order] = []
     seen: set[str] = set()
     sql = HOLD_ORDERS_SQL.read_text(encoding="utf-8")
@@ -61,11 +58,11 @@ def build_orders(conn: psycopg.Connection, max_bronze_id: int) -> list[Order]:
         if action != "apply" or rec_id not in holds or rec_id in seen:
             continue
         seen.add(rec_id)
-        doc = holds[rec_id]
+        doc, expires_ts = holds[rec_id]
         act = doc["action"]
         orders.append(Order(rec_id, act["bus_id"], act["stop_id"],
                             float(act["duration_s"] if act.get("duration_s") is not None else 0),
-                            decided_at, _utc(doc["expires_ts"])))
+                            decided_at, expires_ts))
     return orders
 
 

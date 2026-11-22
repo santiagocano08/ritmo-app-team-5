@@ -164,7 +164,7 @@ INF = float("-inf")
 def hold_run(orders, noncompliance: float = 0.0, scenarios=(), duration: int = 2400):
     """The scenario stream with `orders` on the board. Each order is (rec, bus, stop, hold_s, from_s, until_s)."""
     truth = TruthSink(list(scenarios))
-    board = HoldBoard({}, seed=SEED, noncompliance=noncompliance, truth=truth, when=lambda t: f"t{t}")
+    board = HoldBoard(seed=SEED, noncompliance=noncompliance, truth=truth, when=lambda t: f"t{t}")
     for o in orders:
         board.add_order(*o)
     events = list(scenario_events(list(scenarios), SEED, duration, truth, holds=board))

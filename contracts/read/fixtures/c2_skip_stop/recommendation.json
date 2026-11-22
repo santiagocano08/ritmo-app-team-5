@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.1.0",
+  "rec_id": "cccc0003-0000-4000-8000-000000000032",
+  "case": "C2",
+  "action": {
+    "type": "skip_stop",
+    "bus_id": "B-101",
+    "stop_id": "P-890",
+    "duration_s": null
+  },
+  "reason": "skip stops with an empty queue for B-101 from P-890 saves 18.2 s per rider",
+  "ewt_saving_s": 18.2,
+  "horizon_s": 600,
+  "data_quality": "live",
+  "expires_ts": "2026-11-24T22:12:00Z",
+  "conflicts_with": [],
+  "rank": 1,
+  "status": "proposed",
+  "lineage": {
+    "model_version": "1.0.0",
+    "rule_version": "1.6.0",
+    "snapshot_id": "cccc0003-0000-4000-8000-000000000003"
+  }
+}

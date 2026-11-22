@@ -38,3 +38,12 @@ def test_healthcheck_block_documents_its_timing() -> None:
     assert "retries: 1" in block
     assert "#" in block[block.index("healthcheck:") - 400:block.index("healthcheck:")]
     assert "interval" in block.lower() and "start period" in block.lower()
+
+
+def test_demand_scale_reaches_the_simulator_with_the_real_demand_as_default() -> None:
+    """006 T044: the compose file lists variables explicitly, so the demo scale must be listed to arrive."""
+    assert _ingestion()["environment"]["SIM_DEMAND_SCALE"] == "${SIM_DEMAND_SCALE:-1.0}"
+
+
+def test_the_seed_variable_is_gone_from_ingestion() -> None:
+    assert "SEED_" + "RECOMMENDATIONS_PATH" not in _ingestion()["environment"]
