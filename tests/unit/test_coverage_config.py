@@ -19,6 +19,7 @@ def test_omit_list_is_exactly_the_agreed_entries() -> None:
         [
             "src/pulsoflota/models/*",
             "src/data/tests/*",
+            "src/api/tests/*",
             "src/data/reference/build.py",
             "src/data/reference/sources.py",
         ]

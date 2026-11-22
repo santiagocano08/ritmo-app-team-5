@@ -30,7 +30,7 @@ dev = [
 packages = ["src/pulsoflota", "src/api", "src/data"]
 
 [tool.pytest.ini_options]
-testpaths = ["src/data/tests", "tests"]
+testpaths = ["src/data/tests", "src/api/tests", "tests"]
 addopts = "--strict-markers --cov=src --cov-report=term-missing --cov-fail-under=80"
 markers = [
     "slow: long-running checks (for example the 60-minute replay of SC-001)",
@@ -44,6 +44,7 @@ source = ["src"]
 omit = [
     "src/pulsoflota/models/*",
     "src/data/tests/*",
+    "src/api/tests/*",
     "src/data/reference/build.py",
     "src/data/reference/sources.py",
 ]
