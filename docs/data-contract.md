@@ -506,20 +506,32 @@ The BE computes coverage and "payable" from `pct_rejected` and `pct_estimated`. 
 
 The decision model stores what it predicted, so its accuracy can be measured over time (data owner, 2026-11-22).
 
-- `gold.mpc_projection`: append-only, one row per (snapshot, bus, stop) of the "do nothing" baseline, with `as_of_ts`, `projected_departure_ts`, `lead_s` (up to 1,800 s), `rules_version`, `max_bronze_id`. The projection uses the historical M1 travel times and the observed arrival rates.
-- `gold.v_projection_accuracy`: pairs each projected departure with the bus's first real departure from that stop after `as_of_ts`. It exposes `error_s` (real − projected), `abs_error_s`, the lead bucket (0–5, 5–10, 10–30 min) and `affected_by_decision` (an applied recommendation changed that bus, so the baseline is not comparable). No real departure yet: NULL error, never zero.
+- `gold.mpc_projection`: append-only, one row per (snapshot, bus, stop) of the "do nothing" baseline, written in every fresh cycle while the model is on. Columns: `snapshot_id`, `bus_id`, `stop_id`, `as_of_ts`, `projected_departure_ts` (`as_of_ts + lead_s`), `lead_s` (0 to 1,800 s), `rules_version`, `max_bronze_id`. Key: (`snapshot_id`, `bus_id`, `stop_id`). The projection uses the historical M1 travel times and the observed arrival rates. No row is written before any bus has reported. Volume: about 52 rows per cycle (about 7 MB for a 45-minute demo, 36 MB for 4 hours).
+- `gold.v_projection_accuracy`: pairs each projected departure with the bus's first real departure from that stop at or after `as_of_ts` (`silver.stop_visits`). Columns: the table's, plus `lead_bucket` (`'0-5 min'`, `'5-10 min'`, `'10-30 min'`; text, so sort by the bucket order, not alphabetically), `actual_departure_ts`, `error_s` (real − projected, seconds), `abs_error_s` and `affected_by_decision` (an applied recommendation on the same bus was decided after `as_of_ts` and not after the real departure, so the baseline is not comparable). No real departure yet, or the departure was estimated: NULL error, never zero.
 
 **Q16. Projection accuracy per lead bucket**
 ```sql
-SELECT lead_bucket, count(*) AS n, avg(abs_error_s) AS mae_s,
-       percentile_cont(0.5) WITHIN GROUP (ORDER BY abs_error_s) AS median_abs_error_s,
-       max(abs_error_s) AS worst_abs_error_s
-FROM gold.v_projection_accuracy
-WHERE error_s IS NOT NULL AND NOT affected_by_decision
-  AND as_of_ts BETWEEN %(from_ts)s AND %(to_ts)s
-GROUP BY lead_bucket ORDER BY lead_bucket;
+SELECT b.lead_bucket,
+       count(a.error_s) AS n_compared,
+       round(avg(a.abs_error_s), 1) AS mae_s,
+       round((percentile_cont(0.5) WITHIN GROUP (ORDER BY a.abs_error_s))::numeric, 1) AS median_abs_error_s,
+       max(a.abs_error_s) AS worst_abs_error_s,
+       round(avg(a.error_s), 1) AS mean_error_s
+FROM (VALUES ('0-5 min', 1), ('5-10 min', 2), ('10-30 min', 3)) AS b(lead_bucket, ord)
+LEFT JOIN gold.v_projection_accuracy a
+       ON a.lead_bucket = b.lead_bucket
+      AND a.error_s IS NOT NULL AND NOT a.affected_by_decision
+      AND a.as_of_ts BETWEEN %(from_ts)s AND %(to_ts)s
+GROUP BY b.lead_bucket, b.ord
+ORDER BY b.ord;
 ```
-Exact column names are fixed when story 006 phase 2b is built; this section is updated then.
+```
+lead_bucket | n_compared | mae_s | median_abs_error_s | worst_abs_error_s
+0-5 min     | 1260       | 37.6  | 15.0               | 400
+5-10 min    | 1175       | 77.0  | 45.0               | 400
+10-30 min   | 3316       | 114.4 | 75.0               | 435
+```
+(C1 bunching, seed 42, `SIM_DEMAND_SCALE=3`, story 006 phase 2b; the 400 s worst case is the stall the scenario injects at P-884.) `mean_error_s` is omitted in the sample. Names fixed by story 006 phase 2b (`specs/006-decision-mpc/contracts/projection-accuracy.md`, `rules_version` 1.7.0); the time filter is the reporting addition.
 
 ### MVP vs improvements
 
