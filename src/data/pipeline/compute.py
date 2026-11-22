@@ -20,6 +20,7 @@ import psycopg
 
 from src.data.pipeline.cycle import CycleError, run_cycle
 from src.data.pipeline.reference import load_reference
+from src.data.pipeline.seeds import load_seeds
 from src.pulsoflota.config import get_db_dsn, get_log_level
 
 
@@ -83,6 +84,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     with psycopg.connect(dsn) as conn:
         load_reference(conn)
+        load_seeds(conn)
+        conn.commit()
         for as_of in times:
             try:
                 result = run_cycle(conn, as_of, notify=not args.no_notify)

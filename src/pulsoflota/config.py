@@ -117,3 +117,35 @@ def get_sim_scenario_file() -> str | None:
 def get_sim_truth_path() -> str | None:
     """Path of the scenario truth file from SIM_TRUTH_PATH; unset or empty means stderr (004)."""
     return os.environ.get("SIM_TRUTH_PATH") or None
+
+
+def get_sim_holds() -> bool:
+    """True when the hold loop is on (SIM_HOLDS=on). Default `off`; anything else is an error (004)."""
+    raw = (os.environ.get("SIM_HOLDS") or "off").strip().lower()
+    if raw not in ("on", "off"):
+        raise RuntimeError(f"SIM_HOLDS must be 'on' or 'off', got: {raw!r}")
+    return raw == "on"
+
+
+def get_sim_hold_poll_s() -> float:
+    """Seconds between polls of the hold decisions (SIM_HOLD_POLL_S, default 1)."""
+    return _positive_float("SIM_HOLD_POLL_S", 1.0)
+
+
+def get_sim_hold_noncompliance() -> float:
+    """Probability that a driver does not comply with an approved hold (SIM_HOLD_NONCOMPLIANCE, default 0.10)."""
+    raw = os.environ.get("SIM_HOLD_NONCOMPLIANCE")
+    if raw is None or raw == "":
+        return 0.10
+    try:
+        value = float(raw)
+    except ValueError:
+        raise RuntimeError(f"SIM_HOLD_NONCOMPLIANCE must be a number, got: {raw!r}")
+    if not math.isfinite(value) or not 0.0 <= value <= 1.0:
+        raise RuntimeError(f"SIM_HOLD_NONCOMPLIANCE must be between 0 and 1, got: {raw!r}")
+    return value
+
+
+def get_seed_recommendations_path() -> str | None:
+    """Path of the seed recommendations file (SEED_RECOMMENDATIONS_PATH); unset or empty means the built-in file."""
+    return os.environ.get("SEED_RECOMMENDATIONS_PATH") or None

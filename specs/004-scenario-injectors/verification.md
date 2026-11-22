@@ -91,3 +91,69 @@ Golden hashes green in both. Coverage of the new modules: `scenarios/channel.py`
 
 - End: 2026-11-21T14:45:05Z (UTC). Start: 2026-11-21T14:05:26Z. About 40 minutes elapsed.
 - Not committed or pushed (left to the data owner).
+
+## Phase 1 gate decision: scenario truth time and "detection time" (data owner, 2026-11-21)
+
+The hidden truth records the **injection** time for C1 and C2 (code unchanged). SC-006 in `spec.md` and the T024 note in `tasks.md` now compare **bus and kind** only. The time from injection to the first gold snapshot that shows the effect is a separate measure, the "detection time". Phase 1 live figure for C2: injected 22:05:00Z (truth), first snapshot with the gap 22:27:30Z; this is reported as detection time, not as a pass condition. Research R2 line 151 and the T011 sentence still say "within one cycle"; they were not in the requested edit and are flagged for the data owner.
+
+## Phase 2 — Hold loop (US2)
+
+- Start: 2026-11-21T16:41:59Z (UTC). End: 2026-11-21T17:02Z (UTC).
+- Branch: `feature/004-scenario-injectors`. Checklist gate not re-asked (data owner approval 2026-11-21); checklist files untouched.
+
+### Red confirmation (T037)
+
+Run before any Phase 2 code. All failures are the expected ones; no syntax errors.
+
+| Test file | Failure before the code |
+|---|---|
+| `test_hold_rules.py` | `ImportError: cannot import name 'holds' from 'src.data.rules'` |
+| `test_hold_compliance.py`, `test_hold_board.py`, `test_scenario_injectors.py` (hold cases), `test_hold_poller.py` | `ModuleNotFoundError: src.data.simulator.scenarios.holds` |
+| `test_instruction_status.py`, `test_hold_loop.py` | `ModuleNotFoundError: src.data.pipeline.seeds` |
+| `test_seeds.py` | `ImportError: cannot import name 'seeds' from 'src.data'` |
+| `test_simulator_golden_hash.py` (new holds case), `test_loop_isolation.py` (offline) | `SystemExit: 2` (argparse: `--holds` does not exist) |
+| `test_schema_init.py` | `config.seed_recommendation missing` |
+| `test_generated_read_models.py` | `No module named 'src.pulsoflota.models.read.recommendation'` |
+| `test_env_example.py` (new tests) | `ImportError: cannot import name 'get_seed_recommendations_path'` |
+| `test_no_bronze_writes.py` | green by design (14 passed); it scans the simulator and passes on the new files |
+| Phase 1 tests, golden hashes (`--holds` absent) | stay green |
+
+### Implementation notes and decisions
+
+- `rules/holds.py` is the one definition of the cap (90 s), the tolerance (15 s), visit matching and observation. Both sides apply the same order rules. A conflict is "two orders whose first matching visit is the same visit": the earlier bronze id runs, the later one is `not_executed` at the arrival time (the engine cancels the loser the same way).
+- The compliance draw reads the first **8 bytes** of the SHA-256 digest as an integer and divides by 2**64. The task text says `[:8]` of the digest, which as 8 hex characters would give values below 2**-32 and make the probability meaningless.
+- Pending needs the open arrivals: `silver.stop_visits` only has finished visits, so `pipeline/holds.py` also reads bronze arrivals that have no visit row yet (SELECT only). Without it an order whose bus is still at the stop after `expires_ts` would be reported `not_executed` and then flip.
+- `gold.instruction_status` is rebuilt every cycle (not only when a snapshot is created), by DELETE + INSERT in the cycle transaction. The table has a CHECK that `ts_by_status` holds exactly one key equal to `status`.
+- Seeds: `src/data/seeds/recommendations.json` (demo hold of 90 s, B-103 at P-887, expires 22:35:00Z, `ewt_saving_s` 55, horizon 300 s). `refresh` and `compute` load it with `pipeline/seeds.py` at start.
+- Beyond the task text: `SEED_RECOMMENDATIONS_PATH` is also passed to the `refresh` service in `docker-compose.yml` (default empty), so the simulator and the pipeline cannot read different files. Added a `TruthSink.add_record` for hold records and `gold_support.clear_all` clears `gold.instruction_status`.
+- The CODEOWNERS paths touched in this phase: `src/data/rules/holds.py` (new), `src/data/rules/sql/hold_orders.sql` (new). `rules/__init__.py` and `silver_incidents.sql` are not touched again.
+
+### Offline hand checks (T044)
+
+Scratch database, simulator CLI with `--holds on`, seed fixture, `SIM_HOLD_NONCOMPLIANCE` forced:
+- Empty bronze, 3,600 s: seed 42 `51a5e9b3…` and seed 7 `6bd20707…`, both equal to the baselines.
+- A `discard` decision: stream identical to the no-holds stream (zero holds).
+- An `apply` decision for the 90 s seed on B-103: arrival 22:27:30Z, departure 22:29:00Z with `SIM_HOLD_NONCOMPLIANCE=0`; departure 22:27:40Z (natural 10 s dwell) with `=1`.
+
+### Whole suite (T045 steps 1 and 2), one at a time
+
+| Run | Command | Result |
+|---|---|---|
+| Phase 1 end | host and Andon | 692 passed, 3 skipped (host); 688 passed, 7 skipped (Andon); 95.75 % |
+| Host | `uv run pytest` (16:51 to 16:56Z, 337 s) | **809 passed, 4 skipped, 0 failed, 96.40 %** |
+| Andon | `docker compose --profile tools build tests && docker compose --profile tools run --rm tests` (16:57Z, 161 s run) | **805 passed, 8 skipped, 0 failed, 96.40 %** |
+
+Skips: the `-m live` tests, which skip themselves unless `-m live` is passed; the container run has 4 more skips than the host run, which I did not itemize. Golden hashes green in both runs (base-case test T002 stayed green with and without `--holds on`). Coverage of the new code: `rules/holds.py` **100 %**, `pipeline/holds.py` 100 %, `simulator/scenarios/holds.py` 99 % (lines 236-237, the closing-error guard), `seeds/__init__.py` 93 %, `simulator/main.py` 95 %, `engine.py` 100 %.
+
+Wall-clock sampling (SC-008): the batch of N = 200 `rec_id` values with seed 42 and probability 0.10 gives a reproducible non-compliant count, equal to the truth-record count; the expected 20 is reported by the test comment, not asserted.
+
+### Live check (T045 step 3), project `pulsoflota-verify`, db on port 55432
+
+Commands (each names the project on its own line): `COMPOSE_PROJECT_NAME=pulsoflota-verify docker compose down -v`; `POSTGRES_PORT=55432 API_PORT=58000 SIM_HOLDS=on SIM_PACE_S=0.5 SIM_DURATION_S=3600 COMPOSE_PROJECT_NAME=pulsoflota-verify docker compose up -d --build db ingestion`; `COMPOSE_PROJECT_NAME=pulsoflota-verify … uv run pytest src/data/tests/integration/test_loop_isolation.py -m live -q --no-cov -s`; `COMPOSE_PROJECT_NAME=pulsoflota-verify docker compose down -v`.
+Result: **1 passed** in 12.5 s. `api` and `refresh` were not running (the test stopped them with `-p pulsoflota-verify` and confirmed), the ingestion service ran with the poller on (`SIM_HOLDS=on`), and `bronze.events` grew by more than 5 rows over 12 s. No `hold_poll_failed` line. The default project (db, ingestion, api, refresh) was running before and after and was not touched.
+
+### Untouched check (T045 step 4)
+
+`git status --short` shows no change to `contracts/`, `docs/adr/`, `002_bronze.sql`, `ingestion/bronze.py`, `ingestion/validate.py`, `.github/`, `Dockerfile`, `pyproject.toml`, `uv.lock`, `.kiro/`, `.specify/`. Init scripts 001 to 006 unchanged; `007_scenarios.sql` has the Phase 2 section appended. Existing 002/003 tests edited: `test_schema_init.py` (table lists), `tests/unit/test_generated_read_models.py` (NAMES), `tests/unit/test_env_example.py` (new tests only), `test_simulator_golden_hash.py` and `test_scenario_injectors.py` (new tests only), `gold_support.py` (one table added to `clear_all`); no assertion was weakened. Outside the written allowed list: `docker-compose.yml` refresh env (see decisions), reported.
+
+- Not committed or pushed (left to the data owner).

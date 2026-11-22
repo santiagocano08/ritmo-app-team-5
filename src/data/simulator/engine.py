@@ -63,8 +63,9 @@ def sim_start(start_hour: int = 17) -> datetime:
 
 
 def run(seed: int, duration: int, start_hour: int = 17, demand_scale: float = 1.0,
-        ref: Reference | None = None, hooks=None) -> Iterator[dict]:
-    """`hooks` (004): optional scenario hooks; `None` runs exactly the baseline statements."""
+        ref: Reference | None = None, hooks=None, holds=None) -> Iterator[dict]:
+    """`hooks` (004): optional scenario hooks; `holds` (004): optional hold board.
+    `None` for both runs exactly the baseline statements."""
     ref = ref or load_reference()
     rng = random.Random(seed)
     base = datetime(*SIM_DATE, start_hour, tzinfo=LOCAL_TZ)
@@ -153,13 +154,13 @@ def run(seed: int, duration: int, start_hour: int = 17, demand_scale: float = 1.
                 target = b.profile.time_at(ref.stops[b.next_idx].distance_m)
                 if b.drive_t >= target:
                     b.drive_t, b.idx = target, b.next_idx
-                    _arrive(b, t, ref, queues, last, out, env, hooks)
+                    _arrive(b, t, ref, queues, last, out, env, hooks, holds)
             if b.phase == "layover" and t >= b.phase_end:
                 b.trip_n += 1
                 start_trip(b, t)
                 b.phase, b.start_at = "waiting", t
             if b.phase == "waiting" and t >= b.start_at:
-                _arrive(b, t, ref, queues, last, out, env, hooks)
+                _arrive(b, t, ref, queues, last, out, env, hooks, holds)
             elif b.phase == "dwell" and t >= b.phase_end:
                 boarded, alighted, rejected, occ_in = b.pending
                 out.append(env("stop_departure", t, _stop_payload(b, ref, boarded, alighted, rejected, len(b.load))))
@@ -181,7 +182,7 @@ def _stop_payload(b: Bus, ref: Reference, boarded: int, alighted: int, rejected:
 
 
 def _arrive(b: Bus, t: int, ref: Reference, queues: list[deque], last: int, out: list[dict], env,
-            hooks=None) -> None:
+            hooks=None, holds=None) -> None:
     occ_in = len(b.load)
     staying = [r for r in b.load if b.idx != last and r.dest_idx != b.idx]
     alighted = occ_in - len(staying)
@@ -197,6 +198,8 @@ def _arrive(b: Bus, t: int, ref: Reference, queues: list[deque], last: int, out:
     b.phase, b.phase_end = "dwell", t + dwell_s(nb, alighted)
     if hooks is not None:
         b.phase_end += hooks.dwell_extra(b, t, ref.stops[b.idx].stop_id)
+    if holds is not None:
+        b.phase_end = holds.dwell_end(b.bus_id, t, ref.stops[b.idx].stop_id, b.phase_end)
 
 
 def _position_payload(b: Bus, ref: Reference, halted: bool = False) -> dict:

@@ -16,10 +16,10 @@ INIT = ROOT / "src" / "data" / "db" / "init"
 
 TABLES = {
     "config": ["corridor_settings", "fleet_roster", "enabled_stops", "ref_stops", "ref_segments",
-               "ref_congestion_factor", "ref_demand_shape", "ref_demand_volume"],
+               "ref_congestion_factor", "ref_demand_shape", "ref_demand_volume", "seed_recommendation"],
     "silver": ["position_history", "incidents", "bus_current_state", "stop_visits", "segment_traversals"],
     "gold": ["snapshots", "source_status", "corridor_now", "decision_inputs", "service_metric",
-             "m1_baseline", "m2_baseline", "incident"],
+             "m1_baseline", "m2_baseline", "incident", "instruction_status"],
 }
 GOLD_TABLES = TABLES["gold"]
 

@@ -19,6 +19,7 @@ import psycopg
 
 from src.data.pipeline.cycle import CycleError, run_cycle
 from src.data.pipeline.reference import load_reference
+from src.data.pipeline.seeds import load_seeds
 from src.pulsoflota.config import get_db_dsn, get_log_level
 
 log = logging.getLogger("pulsoflota.refresh")
@@ -139,6 +140,7 @@ def main() -> None:
     dsn = get_db_dsn()
     conn = connect_with_retry(dsn)
     load_reference(conn)
+    load_seeds(conn)
     conn.commit()
     _event(logging.INFO, event="refresh_started", clock=mode, interval_s=interval)
 

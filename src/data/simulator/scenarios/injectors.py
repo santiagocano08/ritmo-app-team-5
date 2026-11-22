@@ -14,8 +14,9 @@ BUNCHED_BELOW_S = 300  # same quantity the rule uses: 0.5 x planned headway (002
 
 
 class ScenarioHooks:
-    def __init__(self, scenarios: Sequence, truth: TruthSink) -> None:
+    def __init__(self, scenarios: Sequence, truth: TruthSink, holds=None) -> None:
         self._truth = truth
+        self._holds = holds  # 004 Phase 2: a breakdown cancels the pending hold orders of the bus
         self._c1 = [s for s in scenarios if s.type == "C1"]
         self._c2 = [s for s in scenarios if s.type == "C2"]
         self._c5 = [s for s in scenarios if s.type == "C5"]
@@ -56,6 +57,8 @@ class ScenarioHooks:
             out.append(env("incident_report", t, {
                 "incident_type": "bus_breakdown", "target_id": s.bus,
                 "duration_min": s.duration_s / 60, "reported_by": "script"}))
+            if self._holds is not None:
+                self._holds.cancel_bus(s.bus)
             self._truth.fire(s.id, self._when(t))
 
     def halted(self, bus, t: int) -> bool:

@@ -25,3 +25,28 @@ WHERE i.snapshot_id = (
                              ORDER BY s2.as_of_ts DESC, s2.max_bronze_id DESC LIMIT 1)
     ORDER BY s.as_of_ts DESC, s.max_bronze_id DESC
     LIMIT 1);
+
+-- === Phase 2: hold loop (US2; data-model E3, E7) ====================================================
+-- Seed recommendations: demo and test data, loaded from src/data/seeds/recommendations.json by
+-- pipeline/seeds.py (DELETE + INSERT). Removed when the recommendation door exists.
+CREATE TABLE IF NOT EXISTS config.seed_recommendation (
+    rec_id  UUID  PRIMARY KEY,
+    doc     JSONB NOT NULL
+);
+
+-- Instruction status per approved hold, rebuilt each cycle from bronze, silver and config (no row while
+-- pending). `ts_by_status` has exactly one key, the status itself, with an RFC 3339 UTC time.
+CREATE TABLE IF NOT EXISTS gold.instruction_status (
+    rec_id            UUID    PRIMARY KEY,
+    bus_id            TEXT    NOT NULL,
+    stop_id           TEXT    NOT NULL,
+    hold_s            NUMERIC NOT NULL,
+    observed_dwell_s  NUMERIC,
+    status            TEXT    NOT NULL CHECK (status IN ('executed', 'not_executed')),
+    ts_by_status      JSONB   NOT NULL,
+    rules_version     TEXT    NOT NULL,
+    max_bronze_id     BIGINT  NOT NULL,
+    CONSTRAINT instruction_status_one_key CHECK (
+        COALESCE(jsonb_typeof(ts_by_status -> status) = 'string', false)
+        AND ts_by_status = jsonb_build_object(status, ts_by_status -> status))
+);

@@ -152,3 +152,100 @@ def test_modules_have_no_wall_clock_or_unseeded_random() -> None:
     for name in ("injectors.py", "channel.py"):
         code = (root / name).read_text(encoding="utf-8")
         assert not pattern.search(code), name
+
+
+# -- hold executor in the engine (T031; 004 FR-013, FR-014, FR-016, SC-007) --------------------------
+from src.data.simulator.scenarios.config import parse_scenarios  # noqa: E402
+from src.data.simulator.scenarios.holds import HoldBoard  # noqa: E402
+
+INF = float("-inf")
+
+
+def hold_run(orders, noncompliance: float = 0.0, scenarios=(), duration: int = 2400):
+    """The scenario stream with `orders` on the board. Each order is (rec, bus, stop, hold_s, from_s, until_s)."""
+    truth = TruthSink(list(scenarios))
+    board = HoldBoard({}, seed=SEED, noncompliance=noncompliance, truth=truth, when=lambda t: f"t{t}")
+    for o in orders:
+        board.add_order(*o)
+    events = list(scenario_events(list(scenarios), SEED, duration, truth, holds=board))
+    truth.close()
+    return events, truth.records()
+
+
+def dwell_of(events, bus="B-103", stop="P-887") -> tuple[int, int]:
+    arr = secs(find(events, "stop_arrival", bus, stop)[0])
+    dep = secs(find(events, "stop_departure", bus, stop)[0])
+    return arr, dep
+
+
+@pytest.fixture(scope="module")
+def base_events() -> list[dict]:
+    return list(run(SEED, 2400))
+
+
+def test_hold_extends_the_total_dwell_to_the_requested_seconds() -> None:
+    events, truth = hold_run([("r1", "B-103", "P-887", 90, INF, 2100)])
+    arr, dep = dwell_of(events)
+    assert arr == 1650 and dep == 1650 + 90
+    (rec,) = [r for r in truth if r["type"] == "HOLD"]
+    assert rec["rec_id"] == "r1" and rec["complied"] is True and rec["hold_s"] == 90
+
+
+def test_hold_keeps_reporting_with_doors_open_and_the_bus_does_not_move() -> None:
+    events, _ = hold_run([("r1", "B-103", "P-887", 90, INF, 2100)])
+    reports = [e for e in events if e["event_type"] == "bus_position" and e["payload"]["bus_id"] == "B-103"
+               and 1650 < secs(e) < 1740 and e["payload"]["trip_id"].endswith("001")]
+    assert len(reports) == 17 and all(e["payload"]["doors_open"] for e in reports)
+    assert len({e["payload"]["distance_along_m"] for e in reports}) == 1
+
+
+def test_a_natural_dwell_longer_than_the_hold_is_kept(base_events) -> None:
+    events, _ = hold_run([("r1", "B-103", "P-887", 5, INF, 2100)])
+    assert events == base_events
+
+
+def test_non_compliance_leaves_with_the_natural_dwell(base_events) -> None:
+    events, truth = hold_run([("r1", "B-103", "P-887", 90, INF, 2100)], noncompliance=1.0)
+    assert events == base_events
+    (rec,) = [r for r in truth if r["type"] == "HOLD"]
+    assert rec["complied"] is False
+
+
+def test_no_order_or_no_board_is_the_baseline(base_events) -> None:
+    assert hold_run([])[0] == base_events
+    assert list(scenario_events([], SEED, 2400, TruthSink([]), holds=None)) == base_events
+
+
+def test_an_order_for_another_stop_or_bus_changes_nothing(base_events) -> None:
+    events, _ = hold_run([("r1", "B-103", "P-890", 90, INF, 100)])  # window closes before the bus gets there
+    assert events == base_events
+
+
+def test_decision_must_precede_the_arrival_strictly(base_events) -> None:
+    events, truth = hold_run([("r1", "B-103", "P-887", 90, 1650, 2100)])  # decided at the arrival instant
+    assert events == base_events and not [r for r in truth if r["type"] == "HOLD"]
+    events, _ = hold_run([("r1", "B-103", "P-887", 90, 1649, 2100)])
+    assert dwell_of(events) == (1650, 1740)
+
+
+def test_arrival_after_expiry_is_not_held(base_events) -> None:
+    events, _ = hold_run([("r1", "B-103", "P-887", 90, INF, 1649)])
+    assert events == base_events
+
+
+def test_breakdown_cancels_the_pending_order() -> None:
+    scenarios = parse_scenarios([{"id": "c5", "type": "C5", "start_s": 1300, "bus": "B-103", "duration_s": 60}])
+    events, truth = hold_run([("r1", "B-103", "P-887", 90, INF, 2400)], scenarios=scenarios)
+    arr, dep = dwell_of(events)
+    assert dep - arr <= 20  # natural dwell: the order was cancelled when the bus broke down
+    assert not [r for r in truth if r["type"] == "HOLD"]
+
+
+def test_second_order_for_the_same_visit_is_a_conflict_and_never_runs() -> None:
+    events, truth = hold_run([("r1", "B-103", "P-887", 90, INF, 2100), ("r2", "B-103", "P-887", 80, INF, 2100)])
+    assert dwell_of(events) == (1650, 1740)
+    assert [r["rec_id"] for r in truth if r["type"] == "HOLD"] == ["r1"]
+
+
+def test_hold_run_is_reproducible() -> None:
+    assert hold_run([("r1", "B-103", "P-887", 90, INF, 2100)]) == hold_run([("r1", "B-103", "P-887", 90, INF, 2100)])

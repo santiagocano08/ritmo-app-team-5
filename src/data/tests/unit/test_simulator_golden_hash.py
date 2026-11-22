@@ -65,3 +65,27 @@ def test_scenario_run_is_reproducible_and_differs_from_the_baseline(tmp_path: Pa
     second = _stream(42, ["--scenario-file", str(fixture), "--truth-path", str(b)])
     assert first == second and a.read_bytes() == b.read_bytes()
     assert hashlib.sha256(first).hexdigest() != GOLDEN[42]
+
+
+def test_holds_on_with_an_empty_bronze_is_the_baseline(module_db_dsn, monkeypatch: pytest.MonkeyPatch) -> None:
+    """T027: `--holds on` against an empty bronze leaves the stream byte-identical (004 FR-001, FR-017, SC-001)."""
+    import psycopg
+
+    with psycopg.connect(module_db_dsn) as conn:
+        conn.execute("TRUNCATE bronze.events, bronze.rejections RESTART IDENTITY")
+        conn.commit()
+    monkeypatch.setenv("DATABASE_URL", module_db_dsn)
+    for seed in (42, 7):
+        assert hashlib.sha256(_stream(seed, ["--holds", "on"])).hexdigest() == GOLDEN[seed]
+    monkeypatch.setenv("SIM_HOLDS", "on")
+    assert hashlib.sha256(_stream(42)).hexdigest() == GOLDEN[42]
+
+
+def test_holds_on_with_the_database_down_is_the_baseline(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://nobody:x@127.0.0.1:1/none")
+    assert hashlib.sha256(_stream(42, ["--holds", "on"])).hexdigest() == GOLDEN[42]
+
+
+def test_holds_off_does_not_need_a_database(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    assert hashlib.sha256(_stream(42, ["--holds", "off"])).hexdigest() == GOLDEN[42]

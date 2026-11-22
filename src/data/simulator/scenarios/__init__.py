@@ -12,11 +12,13 @@ WORLD = ("C1", "C2", "C5")
 
 
 def scenario_events(scenarios: Sequence, seed: int, duration: int, truth: TruthSink | None = None,
-                    start_hour: int = 17) -> Iterator[dict]:
-    """The simulator stream with the scenarios applied: world hooks in the engine, D1 in the channel."""
+                    start_hour: int = 17, holds=None) -> Iterator[dict]:
+    """The simulator stream with the scenarios applied: world hooks in the engine, D1 in the channel.
+
+    `holds` (004 Phase 2) is the hold board of an approved-hold run; `None` adds nothing."""
     truth = truth if truth is not None else TruthSink(scenarios)
-    hooks = ScenarioHooks(scenarios, truth)
-    events = run(seed, duration, start_hour=start_hour, hooks=hooks if hooks.active else None)
+    hooks = ScenarioHooks(scenarios, truth, holds)
+    events = run(seed, duration, start_hour=start_hour, hooks=hooks if hooks.active else None, holds=holds)
     if any(s.type not in WORLD for s in scenarios):
         events = apply_channel(events, scenarios, sim_start(start_hour), truth)
     return events

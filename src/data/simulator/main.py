@@ -1,10 +1,14 @@
 """Simulator CLI (T023): JSON-lines envelopes on stdout.
 
     python -m src.data.simulator.main --seed S --duration D [--pace P]
-        [--scenario-file PATH] [--truth-path PATH]
+        [--scenario-file PATH] [--truth-path PATH] [--holds {on,off}]
 
 `--scenario-file` (or SIM_SCENARIO_FILE) turns scenario injectors on (004); an invalid file exits
 non-zero before any event. The hidden truth goes to `--truth-path` (or SIM_TRUTH_PATH), else stderr.
+
+`--holds on` (or SIM_HOLDS=on) turns the hold loop on (004 Phase 2): an initial synchronous poll of the
+backend `decision` rows, then a read-only daemon thread. With it off (the default) the simulator never
+touches the database. With it on and an empty bronze the stream is byte-identical to the baseline.
 
 `--pace` only throttles output in wall-clock seconds per 5 s sim step so a
 long-running container produces a steady stream; it never changes the bytes.
@@ -15,14 +19,18 @@ import argparse
 import json
 import sys
 import time
+from datetime import timedelta
 from typing import TextIO
 
-from src.data.simulator.engine import run
+from src.data.simulator.engine import run, sim_start
 from src.data.simulator.model import STEP_S
 from src.data.simulator.scenarios import scenario_events
 from src.data.simulator.scenarios.config import ScenarioConfigError, load_scenarios
 from src.data.simulator.scenarios.truth import TruthSink
-from src.pulsoflota.config import get_sim_scenario_file, get_sim_truth_path
+from src.data.seeds import SeedError
+from src.data.simulator.scenarios.holds import HoldBoard, HoldPoller, load_seeds
+from src.pulsoflota.config import (get_db_dsn, get_sim_hold_noncompliance, get_sim_hold_poll_s, get_sim_holds,
+                                   get_sim_scenario_file, get_sim_truth_path)
 
 
 def main(argv: list[str] | None = None, out: TextIO | None = None) -> None:
@@ -35,6 +43,8 @@ def main(argv: list[str] | None = None, out: TextIO | None = None) -> None:
                         help="JSON scenario file (default: SIM_SCENARIO_FILE; unset = no scenario)")
     parser.add_argument("--truth-path", default=None,
                         help="Where to write the hidden scenario truth (default: SIM_TRUTH_PATH, else stderr)")
+    parser.add_argument("--holds", choices=("on", "off"), default=None,
+                        help="Hold loop: poll approved holds from bronze, read-only (default: SIM_HOLDS, else off)")
     args = parser.parse_args(argv)
     out = out or sys.stdout
     try:
@@ -43,7 +53,21 @@ def main(argv: list[str] | None = None, out: TextIO | None = None) -> None:
         print(f"scenario file rejected: {exc}", file=sys.stderr)
         raise SystemExit(2) from None
     truth = TruthSink(scenarios, path=args.truth_path or get_sim_truth_path())
-    events = scenario_events(scenarios, args.seed, args.duration, truth) if scenarios \
+    board = poller = None
+    try:
+        holds_on = (args.holds == "on") if args.holds else get_sim_holds()
+        if holds_on:
+            start = sim_start()
+            board = HoldBoard(load_seeds(None, start), args.seed, get_sim_hold_noncompliance(), truth=truth,
+                              when=lambda t: (start + timedelta(seconds=t)).strftime("%Y-%m-%dT%H:%M:%SZ"))
+            poller = HoldPoller(get_db_dsn(), board, start, get_sim_hold_poll_s())
+    except (RuntimeError, SeedError) as exc:
+        print(f"hold loop rejected: {exc}", file=sys.stderr)
+        raise SystemExit(2) from None
+    if poller is not None:
+        poller.poll_once()  # the only blocking call (2 s timeouts): decisions already written are known from step 0
+        poller.start()
+    events = scenario_events(scenarios, args.seed, args.duration, truth, holds=board) if scenarios or board \
         else run(args.seed, args.duration)
     last_ts = None
     try:
@@ -55,6 +79,8 @@ def main(argv: list[str] | None = None, out: TextIO | None = None) -> None:
             out.write(json.dumps(event, sort_keys=True) + "\n")
         out.flush()
     finally:
+        if poller is not None:
+            poller.stop()
         truth.close()
 
 
