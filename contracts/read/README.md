@@ -1,5 +1,7 @@
 # Turn 1 Read Contract (v1.0.0)
 
+How the backend reads and writes this contract: see `docs/data-contract.md` (ADR-0006, ADR-0007).
+
 Read schemas for the turn-1 dispatcher console (corridor C6-008, direction 1). These are the
 objects the backend exposes and data persists; Pydantic V2 models are derived from them by
 `implement-code`. See **ADR-0003** for the full design rationale.
