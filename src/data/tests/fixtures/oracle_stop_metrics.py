@@ -105,3 +105,45 @@ def bands(events: list[dict], as_of: int, stops=STOPS) -> dict[tuple[str, int, s
 
 def add(a: dict, b: dict) -> dict:
     return {k: a[k] + b[k] for k in a}
+
+
+# -- 005 US4: P(board <= t), simple method (research R6; data-model E7) -----------------------------------------
+THRESHOLDS_S = (300, 600, 900)
+
+
+def riders(events: list[dict], as_of: int, stops=STOPS) -> dict[tuple[str, int, str], dict]:
+    """{(local date, band of the arrival, stop): counts} for every `rider_arrival` at the given stops.
+
+    One rider per (`source`, `event_id`). The wait is to the next departure of **any** bus from the stop with
+    `arrival <= departure <= as_of` (a departure at the arrival second counts, wait 0); no such departure means
+    the rider is only in `n_riders`. Independent of `src/data/rules/boarding.py`, `silver` and `gold`.
+    """
+    deps = {s: sorted(r[0] for r in rows) for s, rows in departures(events).items()}
+    seen: set[tuple[str, str]] = set()
+    out: dict[tuple[str, int, str], dict] = {}
+    for e in events:
+        if e["event_type"] != "rider_arrival":
+            continue
+        key = (e["source"], e["event_id"])
+        a, stop = epoch(e["event_ts"]), e["payload"]["stop_id"]
+        if key in seen or stop not in stops or a > as_of:
+            continue
+        seen.add(key)
+        date, band = band_of(a)
+        row = out.setdefault((date, band, stop), {"n_riders": 0, "n_le_5": 0, "n_le_10": 0, "n_le_15": 0})
+        row["n_riders"] += 1
+        d = next((x for x in deps.get(stop, []) if a <= x <= as_of), None)
+        if d is not None:
+            for name, t in zip(("n_le_5", "n_le_10", "n_le_15"), THRESHOLDS_S):
+                row[name] += int(d - a <= t)
+    return out
+
+
+def riders_by_band(events: list[dict], as_of: int, stops=STOPS) -> dict[tuple[str, int], dict]:
+    """The same counts summed over stops: {(local date, band): counts}."""
+    out: dict[tuple[str, int], dict] = {}
+    for (date, band, _stop), v in riders(events, as_of, stops).items():
+        acc = out.setdefault((date, band), {k: 0 for k in v})
+        for k, n in v.items():
+            acc[k] += n
+    return out

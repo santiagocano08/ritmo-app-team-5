@@ -55,7 +55,7 @@ def clear_all(conn: psycopg.Connection) -> None:
     conn.execute("TRUNCATE bronze.events, bronze.rejections RESTART IDENTITY")
     for table in ("segment_traversals", "stop_visits", "bus_current_state", "incidents", "position_history"):
         conn.execute(f"DELETE FROM silver.{table}")  # noqa: S608 - fixed names
-    for table in ("instruction_status", "incident", "service_metric", "service_metric_stop", "stop_ewt_band", "decision_inputs",
+    for table in ("instruction_status", "incident", "service_metric", "service_metric_stop", "stop_ewt_band", "stop_boarding_band", "decision_inputs",
                   "corridor_now", "source_status", "snapshots"):
         conn.execute(f"DELETE FROM gold.{table}")  # noqa: S608 - fixed names
     conn.commit()

@@ -14,6 +14,7 @@ from uuid import UUID
 import psycopg
 
 from src.data.rules import RULES_VERSION
+from src.data.rules.boarding import count_riders
 from src.data.rules.service_metric import ServiceMetric, service_metric
 from src.data.rules.stop_metrics import ZERO, Departure, add, band_sums, window_sums_by_stop
 from src.data.rules.timebands import WINDOW
@@ -82,3 +83,31 @@ def rebuild_ewt_bands(conn: psycopg.Connection, as_of_ts: datetime, max_bronze_i
                 "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                 (day, band, stop, s.n, s.sum_h, s.sum_h2, sum_p, sum_p2, s.n_excluded, RULES_VERSION,
                  max_bronze_id))
+
+
+def rebuild_boarding_bands(conn: psycopg.Connection, as_of_ts: datetime, max_bronze_id: int) -> None:
+    """Replace `gold.stop_boarding_band` for this cycle (005 US4; data-model E7), open band included.
+
+    Riders come from bronze (read only; one per `source` + `event_id`), departures from this cycle's silver.
+    Only the stops of `config.ref_stops` count. Runs after the silver rebuild, in the caller's transaction."""
+    as_of = _utc(as_of_ts)
+    with conn.cursor() as cur:
+        departures: dict[str, list[datetime]] = {
+            r[0]: [] for r in cur.execute("SELECT stop_id FROM config.ref_stops ORDER BY stop_seq").fetchall()}
+        for d in read_departures(cur):
+            departures[d.stop_id].append(d.ts)
+        for times in departures.values():
+            times.sort()
+        arrivals = [(r[0], _utc(r[1])) for r in cur.execute(
+            "SELECT DISTINCT ON (e.source, e.event_id) e.payload->>'stop_id', e.event_ts "
+            "FROM bronze.events e JOIN config.ref_stops r ON r.stop_id = e.payload->>'stop_id' "
+            "WHERE e.event_type = 'rider_arrival' AND e.id <= %s AND e.event_ts <= %s "
+            "ORDER BY e.source, e.event_id", (max_bronze_id, as_of)).fetchall()]
+        counts = count_riders(arrivals, departures, as_of)
+        cur.execute("DELETE FROM gold.stop_boarding_band")
+        for (day, band, stop), c in sorted(counts.items()):
+            cur.execute(
+                "INSERT INTO gold.stop_boarding_band (local_date, band, stop_id, n_riders, n_board_le_5, "
+                "n_board_le_10, n_board_le_15, rules_version, max_bronze_id) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (day, band, stop, c.n_riders, c.n_le_5, c.n_le_10, c.n_le_15, RULES_VERSION, max_bronze_id))

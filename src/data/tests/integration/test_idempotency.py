@@ -6,7 +6,7 @@ from src.data.tests.fixtures.gold_support import count, cycle
 from src.data.tests.fixtures.silver_support import dump
 
 GOLD_TABLES = ("snapshots", "source_status", "corridor_now", "service_metric", "decision_inputs",
-               "service_metric_stop", "stop_ewt_band")
+               "service_metric_stop", "stop_ewt_band", "stop_boarding_band")
 
 
 def _gold_dump(conn) -> dict[str, list]:

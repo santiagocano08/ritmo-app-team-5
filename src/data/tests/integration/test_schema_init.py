@@ -20,7 +20,7 @@ TABLES = {
     "silver": ["position_history", "incidents", "bus_current_state", "stop_visits", "segment_traversals"],
     "gold": ["snapshots", "source_status", "corridor_now", "decision_inputs", "service_metric",
              "m1_baseline", "m2_baseline", "incident", "instruction_status",
-             "service_metric_stop", "stop_ewt_band"],
+             "service_metric_stop", "stop_ewt_band", "stop_boarding_band"],
 }
 GOLD_TABLES = TABLES["gold"]
 
@@ -238,3 +238,41 @@ def test_adr_0001_has_the_ops_addendum_after_the_config_one() -> None:
            "(ingestion freshness). It holds no tables and no secrets.")
     assert ops in text
     assert text.index("a fourth schema, `config`") < text.index(ops)
+
+
+def test_stop_boarding_band_shape_and_checks(conn) -> None:
+    """005 E7."""
+    cols = _columns(conn, "gold", "stop_boarding_band")
+    assert set(cols) == {"local_date", "band", "stop_id", "n_riders", "n_board_le_5", "n_board_le_10",
+                         "n_board_le_15", "rules_version", "max_bronze_id"}
+    assert cols["local_date"][0] == "date" and cols["band"][0] == "smallint" and cols["stop_id"][0] == "text"
+    assert all(cols[c][0] == "integer" for c in ("n_riders", "n_board_le_5", "n_board_le_10", "n_board_le_15"))
+    assert cols["rules_version"][0] == "text" and cols["max_bronze_id"][0] == "bigint"
+    assert all(v[1] == "NO" for v in cols.values())
+    pk = [r[0] for r in conn.execute(
+        "SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) "
+        "WHERE i.indrelid = 'gold.stop_boarding_band'::regclass AND i.indisprimary ORDER BY a.attname")]
+    assert pk == ["band", "local_date", "stop_id"]
+    insert = ("INSERT INTO gold.stop_boarding_band (local_date, band, stop_id, n_riders, n_board_le_5, n_board_le_10, "
+              "n_board_le_15, rules_version, max_bronze_id) VALUES ('2026-11-24', %s, 'P-884', %s, %s, %s, %s, '1.4.0', 1)")
+    # column order: le_5 <= le_10 <= le_15 <= n_riders, counts >= 0, band 0..95
+    for args in ((10, 5, 4, 3, 5), (10, 5, 1, 2, 6), (10, 5, 1, 5, 4), (10, 2, 0, 1, 3), (96, 0, 0, 0, 0),
+                 (10, -1, -1, -1, -1)):
+        with pytest.raises(psycopg.errors.CheckViolation):
+            conn.execute(insert, args)
+        conn.rollback()
+    with pytest.raises(psycopg.errors.NotNullViolation):
+        conn.execute("INSERT INTO gold.stop_boarding_band (local_date, band, stop_id, n_riders, n_board_le_5, "
+                     "n_board_le_10, n_board_le_15, rules_version, max_bronze_id) "
+                     "VALUES ('2026-11-24', 10, 'P-884', 1, 0, 0, 0, NULL, 1)")
+    conn.rollback()
+
+
+def test_stop_boarding_band_view_flags(conn) -> None:
+    """005 E8: closed = band_end <= newest as_of; final = band_end + 15 min <= newest as_of; no snapshot: both false."""
+    assert conn.execute("SELECT relkind FROM pg_class WHERE oid = 'gold.stop_boarding_band_v'::regclass").fetchone()[0] == "v"
+    cols = [r[0] for r in conn.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_schema = 'gold' "
+        "AND table_name = 'stop_boarding_band_v'")]
+    assert {"local_date", "band", "stop_id", "n_riders", "n_board_le_5", "n_board_le_10", "n_board_le_15",
+            "rules_version", "max_bronze_id", "band_start_ts", "band_end_ts", "closed", "final"} <= set(cols)

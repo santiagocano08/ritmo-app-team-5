@@ -55,3 +55,37 @@ CREATE TABLE IF NOT EXISTS gold.stop_ewt_band (
     max_bronze_id     BIGINT   NOT NULL,
     PRIMARY KEY (local_date, band, stop_id)
 );
+
+-- Phase 3 (US4): P(board <= t) counts per stop and band of the rider's arrival (simple method, FR-040 to FR-045).
+-- E7: additive counts; the open band is included (its counts can still rise); replaced every cycle (sparse).
+CREATE TABLE IF NOT EXISTS gold.stop_boarding_band (
+    local_date     DATE     NOT NULL,
+    band           SMALLINT NOT NULL CHECK (band BETWEEN 0 AND 95),
+    stop_id        TEXT     NOT NULL,
+    n_riders       INT      NOT NULL CHECK (n_riders >= 0),
+    n_board_le_5   INT      NOT NULL CHECK (n_board_le_5 >= 0),
+    n_board_le_10  INT      NOT NULL CHECK (n_board_le_10 >= 0),
+    n_board_le_15  INT      NOT NULL CHECK (n_board_le_15 >= 0),
+    rules_version  TEXT     NOT NULL,
+    max_bronze_id  BIGINT   NOT NULL,
+    PRIMARY KEY (local_date, band, stop_id),
+    CHECK (n_board_le_5 <= n_board_le_10 AND n_board_le_10 <= n_board_le_15 AND n_board_le_15 <= n_riders)
+);
+
+-- E8: the band's UTC instants and its state against the newest snapshot. `closed`: the band has ended.
+-- `final`: every rider of the band has had the 15 minutes the largest threshold needs. No snapshot: both false.
+-- Local time = UTC - 5 h (same fixed offset as src/data/rules/timebands.py).
+CREATE OR REPLACE VIEW gold.stop_boarding_band_v AS
+SELECT x.local_date, x.band, x.stop_id, x.n_riders, x.n_board_le_5, x.n_board_le_10, x.n_board_le_15,
+       x.rules_version, x.max_bronze_id, x.band_start_ts, x.band_end_ts,
+       coalesce(x.band_end_ts <= n.as_of_ts, false) AS closed,
+       coalesce(x.band_end_ts + interval '15 minutes' <= n.as_of_ts, false) AS final
+FROM (
+    SELECT b.*,
+           (b.local_date::timestamp + b.band * interval '15 minutes' + interval '5 hours') AT TIME ZONE 'UTC'
+               AS band_start_ts,
+           (b.local_date::timestamp + (b.band + 1) * interval '15 minutes' + interval '5 hours') AT TIME ZONE 'UTC'
+               AS band_end_ts
+    FROM gold.stop_boarding_band b
+) x
+CROSS JOIN (SELECT max(as_of_ts) AS as_of_ts FROM gold.snapshots) n;

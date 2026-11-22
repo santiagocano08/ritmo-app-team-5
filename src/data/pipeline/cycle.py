@@ -21,7 +21,7 @@ from src.data.pipeline import gold
 from src.data.pipeline.holds import build_instruction_status
 from src.data.pipeline.incidents import build_incidents
 from src.data.pipeline.silver import rebuild_silver
-from src.data.pipeline.stop_metrics import rebuild_ewt_bands
+from src.data.pipeline.stop_metrics import rebuild_boarding_bands, rebuild_ewt_bands
 
 CHANNEL = "gold_snapshot"
 ADVISORY_LOCK_KEY = 7_203_002  # arbitrary constant: "pulsoflota 002 gold cycle"
@@ -70,6 +70,7 @@ def run_cycle(conn: psycopg.Connection, as_of_ts: datetime, notify: bool = True)
         rebuild_silver(conn, as_of, max_id)
         gold.rebuild_baselines(conn, as_of, max_id)
         rebuild_ewt_bands(conn, as_of, max_id)  # 005: closed 15-minute bands, replaced every cycle
+        rebuild_boarding_bands(conn, as_of, max_id)  # 005 US4: P(board <= t) counts, open band included
         snap = gold.build_snapshot(conn, as_of, max_id)
         if snap.created:
             build_incidents(conn, snap.snapshot_id, as_of, max_id)

@@ -217,3 +217,79 @@ Required: p95 <= 250 ms at demo length (met, 88.7 ms; the new steps add about 13
 Created: `src/data/db/init/008_data_fixes_metrics.sql` (CODEOWNERS: db), `src/data/rules/stop_metrics.py` (CODEOWNERS: rules), `src/data/pipeline/stop_metrics.py`, `src/data/tests/fixtures/oracle_stop_metrics.py`, `src/data/tests/unit/test_stop_metrics.py`, `src/data/tests/integration/test_stop_ewt_gold.py`.
 
 Modified: `src/data/rules/__init__.py` (RULES_VERSION 1.3.0, CODEOWNERS: rules), `src/data/rules/service_metric.py` (CODEOWNERS: rules), `src/data/rules/sql/silver_stop_visits.sql` (CODEOWNERS: silver SQL), `src/data/pipeline/gold.py`, `src/data/pipeline/cycle.py`; tests `unit/test_service_metric.py`, `unit/test_rules_version.py`, `integration/test_schema_init.py`, `integration/test_gold_contract.py`, `integration/test_idempotency.py`, `integration/test_scenarios_gold.py`, `integration/test_incident_gold.py`, `integration/test_rebuild.py`, `integration/test_waiting_buses.py`, `integration/test_instruction_status.py`, `fixtures/gold_support.py`; `specs/005-data-fixes-metrics/tasks.md` (marks), `specs/005-data-fixes-metrics/verification.md`.
+
+## Phase 3 (US4: P(board <= t)), T036 to T044
+
+Start 2026-11-22T05:09Z. End 2026-11-22T05:33Z (UTC). Agent: implement-code. Nothing committed. Phase 4 not started.
+`.specify/extensions.yml` does not exist, so no hooks applied.
+
+### Oracle results (all exact; none changed to fit the code)
+
+Independent oracle `riders()` / `riders_by_band()` in `src/data/tests/fixtures/oracle_stop_metrics.py` (raw simulator events; no import of `rules/boarding.py`, silver or gold). Self-check passed **before** any implementation existed, then gold reproduced it with 0 differences per (band, stop):
+
+| Band (local) | n_riders | <= 5 min | <= 10 min | <= 15 min | Plan | Oracle | Gold |
+|---|---|---|---|---|---|---|---|
+| 68 (17:00-17:15) | 9 | 3 | 9 | 9 | 9 / 3 / 9 / 9 | same | same |
+| 69 (17:15-17:30) | 16 | 10 | 16 | 16 | 16 / 10 / 16 / 16 | same | same |
+| 70 (17:30-17:45) | 21 | 9 | 14 | 15 | 21 / 9 / 14 / 15 | same | same |
+
+46 riders in all, 37 at P-883 (plan: 46 and 37). Band 70 has 6 riders not in `n_board_le_15` (open, still in `n_riders`; the test checks that all 6 are in band 70 and have no departure at or before `as_of`).
+Q-P1 at 22:45:00Z: bands 68 + 69 final: 25 riders, 52.0 % at <= 5 min (13/25), 100 % at <= 10 and <= 15 min. Band 69 alone: 62.5 % at <= 5 min, 100 % at <= 10 min. Band 68 alone: 33.3 % and 100 %. Band 70 (provisional, all riders in the denominator): 42.9 % at <= 5 min, 66.7 % at <= 10 min (decision 3; the mock's 60 % and 93 % leave the 6 open riders out).
+
+### Read query (Q-P1, as written in `contracts/gold-stop-metrics.md`)
+
+Run by `test_stop_boarding_gold.py` with parameters `day`, `from_band`, `to_band`, over `gold.stop_boarding_band_v ... AND final`: NULL (not 0) when no rider (bands 10-11 and the open band 70), per-stop variant equals the oracle.
+
+### Test runs (one at a time)
+
+| # | Command | Result | Time (UTC) |
+|---|---|---|---|
+| 1 | `uv run --extra dev pytest -m "not slow and not live" -p no:cacheprovider -q` (host, `DATABASE_URL` to localhost) | **887 passed, 0 failed**, 5 deselected; coverage **96.75 %** (gate 80 %); `rules/boarding.py` 100 %, `pipeline/stop_metrics.py` 100 % | 05:14:21Z to 05:21:45Z |
+| 2 | `docker compose --profile tools build tests && docker compose --profile tools run --rm tests` | run as `POSTGRES_PORT=5433 API_PORT=8001 docker compose -p pulsoflota-verify --profile tools ...` (the default project has a running stack on 5432/8000 and is never touched). **884 passed, 8 skipped, 0 failed**; coverage **96.75 %**. Same 8 container-only skips as before | 05:21:52Z to 05:26:23Z |
+
+Passed count 887 vs 862 at the end of Phase 2: +25 new tests.
+
+### Live check (project `pulsoflota-verify`, ports 5433 / 8001, fixture mounted through `/tmp/verify-override.yml`)
+
+`SIM_SEED=42 SIM_DURATION_S=2700 SIM_PACE_S=0.05 SIM_SCENARIO_FILE=/scn/c1_bunching.json REFRESH_CLOCK=data`, fresh volume (`008` through the init directory):
+
+| Check | Result |
+|---|---|
+| bronze events / newest snapshot | 2,881 / 22:44:55Z (the stream ends at 22:44:55Z, so the run itself never passes 22:45:00Z) |
+| view at 22:44:55Z | band 68 closed + final (9 / 3 / 9 / 9); band 69 closed, not final (16 / 10 / 16 / 16); band 70 open (21 / 9 / 14 / 15) |
+| one extra cycle at 22:45:00Z through `run_cycle` inside the refresh container (verify project only) | band 68 closed + final; band 69 closed + final; band 70 closed, not final; same counts |
+| Q-P1 over bands 68-69 | 25 riders, 52.0 % / 100 % / 100 % |
+| `cycle_failed` in the refresh log | 0 |
+| cleanup | `docker compose -p pulsoflota-verify --profile tools down -v`; default stack untouched and still running |
+
+### Cycle time (scratch recipe, throwaway database, C1 seed 42, 2,700 s, 108 cycles, 2,881 events)
+
+| Run | Median | p95 | Max |
+|---|---|---|---|
+| Baseline (T001) | 47.7 ms | 67.0 ms | 69.8 ms |
+| After Phase 2 | 60.7 ms | 88.7 ms | 96.8 ms |
+| After Phase 3, run 1 | 65.1 ms | 93.9 ms | 187.2 ms (one outlier) |
+| After Phase 3, run 2 | 65.8 ms | 96.4 ms | 107.3 ms |
+| Live `refresh_cycle` `duration_ms` (18 cycles) | 152 ms | 159 ms | 160 ms |
+| 4 simulated hours, 15,388 events, 15 cycles near the end, three runs | median 1,442 / 1,439 / 1,435 ms | | max 1,519 / 1,543 / 1,507 ms |
+
+p95 <= 250 ms at demo length: met (about 94-96 ms; the boarding step adds about 5 ms at the median). **4-hour figure <= 1.5 s: the median meets it (about 1.44 s); the worst cycle of each run is 1.51 to 1.54 s, slightly over.** Phase 2 recorded median 1,428 / max 1,475 ms. The linear growth is the known H-8 finding; the boarding step adds about 15 ms. Flagged for the data owner; no code was changed to hide it.
+
+### Rework and findings
+
+1. Red first, seen for the expected reason: `test_boarding.py` (`boarding` module missing), the schema and gold tests (table and view missing; `clear_all` failed on the missing table), `test_rules_version` (1.3.0 vs 1.4.0).
+2. Four test mistakes of mine, fixed in the tests (no rule or oracle touched): the threshold test used one stop for riders who all see the same next departure (now one stop per case); a CHECK case in `test_schema_init` was actually valid (3, 4, 5 of 5 riders); the builder's `rider_arrival` already appends to `events`, so I had added the event twice.
+3. `test_instruction_status.py` pinned `rules_version == "1.3.0"`; changed to `1.4.0` (same kind of literal as `test_rules_version.py`).
+4. Lists of gold tables in `gold_support.clear_all`, `test_incident_gold`, `test_scenarios_gold`, `test_idempotency`, `test_rebuild`, `test_schema_init` gained `stop_boarding_band` (and the view is dropped before the table in the rebuild test).
+5. The first live attempt ran the refresh image built in Phase 2 (no `boarding.py`); the table stayed empty. I rebuilt `ingestion` and `refresh` under the verify project (`docker compose -p pulsoflota-verify ... build ingestion refresh`) and repeated the check. No product impact.
+6. **Decision on the wording of T039 (f).** The task says band 70 "is `closed = false`" at 22:45:00Z. Data-model E8 defines `closed` as `band_end_ts <= newest as_of_ts`, and band 70 ends at 22:45:00Z, so it is `closed = true`, `final = false` at 22:45:00Z and `closed = false` at 22:44:55Z. I followed E8 (same rule as `stop_ewt_band`, where band 70 appears at 22:45:00Z) and tested both instants. The `final` result (only 68 and 69) is as the plan says.
+
+### Untouched check
+
+`git diff --stat feature/004-scenario-injectors` on `contracts/`, `docs/adr/`, `docs/data-contract.md`, `src/data/db/init/001`-`007`, `.github/`, `Dockerfile`, `pyproject.toml`, `uv.lock`, `docker-compose.yml`, `.env.example`, `src/pulsoflota/config.py`, `src/data/simulator/`, `src/data/ingestion/`, `.kiro/`, `.specify/`: **empty**. `git status` shows only the files below.
+
+### Files changed in Phase 3 (CODEOWNERS paths marked)
+
+Created: `src/data/rules/boarding.py` (CODEOWNERS: rules), `src/data/tests/unit/test_boarding.py`, `src/data/tests/integration/test_stop_boarding_gold.py`.
+
+Modified: `src/data/db/init/008_data_fixes_metrics.sql` (CODEOWNERS: db; adds `gold.stop_boarding_band` and `gold.stop_boarding_band_v`), `src/data/rules/__init__.py` (RULES_VERSION 1.4.0, CODEOWNERS: rules), `src/data/pipeline/stop_metrics.py`, `src/data/pipeline/cycle.py`; tests `fixtures/oracle_stop_metrics.py`, `fixtures/gold_support.py`, `unit/test_rules_version.py`, `integration/test_schema_init.py`, `test_idempotency.py`, `test_incident_gold.py`, `test_scenarios_gold.py`, `test_rebuild.py`, `test_instruction_status.py`; `specs/005-data-fixes-metrics/tasks.md` (marks), `specs/005-data-fixes-metrics/verification.md`.

@@ -151,7 +151,7 @@ def test_dropping_silver_and_gold_and_recomputing_gives_the_same_snapshot(gold_c
         for t in baselines:
             out[t] = [tuple(repr(v) for v in r) for r in gold_conn.execute(
                 f"SELECT * FROM gold.{t} ORDER BY 1, 2").fetchall()]  # noqa: S608
-        for t in ("service_metric_stop", "stop_ewt_band"):  # 005: all rows of the snapshot / of the closed bands
+        for t in ("service_metric_stop", "stop_ewt_band", "stop_boarding_band"):  # 005: all rows of the snapshot / of the closed bands
             out[t] = sorted(tuple(repr(v) for v in r) for r in gold_conn.execute(
                 f"SELECT * FROM gold.{t}" + (" WHERE snapshot_id = %s" if t == "service_metric_stop" else ""),  # noqa: S608
                 (snap,) if t == "service_metric_stop" else ()).fetchall())
@@ -160,7 +160,7 @@ def test_dropping_silver_and_gold_and_recomputing_gives_the_same_snapshot(gold_c
         return out
 
     before = last_state()
-    assert all(before[t] for t in gold_tables + baselines + ("service_metric_stop", "stop_ewt_band"))
+    assert all(before[t] for t in gold_tables + baselines + ("service_metric_stop", "stop_ewt_band", "stop_boarding_band"))
     last_as_of_s = 30 * 60
 
     gold_conn.commit()
@@ -169,6 +169,8 @@ def test_dropping_silver_and_gold_and_recomputing_gives_the_same_snapshot(gold_c
     gold_conn.execute("DROP TABLE gold.incident")
     gold_conn.execute("DROP TABLE gold.service_metric_stop")  # 005: references gold.snapshots
     gold_conn.execute("DROP TABLE gold.stop_ewt_band")
+    gold_conn.execute("DROP VIEW gold.stop_boarding_band_v")
+    gold_conn.execute("DROP TABLE gold.stop_boarding_band")
     for t in baselines + tuple(reversed(gold_tables)):
         gold_conn.execute(f"DROP TABLE gold.{t}")  # noqa: S608 - fixed names
     for t in SILVER_TABLES:
