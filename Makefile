@@ -1,4 +1,4 @@
-.PHONY: generate generate-read reference up down test lint clean
+.PHONY: generate generate-read reference up down test lint clean network up-split down-split
 
 # Regenerate Pydantic V2 models from the accepted turn-1 contract schemas.
 # The generated file is a build artifact — never hand-edited.
@@ -66,3 +66,23 @@ clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -name "*.pyc" -delete 2>/dev/null || true
 	rm -rf .pytest_cache htmlcov .coverage
+
+# --- One compose project per service (data, generator, backend, frontend) -----
+# Same services as docker-compose.yml, split into four independent stacks joined
+# by the external network pulsoflota-net. Start order: data -> generator/backend -> frontend.
+SPLIT_STACKS := data generator backend frontend
+
+network:
+	docker network inspect pulsoflota-net >/dev/null 2>&1 || docker network create pulsoflota-net
+
+up-split: network
+	for s in $(SPLIT_STACKS); do docker compose -f compose.$$s.yml up --build -d || exit 1; done
+
+down-split:
+	for s in frontend backend generator data; do docker compose -f compose.$$s.yml down; done
+
+up-%: network
+	docker compose -f compose.$*.yml up --build -d
+
+down-%:
+	docker compose -f compose.$*.yml down

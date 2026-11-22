@@ -1,0 +1,75 @@
+# ---------------------------------------------------------------------------
+# PulsoFlota — DATA stack (one of four independent compose projects)
+#
+#   db      — PostgreSQL 16 (bronze / silver / gold)
+#   refresh — gold refresh loop + decision model (feature 002 / 006)
+#
+# Start this stack FIRST: the generator and the backend connect to `db` over the
+# shared network `pulsoflota-net`.
+#
+#   docker network create pulsoflota-net   # once (or: make network)
+#   docker compose -f compose.data.yml up -d --build
+#
+# The all-in-one docker-compose.yml is kept unchanged for the tests profile and CI.
+# Do not run both at the same time: they publish the same host ports.
+# ---------------------------------------------------------------------------
+
+name: pulsoflota-data
+
+services:
+
+  db:
+    image: postgres:16.11
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (cp .env.example .env)}
+    volumes:
+      - ./src/data/db/init:/docker-entrypoint-initdb.d:ro
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - pulsoflota
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # Off the capture path: nothing depends on it (FR-041, Principle III).
+  refresh:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: prod
+    command: ["python", "-m", "src.data.refresh.run"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      REFRESH_CLOCK: ${REFRESH_CLOCK:-data}
+      REFRESH_INTERVAL_S: ${REFRESH_INTERVAL_S:-5}
+      REFRESH_HEALTH_MAX_AGE_S: ${REFRESH_HEALTH_MAX_AGE_S:-30}
+      MPC_ENABLED: ${MPC_ENABLED:-on}
+      PYTHONPATH: /app
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - pulsoflota
+    healthcheck:
+      test: ["CMD", "python", "-m", "src.data.refresh.health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+volumes:
+  db_data:
+
+networks:
+  pulsoflota:
+    name: pulsoflota-net
+    external: true

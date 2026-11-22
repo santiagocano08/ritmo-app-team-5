@@ -1,0 +1,40 @@
+# ---------------------------------------------------------------------------
+# PulsoFlota — FRONTEND stack (one of four independent compose projects)
+#
+#   frontend — dispatcher console (React SPA) behind Nginx; forwards /api/v1 to `api`
+#
+# Reaches the backend through the shared network `pulsoflota-net`:
+#
+#   docker compose -f compose.backend.yml up -d --build   # first
+#   docker compose -f compose.frontend.yml up -d --build
+#
+# Nginx resolves `api` at request time (resolver 127.0.0.11), so this container
+# starts even when the backend is down; the console shows its stale indicator
+# until the backend answers (FR-008).
+# ---------------------------------------------------------------------------
+
+name: pulsoflota-frontend
+
+services:
+
+  frontend:
+    build:
+      context: .
+      dockerfile: src/frontend/Dockerfile
+    ports:
+      - "${FRONTEND_PORT:-8080}:8080"
+    networks:
+      - pulsoflota
+    healthcheck:
+      # 127.0.0.1, not localhost: in the container localhost resolves to ::1 and nginx listens on IPv4 only.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped
+
+networks:
+  pulsoflota:
+    name: pulsoflota-net
+    external: true

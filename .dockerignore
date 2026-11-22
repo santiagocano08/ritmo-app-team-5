@@ -35,6 +35,7 @@ scripts/
 # Docker files themselves (no recursion needed)
 Dockerfile*
 docker-compose*.yml
+compose*.yml
 
 # Test files
 tests/
