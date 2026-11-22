@@ -111,6 +111,69 @@ Nothing else to install — the committed `.kiro/` and `.specify/` directories a
 
 ---
 
+## Running the application (Turn-1 stack)
+
+PulsoFlota runs as a Docker Compose stack of **five services**. One command builds and starts them
+all; the dispatcher console then loads live corridor state from the real backend over one origin.
+
+**Prerequisites:** Docker Engine with `docker compose`.
+
+### 1. Configure the environment
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and set a `POSTGRES_PASSWORD` (the stack refuses to start without it); make sure the
+password in `DATABASE_URL` matches it. The committed defaults use `REFRESH_CLOCK=data`, so the
+simulator/gold path drives corridor **C6-008** — no extra data tooling or mocks are needed. The
+console reaches the backend through the **same origin** (the frontend proxy forwards the relative
+path `/api/v1`), so `VITE_API_BASE_URL` stays unset for the default topology. No secret is required
+beyond `POSTGRES_PASSWORD`.
+
+### 2. Start everything with one command
+
+```bash
+docker compose up --build
+```
+
+### 3. Open the console
+
+Open **http://localhost:8080** (the `FRONTEND_PORT`). The console renders the C6-008 fleet
+leader-first with state, headway and quality, and auto-refreshes about every 5 seconds. Its
+`/api/v1/...` requests are forwarded to the backend through the same origin — no cross-origin call.
+
+### The five services
+
+| Service | Role | Port | Health check |
+|---------|------|------|--------------|
+| `db` | PostgreSQL 16 persistence | `5432` | `pg_isready` |
+| `ingestion` | simulator → ingestion reader (isolated; nothing depends on it) | — | bronze-freshness probe |
+| `refresh` | gold snapshot recompute loop | — | gold-freshness probe |
+| `api` | FastAPI read API | `8000` | `GET /healthz` |
+| `frontend` | Nginx reverse proxy: serves the SPA + forwards `/api/v1` to `api` | `8080` | local index returns 200 |
+
+The `frontend` container becomes healthy only after `api` is healthy. Stopping `api`/`frontend`
+never stops `ingestion` (the console shows a non-blocking stale indicator while `api` is down and
+recovers on its own when it returns).
+
+```bash
+docker compose ps          # STATUS shows (healthy) for all five services
+```
+
+### Run the existing test gates
+
+```bash
+docker compose --profile tools run --rm tests                 # backend pytest + coverage > 80 %
+docker run --rm -v "$PWD":/repo -w /repo/src/frontend node:22.11.0-alpine \
+  sh -c 'npm ci && npm run lint && npm test && npm run build'  # frontend lint/tsc/vitest/build
+```
+
+A full end-to-end validation walkthrough (service health, the five console cases, image/header
+inspection) lives in [`specs/006-functional-integration/quickstart.md`](specs/006-functional-integration/quickstart.md).
+
+---
+
 ## Optional: installing the Spec Kit CLI
 
 You **do not need this** to run the agents in this repo — the Spec Kit files are already committed.

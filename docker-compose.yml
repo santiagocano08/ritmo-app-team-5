@@ -159,6 +159,34 @@ services:
     restart: unless-stopped
 
   # --------------------------------------------------------------------------
+  # frontend — dispatcher console (React SPA) built to static assets and served
+  # by an Nginx reverse proxy that also forwards /api/v1 to the api service, so
+  # the browser talks to one origin (FR-011). Hardened image: non-root UID 10001,
+  # assets-only, mandatory security headers (FR-009/FR-010/FR-012).
+  #
+  # Starts only after api is healthy (FR-002). The healthcheck probes the proxy's
+  # own served index (NOT the upstream backend), so a mid-session backend blip
+  # shows a non-blocking stale indicator in the UI without flapping this container
+  # (FR-008, research R4). Adds NO dependency onto ingestion: Principle III holds.
+  # --------------------------------------------------------------------------
+  frontend:
+    build:
+      context: .
+      dockerfile: src/frontend/Dockerfile
+    ports:
+      - "${FRONTEND_PORT:-8080}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/ >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
   # tests — runs the full pytest suite inside the app image.
   # Profile: 'tools' — only started explicitly with:
   #   docker compose --profile tools run --rm tests
