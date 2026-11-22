@@ -1,0 +1,126 @@
+openapi: 3.1.0
+info:
+  title: PulsoFlota Read API (US-05)
+  version: 1.0.0
+  description: >
+    Read-only HTTP API serving the latest gold-layer corridor state for corridor
+    C6-008 (direction 1). Polling only; no auth/RBAC, recommendations, history or
+    pagination in this story (deferred per docs/turns-ritmo.md). Response bodies
+    are the approved read contracts corridor_now v1.0.0 and source_status v1.0.0;
+    this document references those JSON Schemas as the single source of truth and
+    does not redefine their fields.
+servers:
+  - url: /api/v1
+paths:
+  /corridor/{corridor_id}/now:
+    get:
+      operationId: getCorridorNow
+      summary: Latest corridor_now snapshot
+      description: >
+        Returns the single most recent corridor_now snapshot for the corridor
+        (FR-001, FR-003, FR-010). Read-only against gold (FR-005). When no snapshot
+        exists yet, returns 200 with a distinguishable no-data envelope (FR-008).
+      parameters:
+        - $ref: '#/components/parameters/CorridorId'
+      responses:
+        '200':
+          description: >
+            Latest corridor_now body, or the no-data envelope when no snapshot
+            exists. The two variants are distinguished by the presence of
+            schema_version (contract body) vs status=no_data (envelope).
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: './read/corridor_now.schema.json'
+                  - $ref: '#/components/schemas/NoDataCorridor'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /corridor/{corridor_id}/source-status:
+    get:
+      operationId: getSourceStatus
+      summary: Latest source_status
+      description: >
+        Returns the current data-source status for the corridor (FR-002, FR-004,
+        FR-006). A bus silent > 2 min is reported as a down source with overall
+        status 'estimated' and no alert. Read-only against gold (FR-005). When no
+        snapshot exists yet, returns 200 with status 'no_data' (FR-008).
+      parameters:
+        - $ref: '#/components/parameters/CorridorId'
+      responses:
+        '200':
+          description: >
+            Latest source_status body. The contract already models the empty/no-data
+            case via status=no_data with an empty sources_down.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: './read/source_status.schema.json'
+                  - $ref: '#/components/schemas/NoDataSourceStatus'
+        '500':
+          $ref: '#/components/responses/InternalError'
+components:
+  parameters:
+    CorridorId:
+      name: corridor_id
+      in: path
+      required: true
+      description: Corridor identifier. Turn 1 serves only 'C6-008'; any other id yields the no-data response.
+      schema:
+        type: string
+        minLength: 1
+      example: C6-008
+  schemas:
+    NoDataCorridor:
+      type: object
+      additionalProperties: false
+      required: [status, corridor_id]
+      description: Returned when no gold snapshot exists yet for corridor_now (FR-008).
+      properties:
+        status:
+          type: string
+          enum: [no_data]
+        corridor_id:
+          type: string
+          minLength: 1
+    NoDataSourceStatus:
+      type: object
+      additionalProperties: false
+      required: [status, corridor_id, sources_down]
+      description: >
+        No-data variant for source-status. Mirrors the contract's status=no_data
+        with an empty sources_down and no snapshot identity.
+      properties:
+        status:
+          type: string
+          enum: [no_data]
+        corridor_id:
+          type: string
+          minLength: 1
+        sources_down:
+          type: array
+          maxItems: 0
+          items: {}
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error, correlation_id]
+      description: >
+        Generic error body (FR-007, A10). Never exposes stack traces, file paths or
+        internal data-store structure. correlation_id ties the failure to a
+        server-side log record.
+      properties:
+        error:
+          type: string
+          example: internal_server_error
+        correlation_id:
+          type: string
+          format: uuid
+  responses:
+    InternalError:
+      description: Unhandled server error — generic body with a correlation id.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

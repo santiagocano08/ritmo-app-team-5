@@ -22,6 +22,8 @@ import uuid
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from src.api.routers.corridor_read import router as corridor_read_router
+
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
@@ -72,8 +74,6 @@ async def healthz() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# /api/v1 router placeholder (unused in turn 1)
+# /api/v1 corridor read router (US-05)
 # ---------------------------------------------------------------------------
-# from fastapi import APIRouter
-# v1_router = APIRouter(prefix="/api/v1")
-# app.include_router(v1_router)
+app.include_router(corridor_read_router)
