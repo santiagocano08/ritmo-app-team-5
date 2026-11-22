@@ -51,5 +51,6 @@ on the isolated `pfsim` database.
 - Binds to `127.0.0.1` only.
 - Runs fixed `docker compose` argument lists on project `pfsim` (no shell, no free text).
 - Every run parameter is validated against an allow-list or a numeric range.
+- `IMAGE_TAG=pfsim` in `.pfsim.env`: the compose images are named `pulsoflota/<service>:${IMAGE_TAG}`, so a pfsim build never replaces the default stack images (`:dev`).
 - `.pfsim.env` (secrets) and `runs/` (run history) are git-ignored.
 - Excluded from coverage (`pyproject.toml`): it drives Docker and a browser UI.
