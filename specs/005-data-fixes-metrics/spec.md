@@ -47,7 +47,7 @@ The congestion factor that drives simulated and baseline travel times must descr
 
 ### User Story 2 - No False Gap When a Bus Leaves the Terminal (Priority: P1) — finding H-10
 
-A bus must not be reported as `gap` just because the bus ahead waited a long time at the terminal. Before its trip starts, each bus waits at P-883 sending `bus_position` events with `distance_along_m = 0` and the same `trip_id`. When the follower is exactly at 0 m, the headway rule takes the leader's **first** 0 m sample (when it started waiting) instead of when it left. On scenario C1 (seed 42) the headways come out as 1,235 s, 1,835 s and 2,435 s at 22:20:35, 22:30:40 and 22:40:35. Those buses are flagged `gap` and the snapshot EWT jumps to 211, 467 and 731 s.
+A bus must not be reported as `gap` just because the bus ahead waited a long time at the terminal. Before its trip starts, each bus waits at P-883 sending `bus_position` events with `distance_along_m = 0` and the same `trip_id`. When the follower is exactly at 0 m, the headway rule takes the leader's **first** 0 m sample (when it started waiting) instead of when it left. On scenario C1 (seed 42), after the US1 fix, the headways come out as 1,240 s, 1,835 s and 2,440 s at 22:20:40, 22:30:35 and 22:40:40. Those buses are flagged `gap` and the snapshot EWT jumps to 259, 536 and 732 s.
 
 **Why this priority**: it makes the demo show a false alarm every ten minutes and corrupts the metric the dispatcher watches.
 
@@ -81,8 +81,8 @@ The service metric must say how long riders wait at stops, which is what the qua
 
 **Acceptance Scenarios**:
 
-1. **Given** C1 seed 42 without the hold, **When** the corridor EWT over stops P-888..P-900 and departures 22:28:55–22:44:55 is read, **Then** it is about +40.6 s (the review reference), and the independent recomputation matches the gold value exactly.
-2. **Given** C1 seed 42 with the seeded 90 s hold approved at 22:23:35, **When** the same window is read, **Then** the corridor EWT is about +23.6 s and is lower than the value without the hold.
+1. **Given** C1 seed 42 without the hold, **When** the corridor EWT over stops P-888..P-900 and departures 22:28:55–22:44:55 is read, **Then** it is about +25.8 s (27 intervals; the post-US1 oracle), and the independent recomputation matches the gold value exactly.
+2. **Given** C1 seed 42 with the seeded 90 s hold approved at 22:23:35, **When** the same window is read, **Then** the corridor EWT is about +10.6 s (28 intervals) and is lower than the value without the hold.
 3. **Given** B-103 is bunched behind B-102 in C1, **When** the EWT is read, **Then** it is positive (never "better than planned" because of bunching).
 4. **Given** a bus enters or leaves the corridor between two snapshots and no departure falls in the window, **When** the EWT is read, **Then** it does not swing by the ±200 s seen before; only departures in the window count.
 5. **Given** a stop with fewer than two departures in the window, **When** its row is built, **Then** it has no headway, contributes nothing to the corridor sums, and is marked not computable (no zero, no error).
@@ -256,10 +256,10 @@ A single bus cannot move the reference time far ahead of the others. With `REFRE
 
 - **SC-001 (US1)**: The 24 factors of the regenerated CSV equal an independent recomputation from the raw SIMM file grouped by `UTC hour − 5`, with a maximum difference of 0 at the 4 decimals stored. The 17:00 local factor is 0.4816 (it was 0.5011).
 - **SC-002 (US1)**: The simulator golden hashes for seeds 42 and 7 equal the documented new values; old and new hashes are both recorded.
-- **SC-003 (US2)**: On C1 seed 42, 0 of the snapshots at 22:20:35, 22:30:40 and 22:40:35 report a `gap` caused by the terminal wait, and the headway at each is between 300 s and 900 s (was 1,235 s, 1,835 s, 2,435 s).
+- **SC-003 (US2)**: On C1 seed 42, 0 of the snapshots at 22:20:40, 22:30:35 and 22:40:40 report a `gap` caused by the terminal wait, and the headway at each is between 300 s and 900 s (was 1,240 s, 1,835 s, 2,440 s).
 - **SC-004 (US2)**: The snapshot EWT at those three instants is not 211, 467 or 731 s.
 - **SC-005 (US3)**: Per-stop and corridor EWT in gold equal an independent recomputation from `silver.stop_visits` exactly, for C1 seed 42, with and without the hold. This holds for both the trailing 15-minute window of each snapshot and the per-stop additive sums of each closed clock-aligned 15-minute band (0 differences in `n_headways`, `Σh`, `Σh²`, `Σhp`, `Σhp²`).
-- **SC-006 (US3)**: On C1 seed 42, stops P-888..P-900, departures 22:28:55–22:44:55 (the oracle's reference window, read directly from `silver.stop_visits`; the same sums grouped by closed clock-aligned band must also add up to the oracle's totals for that band): EWT is +40.6 s (±0.1 s) without the hold and +23.6 s (±0.1 s) with the 90 s hold approved at 22:23:35. The value with the hold is lower than without it.
+- **SC-006 (US3)**: On C1 seed 42, stops P-888..P-900, departures 22:28:55–22:44:55 (the oracle's reference window, read directly from `silver.stop_visits`; the same sums grouped by closed clock-aligned band must also add up to the oracle's totals for that band): EWT is +25.8 s (±0.1 s) without the hold and +10.6 s (±0.1 s) with the 90 s hold approved at 22:23:35. The value with the hold is lower than without it.
 - **SC-007 (US3)**: In the C1 snapshot where B-103 is bunched 195 s behind B-102, EWT is greater than 0 (was −202 s).
 - **SC-008 (US3)**: Adding or removing a bus that has no departure in the window changes the EWT by 0 s (no ±200 s swing).
 - **SC-009 (US4)**: For seeded runs of C1 and of the base case, per stop and band counts of `n_riders`, `n_board_le_5`, `n_board_le_10`, `n_board_le_15` equal an independent recomputation from the raw events: 0 differences.
@@ -272,7 +272,7 @@ A single bus cannot move the reference time far ahead of the others. With `REFRE
 ## Assumptions
 
 - **A-1 (window)**: A trailing 15-minute window ending at `as_of_ts` is used for the snapshot EWT. Justification from the repository: M2 and the report bands use 15-minute local bands (`timebands.py`, `WINDOW = 15 min`), and the review reference window (22:28:55–22:44:55, 16 min of departures) is of that size. A trailing window gives a value for every snapshot; a clock-aligned band gives none until the band closes. Decided by the data owner on 2026-11-21 (Clarifications): the trailing window feeds the live headline EWT, and closed clock-aligned bands feed reports and payment, so both are kept.
-- **A-2**: The review numbers (+40.6 s and +23.6 s) were produced by the data owner's oracle on C1 seed 42 and are reproducible with the same seed; they are stated "about", so the criterion uses ±0.1 s.
+- **A-2**: The oracle numbers (+25.8 s and +10.6 s) were produced by the data owner's independent mock on C1 seed 42 with the post-US1 (local-hour) congestion file and are reproducible with the same seed; they are stated "about", so the criterion uses ±0.1 s. The review's earlier +40.6 s / +23.6 s came from the pre-US1 stream (factors shifted five hours) and no longer apply (plan gate, 2026-11-21).
 - **A-3**: The planned headway for every stop is the single `headway_planned_s` of `config.corridor_settings` (600 s). Per-stop or per-band plans are Evolution.
 - **A-4**: The route end is the largest `distance_along_m` in `config.ref_stops` (5,119.4 m today), read from reference data at ingestion. The bound is data, not contract.
 - **A-5**: "Not trustworthy" reuses the existing `estimated` state and `sources_down` listing; no new status value is added to the read contract.
