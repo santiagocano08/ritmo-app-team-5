@@ -136,6 +136,15 @@ Rebuilt each cycle by DELETE and INSERT in the cycle transaction from `gold.reco
 - Q11 is run as written in the contract (`WHERE proposed_ts >= … AND proposed_ts < … ORDER BY proposed_ts DESC`). An index on `proposed_ts` supports it.
 - SC-015 cases are tests: discard with reason, 1.0.0 discard without reason (`reason IS NULL`), apply on a hold with `instruction_status` after the visit, no decision then `expired` after 2 minutes, rebuild idempotence.
 
+**Observed check and tolerance (phase 1, T003/T013).** Seeds 42 and 43 pooled, 3,600 s, stops with at least 30 riders on board in the sample (the sample size is `Σ occupancy_in`, the denominator of the share, not riders boarded at that stop; 6 of 18 stops are skipped at scale 1). Results (`largest |observed − formula|`):
+
+| Run | Stops compared | Formula `1/(last − i + 1)` | Prototype `1/(LAST − i)` | Tolerance (observed + margin) |
+|---|---|---|---|---|
+| scale 1.0 (the spec's check) | 12 | 0.0385 | 0.0500 | 0.06 (margin 0.0215) |
+| scale 10 (same seeds, `demand_scale` argument, test only) | 17 | 0.0551 | 0.5263 | 0.10 (margin 0.0449) |
+
+Margin: the runs are seeded and deterministic, so the margin does not absorb run-to-run noise; it absorbs an engine edit that changes the random sequence without changing the destination model. It is set near one binomial standard deviation of a stop at the smallest admitted sample, sqrt(0.25 / 100) = 0.05 at scale 10, and about half of that at scale 1 where the observed value is smaller. At scale 1 the sample is too small to separate the two formulas (0.0385 against 0.05), so the test that fails for the prototype's formula uses scale 10 (0.5263 against a tolerance of 0.10). Both numbers are in `verification.md`.
+
 ## R9. Cycle time (SC-011)
 
 **Candidate count per cycle** (from the catalog conditions, FR-008). Per follower of a bunched pair: hold at its next stop 30/60/90 s (3) + slow down 10 % and 20 % (2) = 5. Per bus with a gap ahead: skip stops (1). When trouble exists (bunching, gap, breakdown or a queue above 20): adjust departure ±60 ±120 (4) + reserve (1 per free reserve candidate, taking the first free reserve). With one bunched follower (C1): 5 + 4 + 1 = 10, plus the baseline = **11 projections**. Maximum with 5 buses: 4 bunched followers (20) + 4 adjust + 1 reserve = 25 (the brief says about 30 with gap skips) plus the baseline = **26 to 31**. Hour boundary does not multiply the count.
