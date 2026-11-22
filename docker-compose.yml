@@ -61,6 +61,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: pulsoflota/ingestion:${IMAGE_TAG:-dev}
     # Single line: a folded (>) scalar keeps the newline before "|", which breaks the pipe.
     command: ["sh", "-c", "python -m src.data.simulator.main --seed ${SIM_SEED:-42} --duration ${SIM_DURATION_S:-3600} --pace ${SIM_PACE_S:-1} | python -m src.data.ingestion.run"]
     environment:
@@ -104,6 +105,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: pulsoflota/api:${IMAGE_TAG:-dev}
     command: >
       python -m uvicorn src.api.main:app
       --host 0.0.0.0
@@ -138,6 +140,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: prod
+    image: pulsoflota/refresh:${IMAGE_TAG:-dev}
     command: ["python", "-m", "src.data.refresh.run"]
     environment:
       DATABASE_URL: ${DATABASE_URL}
@@ -173,13 +176,15 @@ services:
     build:
       context: .
       dockerfile: src/frontend/Dockerfile
+    image: pulsoflota/frontend:${IMAGE_TAG:-dev}
     ports:
       - "${FRONTEND_PORT:-8080}:8080"
     depends_on:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/ >/dev/null 2>&1 || exit 1"]
+      # 127.0.0.1, not localhost: in the container localhost resolves to ::1 and nginx listens on IPv4 only.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ >/dev/null 2>&1 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 6
