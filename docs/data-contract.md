@@ -502,6 +502,25 @@ The BE computes coverage and "payable" from `pct_rejected` and `pct_estimated`. 
 | `off_peak` | 40 | 63 | 10:00–16:00 |
 | `whole_day` | 0 | 95 | 00:00–24:00 |
 
+### H5. Projection record and accuracy `[006]`
+
+The decision model stores what it predicted, so its accuracy can be measured over time (data owner, 2026-11-22).
+
+- `gold.mpc_projection`: append-only, one row per (snapshot, bus, stop) of the "do nothing" baseline, with `as_of_ts`, `projected_departure_ts`, `lead_s` (up to 1,800 s), `rules_version`, `max_bronze_id`. The projection uses the historical M1 travel times and the observed arrival rates.
+- `gold.v_projection_accuracy`: pairs each projected departure with the bus's first real departure from that stop after `as_of_ts`. It exposes `error_s` (real − projected), `abs_error_s`, the lead bucket (0–5, 5–10, 10–30 min) and `affected_by_decision` (an applied recommendation changed that bus, so the baseline is not comparable). No real departure yet: NULL error, never zero.
+
+**Q16. Projection accuracy per lead bucket**
+```sql
+SELECT lead_bucket, count(*) AS n, avg(abs_error_s) AS mae_s,
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY abs_error_s) AS median_abs_error_s,
+       max(abs_error_s) AS worst_abs_error_s
+FROM gold.v_projection_accuracy
+WHERE error_s IS NOT NULL AND NOT affected_by_decision
+  AND as_of_ts BETWEEN %(from_ts)s AND %(to_ts)s
+GROUP BY lead_bucket ORDER BY lead_bucket;
+```
+Exact column names are fixed when story 006 phase 2b is built; this section is updated then.
+
 ### MVP vs improvements
 
 | MVP (workshop) | Improvements (later, or as an in-class simulation) |
