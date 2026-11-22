@@ -1,0 +1,113 @@
+version: "1"
+name: develop-feature
+description: >-
+  RITMO spiral pipeline for ONE ticket at a time. Runs the Spec Kit agents
+  create-spec -> create-plan -> create-tasks -> validate-plan -> implement-code
+  -> review-code. Pauses for human approval after spec, plan, validation and
+  implementation; create-tasks continues automatically and review-code iterates
+  its converge loop automatically, showing only the final report. The ticket is
+  a single .md file or a directory of files describing exactly one feature.
+
+inputs:
+  # Absolute path to the ticket: a single .md file
+  # (e.g. tickets/US-01-backend-read-api.md) or a directory of requirement files
+  # for one feature. Pass it when launching the run.
+  ticket_path: ""
+
+steps:
+  # 1 - Specification (gate: human approval)
+  - type: step
+    id: create-spec
+    agent: create-spec
+    prompt: >-
+      The ticket to specify is at this path: "{{ inputs.ticket_path }}". If that
+      value is empty, stop and ask the user for the ticket path before doing
+      anything. If the path is a directory, read every file inside it; if it is
+      a single .md file, read that file. Treat the combined content as the
+      description of exactly one feature. Follow the speckit.specify procedure to
+      produce the spec under specs/. When done, send a message with
+      severity=warning that summarizes the generated spec: feature directory,
+      key requirements, any open [NEEDS CLARIFICATION] markers, and checklist
+      results. Start the message with the primary artifact path to review on its
+      own line, exactly: "Spec: <absolute path to spec.md>". Ask the user to
+      approve before planning. Do not advance on your own; if the user asks for
+      changes, refine the spec here and ask again.
+
+  # 2 - Technical plan (gate: human approval)
+  - type: step
+    id: create-plan
+    agent: create-plan
+    prompt: >-
+      Create the technical implementation plan for the current feature with
+      speckit.plan, honoring the constitution, AGENTS.md and steering. When
+      done, send a message with severity=warning summarizing the plan: approach,
+      key technical decisions, contracts touched, and risks. Start the message
+      with the primary artifact path to review on its own line, exactly:
+      "Plan: <absolute path to plan.md>"; if the step generated other review
+      artifacts (research.md, data-model.md, contracts/, quickstart.md), list
+      their paths too. Ask the user to approve before generating tasks. Do not
+      advance on your own; if the user asks for changes, refine the plan here and
+      ask again.
+
+  # 3 - Tasks (no gate: continue automatically)
+  - type: step
+    id: create-tasks
+    agent: create-tasks
+    prompt: >-
+      Break the current feature's plan into a dependency-ordered tasks.md with
+      speckit.tasks. When done, report the tasks summary with severity=success
+      so the workflow advances automatically to validation. Start the report
+      with the artifact path on its own line, exactly:
+      "Tasks: <absolute path to tasks.md>". Do not wait for approval.
+
+  # 4 - Pre-implementation quality gate (gate: human approval)
+  - type: step
+    id: validate-plan
+    agent: validate-plan
+    prompt: >-
+      Run the pre-implementation quality gate on the current feature:
+      speckit.analyze (cross-artifact consistency) then speckit.checklist
+      (requirements quality). The checklist file this produces is a
+      reviewer-owned requirements-quality artifact; it is for the human PR
+      reviewer, and the fact that its items are unchecked MUST NOT be treated as
+      a blocker for implementation. When done, send a message with
+      severity=warning presenting the analysis report: consistency findings,
+      requirements coverage, and any blocking issues. Start the message with the
+      artifact paths on their own lines, exactly: "Analysis report: <absolute
+      path>" and "Checklist: <absolute path to the generated checklist>". Ask the
+      user to approve before implementation. Do not advance on your own; if the
+      user asks for changes, address them here and ask again.
+
+  # 5 - Implementation (gate: approval of the implementation report)
+  - type: step
+    id: implement-code
+    agent: implement-code
+    prompt: >-
+      Implement the current feature by executing its tasks.md with
+      speckit.implement, honoring the constitution, AGENTS.md and steering. Never
+      commit or push. Reviewer-owned requirements-quality checklists (generated
+      by the validate-plan step) are NOT implementation state: if one has
+      unchecked items, do not stop to ask about it and do not treat it as a
+      gate; proceed with implementation. When done, send a message with
+      severity=warning reporting what was implemented: files changed (list their
+      paths), tasks completed vs pending, and the test/coverage, lint and gate
+      status. Ask the user to approve before the final review. Do not advance on
+      your own; if the user asks for changes, address them here and ask again.
+
+  # 6 - Review with automatic converge loop (gate: final report only)
+  - type: step
+    id: review-code
+    agent: review-code
+    prompt: >-
+      Review the implemented code with speckit.converge. If convergence tasks
+      are required, append them to tasks.md, re-run speckit.implement for those
+      tasks, and repeat automatically until the review passes or no further
+      progress is possible. Do NOT ask for approval between iterations. Then run
+      the full validation suite: tests + coverage, lint, format, and validation.
+      When the loop is finished, send ONE message with severity=warning
+      containing the final review report. Start the message with the report
+      artifact path on its own line, exactly: "Review findings: <absolute path to
+      review-findings.md>". Then give: convergence iterations performed, final
+      test/coverage/lint/gate results, any remaining filed issues, and a clear
+      recommendation to close the feature or the blocking reasons it cannot. This
+      is the only report for this step.
