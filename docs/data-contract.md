@@ -7,6 +7,8 @@
 - **Scope:** Turn 1. Corridor C6-008, direction 1, buses B-101..B-105 in service and B-106/B-107 in reserve, stops P-883..P-900.
 - **Source of truth:** the JSON Schemas in `contracts/read/` and `contracts/turn1-events/`, plus ADR-0001, ADR-0002 and ADR-0003. This document says **how the BE reads and writes**. It adds no field to any schema. If this document and a schema disagree, the schema wins.
 
+**Change rule (data owner, 2026-11-21):** every data change reviews this contract. Specs and plans list the affected sections, or "no contract impact" with the reason. Verification checks that the queries, examples and versions here still hold. When there is an impact, this document is updated in the same PR or the very next one. See `.kiro/steering/data-contracts.md`.
+
 **Availability tags used below:**
 - `[main]`: already in `main` (stories 001–003).
 - `[004]`: arrives when story 004 (`feature/004-scenario-injectors`) is merged.
