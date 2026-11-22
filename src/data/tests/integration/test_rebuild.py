@@ -36,6 +36,7 @@ def _prepare(conn) -> None:
 
 def _recreate_silver(conn: psycopg.Connection) -> None:
     """Drop every silver table and recreate it from 004_silver.sql, 008 (005) and 009 (006) (idempotent)."""
+    conn.execute("DROP VIEW IF EXISTS gold.v_projection_accuracy")  # 006 phase 2b: reads silver.stop_visits
     for table in SILVER_TABLES:
         conn.execute(f"DROP TABLE silver.{table}")  # noqa: S608 - fixed names
     from src.data.tests.db_helpers import INIT_DIR
@@ -166,6 +167,8 @@ def test_dropping_silver_and_gold_and_recomputing_gives_the_same_snapshot(gold_c
 
     gold_conn.commit()
     # 004: gold.incident references gold.snapshots, so it goes first and its init script is replayed
+    gold_conn.execute("DROP VIEW gold.v_projection_accuracy")  # 006 phase 2b: reads silver.stop_visits
+    gold_conn.execute("DROP TABLE gold.mpc_projection")  # 006 phase 2b: references gold.snapshots
     gold_conn.execute("DROP VIEW gold.incident_current")
     gold_conn.execute("DROP TABLE gold.incident")
     gold_conn.execute("DROP TABLE gold.service_metric_stop")  # 005: references gold.snapshots

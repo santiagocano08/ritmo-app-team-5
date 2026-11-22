@@ -21,7 +21,7 @@ A new project has an empty volume, so `009_decision_mpc.sql` runs by itself. On 
 $PF exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /docker-entrypoint-initdb.d/009_decision_mpc.sql
 ```
 
-Committed scope: phases 1, 2, 3a, 3b, 3c, 4, 5 (6.10 h). Phase 6 is optional. Cut order on overrun: phase 5, phase 4, then 3b and 3c; never 1, 2 or 3a (plan.md).
+Committed scope: phases 1, 2, 2b, 3a, 3b, 3c, 4, 5 (6.45 h). Phase 6 is optional. Cut order on overrun: phase 5, phase 4, then 3b and 3c; never 1, 2, 2b or 3a (plan.md).
 
 ## Gate after every phase (must be green before the phase is committed)
 
@@ -95,6 +95,27 @@ $PF exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
 
 Pass: at least one evaluated candidate in every cycle whose snapshot has a `bunched` bus (the integration test collects `gold.mpc_evaluation` after each `run_cycle` of the replay and asserts this). Report: whether any candidate reached the 15 s threshold and was recommended, with its saving. Do not tune any parameter. Run the scale 1 case first for the real-demand number; both go in `verification.md` with the scale used.
 
+## Phase 2b: projection record (added 2026-11-22)
+
+```bash
+uv run pytest src/data/tests -k "projection_record or projection_accuracy or projection_schema" -q
+```
+
+Expected: the table and view exist after an idempotent apply of `009`; rows equal `project(inputs)` of the same cycle; `lead_s ≤ 1800`; the same bronze gives identical rows; the view gives `error_s = real − projected`, NULL without a real departure, NULL for an estimated departure; `affected_by_decision` only for an applied recommendation on that bus decided between `as_of_ts` and the real departure.
+
+Live check (dedicated project, C1 forced mode, `SIM_DEMAND_SCALE=3`; recipe of the Phase 2 live check B, then, when the feed has ended):
+
+```bash
+$PF exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
+  "WITH c AS (SELECT snapshot_id, count(*) AS n FROM gold.mpc_projection GROUP BY snapshot_id) SELECT sum(n) AS total_rows, count(*) AS cycles, min(n), percentile_disc(0.5) WITHIN GROUP (ORDER BY n) AS median, max(n) FROM c"
+# the SC-016 table: the aggregate query of contracts/projection-accuracy.md
+# identical rows on a rerun: reset the volume, run the same recipe, compare
+$PF exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -c \
+  "SELECT md5(string_agg(concat_ws('|', snapshot_id, bus_id, stop_id, as_of_ts, projected_departure_ts, lead_s, rules_version, max_bronze_id), E'\n' ORDER BY snapshot_id, bus_id, stop_id)) FROM gold.mpc_projection"
+```
+
+A live run never has two identical wall-clock feeds, so the hash comparison between two live runs is only meaningful with the same cycle times; the test of `test_projection_record.py` is the strict rerun check (replay with fixed cycle times) and the live hash is reported next to it. The error figures are reported as measured, never tuned.
+
 ## Phase 3: execution
 
 ```bash
@@ -115,13 +136,13 @@ uv run pytest src/data/tests -k "decision_log or command_event or reason" -q
 
 Expected (SC-015): discard with "Driver not available" gives `outcome = 'discarded'`, that `reason`, `decided_ts`, `user_id`; a 1.0.0 discard gives `reason` NULL; an `apply` on a hold gives `instruction_status` after the visit; no decision gives `expired` after 2 minutes; the same bronze gives the same rows; Q11 runs as written in the contract.
 
-## Phase 5: counterfactual report (cut first)
+## Phase 5: effect of the approved action (cut first)
 
 ```bash
 uv run python -m src.data.validation.counterfactual --scenario c1_bunching --seed 42 --out /tmp/pf006-report.md
 ```
 
-Runs the scenario twice on the same seed (without and with the model's top executable action approved by a scripted decision), re-projects from the stored `lineage_detail.inputs`, and writes, per action: projected passing times with and without, actual passing times, the error in seconds, and the effect on the mean journey time (wait + ride) of the cohort arriving in the 600 s after the decision (the same riders in both runs). The post-005 reference (C1 seed 42, 90 s hold, stop EWT P-888..P-900, 16 minutes: +25.8 s to +10.6 s, 15.2 s saving) is printed next to it as context only. Pass: the report exists and a second run gives the same file (SC-010).
+Runs the scenario twice on the same seed (without and with the model's top executable action approved by a scripted decision) and writes, per action: the saving the model announced, the actual effect on the mean journey time (wait + ride) of the cohort arriving in the 600 s after the decision (the same riders in both runs), and the difference. The projection error is not recomputed here: it comes from `gold.v_projection_accuracy` (phase 2b) and may be quoted. The post-005 reference (C1 seed 42, 90 s hold, stop EWT P-888..P-900, 16 minutes: +25.8 s to +10.6 s, 15.2 s saving) is printed next to it as context only. Pass: the report exists and a second run gives the same file (SC-010).
 
 ## Phase 6: road trend (optional, outside the committed scope; only if time is left after phase 5)
 

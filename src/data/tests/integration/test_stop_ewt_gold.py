@@ -305,7 +305,7 @@ def test_rerun_and_rebuild_give_identical_rows_with_lineage(gold_conn, load) -> 
     assert again.snapshot_id == first.snapshot_id and again.created is False
     assert _dump(gold_conn) == before
 
-    for table in ("incident", "service_metric", "service_metric_stop", "stop_ewt_band", "decision_inputs",
+    for table in ("mpc_projection", "incident", "service_metric", "service_metric_stop", "stop_ewt_band", "decision_inputs",
                   "corridor_now", "source_status", "snapshots"):
         gold_conn.execute(f"DELETE FROM gold.{table}")  # noqa: S608 - fixed names
     gold_conn.commit()

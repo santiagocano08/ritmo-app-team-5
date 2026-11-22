@@ -6,6 +6,7 @@ These notes describe the interfaces this feature adds or changes. They are desig
 |---|---|---|---|
 | [recommendation-1.1.0.md](recommendation-1.1.0.md) | `contracts/read/recommendation.schema.json` 1.0.0 to 1.1.0 (new action types, optional `action.speed_reduction_pct`), fixtures, generated model | 2 | never |
 | [gold-recommendation.md](gold-recommendation.md) | `gold.recommendation`, `gold.mpc_evaluation`, `gold.decision_log`; read queries Q13 and Q11 | 2, 4 | log: second |
+| [projection-accuracy.md](projection-accuracy.md) | `gold.mpc_projection`, `gold.v_projection_accuracy`, the SC-016 aggregate query | 2b | never |
 | [execution.md](execution.md) | Simulator side: poller read, orders, hooks, not-executed counter | 2, 3 | slow/reserve (3b, 3c): third |
 | [command-event-1.1.0.md](command-event-1.1.0.md) | `contracts/read/command_event.schema.json` 1.0.0 to 1.1.0, optional `reason` | 4 | second |
 

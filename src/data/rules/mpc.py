@@ -121,9 +121,11 @@ def generate_candidates(inp: Inputs, facts: Facts) -> list[Candidate]:
     return out
 
 
-def evaluate_candidates(inp: Inputs, candidates: Sequence[Candidate]) -> tuple[Projection, list[Evaluated]]:
-    """Project "do nothing" and every candidate; saving per rider against the baseline (FR-008, FR-011)."""
-    base = project(inp)
+def evaluate_candidates(inp: Inputs, candidates: Sequence[Candidate], base: Projection | None = None
+                        ) -> tuple[Projection, list[Evaluated]]:
+    """Project "do nothing" (or reuse `base`, already projected for the record of FR-035) and every candidate;
+    saving per rider against the baseline (FR-008, FR-011)."""
+    base = project(inp) if base is None else base
     return base, [Evaluated(c, (pr := project(inp, c.action)).score_s, saving_s_per_rider(base, pr))
                   for c in candidates]
 

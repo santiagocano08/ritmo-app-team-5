@@ -8,7 +8,7 @@
 
 ## Summary
 
-The decision model is data analytics. Every refresh cycle, inside the cycle transaction (REPEATABLE READ, same `M` as silver and gold), a pure, deterministic projector simulates the next 1,800 s of every bus and rider from the snapshot, once without action and once per candidate action. The score of a world is total passenger time (queue-seconds waiting + onboard delay + reserve cost). Candidates exist only when their catalog condition holds. The top 3 whose saving is at least 15 s per rider are written to a new table, `gold.recommendation` (one row per `rec_id`, `doc` shaped as `recommendation.schema.json` 1.1.0). Status is derived from `decision` events and expiry. The seed (file, table, loader, env var) is removed; the hold executor, `gold.instruction_status` and the simulator poller read `gold.recommendation`. The simulator also executes approved `slow_down` and `reserve_dispatch`. A shift log (`gold.decision_log`) and a counterfactual report are separable later phases inside the committed scope; the road-trend correction (FR-031) is outside the committed scope and is built only if time is left after phase 5 (gate decision 1).
+The decision model is data analytics. Every refresh cycle, inside the cycle transaction (REPEATABLE READ, same `M` as silver and gold), a pure, deterministic projector simulates the next 1,800 s of every bus and rider from the snapshot, once without action and once per candidate action. The score of a world is total passenger time (queue-seconds waiting + onboard delay + reserve cost). Candidates exist only when their catalog condition holds. The top 3 whose saving is at least 15 s per rider are written to a new table, `gold.recommendation` (one row per `rec_id`, `doc` shaped as `recommendation.schema.json` 1.1.0). Status is derived from `decision` events and expiry. The seed (file, table, loader, env var) is removed; the hold executor, `gold.instruction_status` and the simulator poller read `gold.recommendation`. The simulator also executes approved `slow_down` and `reserve_dispatch`. **Phase 2b (data owner, 2026-11-22)** also stores the model's "do nothing" projection every cycle in the append-only `gold.mpc_projection` and compares it with what really happened in the view `gold.v_projection_accuracy` (FR-035, FR-036, SC-016), so the model is measured continuously. A shift log (`gold.decision_log`) and a report of the approved action's effect are separable later phases inside the committed scope; the road-trend correction (FR-031) is outside the committed scope and is built only if time is left after phase 5 (gate decision 1).
 
 **Approach** (details in [research.md](research.md)):
 
@@ -23,7 +23,7 @@ The decision model is data analytics. Every refresh cycle, inside the cycle tran
 
 **Primary Dependencies**: psycopg 3, Pydantic V2 and the generated models (existing). `datamodel-codegen` regenerates `recommendation.py` (existing `make generate-read`).
 
-**Storage**: PostgreSQL only. New: `gold.recommendation`, `gold.mpc_evaluation`, `silver.stop_queue`, `config.decision_model`, `config.ref_train_arrival` (phase 2); `gold.decision_log` (phase 4); trend columns in `config.decision_model` (phase 6, optional). Dropped: `config.seed_recommendation`. Bronze stays insert-only.
+**Storage**: PostgreSQL only. New: `gold.recommendation`, `gold.mpc_evaluation`, `silver.stop_queue`, `config.decision_model`, `config.ref_train_arrival` (phase 2); `gold.mpc_projection` and the view `gold.v_projection_accuracy` (phase 2b); `gold.decision_log` (phase 4); trend columns in `config.decision_model` (phase 6, optional). Dropped: `config.seed_recommendation`. Bronze stays insert-only.
 
 **Testing**: pytest. Pure rules tested without a database. Integration tests use the existing `conn` fixture. Host suite plus the CI-ready command `docker compose --profile tools build tests && docker compose --profile tools run --rm tests` (coverage gate 80 %).
 
@@ -63,31 +63,32 @@ Gate source: `.specify/memory/constitution.md` v1.2.0 and `docs/turns-ritmo.md` 
 
 Data owner, binding: demo on 2026-11-24; about 6 hours of agent work. **Gate decision 1 (2026-11-22): budget approved with the first cut applied.** The road trend (FR-031, phase 6) is out of the committed scope and stays as the last, optional phase: it is built only if time is left after phase 5. Times include tests-first, the phase gate (host suite, CI-ready command, coverage), the live check under a dedicated compose project and the cycle-time measurement. Phase order is the reverse of the cut order (FR-034).
 
-**Committed scope = phases 1, 2, 3a, 3b, 3c, 4, 5.** Phases 1, 2 and 3a are never cut.
+**Committed scope = phases 1, 2, 2b, 3a, 3b, 3c, 4, 5.** Phases 1, 2, 2b and 3a are never cut. Phase 2b was added by the data owner on 2026-11-22 (spec commit `c35d654`), after the table below was first approved.
 
 | Phase | Content | Status | Hours | Cumulative |
 |---|---|---|---|---|
 | 1 | US1: projector, scoring, parameters, determinism (pure Python) | committed, never cut | 1.25 | 1.25 |
 | 2 | US2: inputs, candidates, top 3, `gold.recommendation`, derived status, expiry and rest, schema 1.1.0 (recommendation, with `action.speed_reduction_pct`), seed retirement, hold executor and `instruction_status` on `gold.recommendation`, safety rules, `SIM_DEMAND_SCALE` and its live check (+0.15 h) | committed, never cut | 2.15 | 3.40 |
-| 3a | US3 holds: scripted-approval end-to-end check on the new source (SC-008, SC-009) | committed, never cut | 0.25 | 3.65 |
-| 3b | US3 `slow_down` execution, reading `speed_reduction_pct` from the recommendation (separable task group) | committed, cut third | 0.50 | 4.15 |
-| 3c | US3 `reserve_dispatch` execution (separable task group) | committed, cut third | 0.75 | 4.90 |
-| 4 | FR-032 and FR-033: `command_event` 1.1.0 `reason`, `gold.decision_log` | committed, cut second | 0.60 | 5.50 |
-| 5 | US4: counterfactual validation report | committed, cut first | 0.60 | **6.10** |
+| 2b | US2 extension (added 2026-11-22): projection record `gold.mpc_projection` (append-only, every cycle) and view `gold.v_projection_accuracy`, aggregate query for SC-016, `RULES_VERSION` 1.7.0 (FR-035, FR-036, SC-016) | committed, never cut | 0.60 | 4.00 |
+| 3a | US3 holds: scripted-approval end-to-end check on the new source (SC-008, SC-009) | committed, never cut | 0.25 | 4.25 |
+| 3b | US3 `slow_down` execution, reading `speed_reduction_pct` from the recommendation (separable task group) | committed, cut third | 0.50 | 4.75 |
+| 3c | US3 `reserve_dispatch` execution (separable task group) | committed, cut third | 0.75 | 5.50 |
+| 4 | FR-032 and FR-033: `command_event` 1.1.0 `reason`, `gold.decision_log` (`RULES_VERSION` 1.8.0) | committed, cut second | 0.60 | 6.10 |
+| 5 | US4: effect of the approved action (reduced from 0.60 h: the projection error now comes from `gold.v_projection_accuracy`) | committed, cut first | 0.35 | **6.45** |
 | **cut line** | | | | |
-| 6 | FR-031: road trend | **optional**, only if time is left after phase 5 | 0.40 | 6.50 |
+| 6 | FR-031: road trend (`RULES_VERSION` 1.9.0, or 1.8.0 if phase 4 is cut) | **optional**, only if time is left after phase 5 | 0.40 | 6.85 |
 
-**Hours and the cut line.** The committed scope was 5.95 h in the gate decision. It is now **6.10 h**: phase 2 grows by 0.15 h for `SIM_DEMAND_SCALE` (a small task plus its live check, gate decision 3). The `speed_reduction_pct` field (gate decision 2) adds a few minutes to the schema, fixtures and tests of phase 2 and removes the side-column read from 3b, so it is absorbed in the existing 2.15 h and 0.50 h. The committed scope is 0.10 h above the 6 h target; this is inside the ±25 % uncertainty of phase 2 but it is stated, not hidden (see "What no longer fits" in the report of this update and risk 7).
+**Hours and the cut line.** The committed scope was 5.95 h in the gate decision, then 6.10 h with `SIM_DEMAND_SCALE`, and is now **6.45 h**: phase 2b adds 0.60 h and phase 5 gives back 0.25 h (it no longer re-projects or reports the projection error). The 6.10 h came from: phase 2 grows by 0.15 h for `SIM_DEMAND_SCALE` (a small task plus its live check, gate decision 3). The `speed_reduction_pct` field (gate decision 2) adds a few minutes to the schema, fixtures and tests of phase 2 and removes the side-column read from 3b, so it is absorbed in the existing 2.15 h and 0.50 h. Before phase 2b the committed scope was 0.10 h above the 6 h target (now 0.45 h); this is inside the ±25 % uncertainty of phase 2 but it is stated, not hidden (see "What no longer fits" in the report of this update and risk 7).
 
 **Overrun rule (binding).** If phase 2 or phase 3 (3a to 3c) overruns its estimate by more than 0.5 h, cut in this order: first phase 5, then phase 4, and only then touch 3b and 3c. Phases 1, 2 and 3a are never cut. Phase 6 is not part of this order: it is never started while any committed phase is late.
 
 Checkpoints for the data owner:
 
-1. After phase 3a (3.65 h): the never-cut core is done. Committed remaining about 2.45 h.
-2. After phase 3c (4.90 h): measure the overrun of phases 2 and 3. More than 0.5 h: cut phase 5, then phase 4.
-3. After phase 5 (6.10 h): only if hours remain, start phase 6.
+1. After phase 3a (4.25 h): the never-cut core is done. Committed remaining about 2.20 h.
+2. After phase 3c (5.50 h): measure the overrun of phases 2 and 3. More than 0.5 h: cut phase 5, then phase 4.
+3. After phase 5 (6.45 h): only if hours remain, start phase 6.
 
-Each phase ends with a check that can be run (quickstart.md): phase 1 the pure test group; phase 2 the integration group, the live C1 check at the default scale and at `SIM_DEMAND_SCALE=3`, and the cycle-time measurement; 3a the scripted approval; 3b the speed-ratio test; 3c the reserve-appears test; 4 the SC-015 cases and Q11; 5 the report command run twice; 6 the SC-014 cases. Each phase can be committed on its own. The data owner commits (agents never commit).
+Each phase ends with a check that can be run (quickstart.md): phase 1 the pure test group; phase 2 the integration group, 2b the projection record check (rows per cycle, rerun identical, SC-016 table), the live C1 check at the default scale and at `SIM_DEMAND_SCALE=3`, and the cycle-time measurement; 3a the scripted approval; 3b the speed-ratio test; 3c the reserve-appears test; 4 the SC-015 cases and Q11; 5 the report command run twice; 6 the SC-014 cases. Each phase can be committed on its own. The data owner commits (agents never commit).
 
 ## Project Structure
 
@@ -125,9 +126,9 @@ contracts/read/                                              [CO]
     └── c1_discard_legacy/command_event.json        (phase 4, a 1.0.0 decision without reason)
 
 src/data/rules/                                              [CO]
-├── __init__.py                         # RULES_VERSION 1.5.0 -> 1.6.0 (phase 2), bump again if a later phase changes gold output
+├── __init__.py                         # RULES_VERSION 1.5.0 -> 1.6.0 (phase 2) -> 1.7.0 (phase 2b); bump again if a later phase changes gold output (phase 4: 1.8.0)
 ├── mpc_params.py                       # new, phase 1: parameter dataclass and defaults
-├── projector.py                        # new, phase 1: pure projection and score
+├── projector.py                        # new, phase 1: pure projection and score; phase 2b: `projection_record` (pure rows of the baseline)
 ├── mpc.py                              # new, phases 1-2: candidates, ranking, rec keys, rec_id, status derivation, rest rule
 ├── trend.py                            # new, phase 6 (optional, outside the committed scope)
 └── sql/
@@ -139,7 +140,7 @@ src/data/rules/                                              [CO]
     └── trend_ratio.sql                 # new, phase 6 (optional)
 
 src/data/pipeline/
-├── recommend.py                        # new, phase 2: load inputs, run model, write gold.recommendation and gold.mpc_evaluation
+├── recommend.py                        # new, phase 2: load inputs, run model, write gold.recommendation and gold.mpc_evaluation; phase 2b: project the baseline every cycle and append gold.mpc_projection
 ├── cycle.py                            # phase 2: call recommend step; phase 4: call decision_log step
 ├── holds.py                            # phase 2: orders from gold.recommendation instead of config.seed_recommendation
 ├── decision_log.py                     # new, phase 4
@@ -150,7 +151,7 @@ src/data/pipeline/
 
 src/data/refresh/run.py                 # phase 2: remove load_seeds; log model_ms
 src/data/seeds/                         # DELETED, phase 2 (recommendations.json and loader)
-src/data/validation/counterfactual.py   # new, phase 5
+src/data/validation/counterfactual.py   # new, phase 5 (effect of the approved action)
 src/data/db/init/009_decision_mpc.sql   # new, sections per phase; DROP TABLE IF EXISTS config.seed_recommendation
 src/data/db/init/007_scenarios.sql      # edit: remove the seed table section (phase 2)
 
@@ -180,7 +181,7 @@ tests/unit/test_env_example.py          # phase 2: env var list (adds MPC_ENABLE
 4. **Hour-boundary scoring** (17:00 to 18:00 is the demo window): both hours are read for each projected step; tested with crafted input crossing 18:00.
 5. **Existing volumes** do not re-run init scripts: `009_decision_mpc.sql` is applied by hand (quickstart.md), as for 007 and 008.
 6. **4-hour stress cycle** is already at 1.55 s (issue #21); the model adds a roughly constant amount (R9). Reported, not hidden.
-7. **Committed scope is 6.10 h, 0.10 h above the 6 h target** after adding `SIM_DEMAND_SCALE` (+0.15 h) to the 5.95 h of the gate decision. No slack. The overrun rule protects phases 1, 2 and 3a; phase 6 is not started unless every committed phase is done.
+7. **Committed scope is 6.45 h, 0.45 h above the 6 h target** after adding `SIM_DEMAND_SCALE` (+0.15 h, to 6.10 h) and phase 2b (+0.60 h) and reducing phase 5 (−0.25 h). No slack. The overrun rule protects phases 1, 2 and 3a; phase 6 is not started unless every committed phase is done.
 8. **A demo scale hides the real-demand result.** A run at scale 3 can show a recommendation that does not appear at scale 1. Mitigation: `verification.md` records both runs (default scale and scale 3) and the demo states which scale it used.
 
 ## Decisions of the data owner (human gate, 2026-11-22)

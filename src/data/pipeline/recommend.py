@@ -15,6 +15,7 @@ import hashlib
 import json
 import logging
 from dataclasses import dataclass, fields
+from decimal import Decimal
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import UUID
@@ -30,7 +31,7 @@ from src.data.rules.mpc import (CycleCtx, Decision, Existing, Facts, Row, action
                                 resting_keys)
 from src.data.rules.mpc_params import MpcParams
 from src.data.rules.projector import (DWELL_BASE_S, DWELL_PER_ALIGHTED_S, DWELL_PER_BOARDED_S, NON_LIVE, BusState,
-                                      Inputs, StopState, alight_share, inputs_json)
+                                      Inputs, StopState, alight_share, inputs_json, project, projection_record)
 from src.data.rules.timebands import LOCAL_OFFSET
 from src.pulsoflota.config import get_mpc_enabled
 from src.pulsoflota.models.read.recommendation import RecommendationV110
@@ -57,6 +58,14 @@ _UPSERT = (
 _EVAL_INSERT = (
     "INSERT INTO gold.mpc_evaluation (snapshot_id, seq, action, \"case\", score_s, saving_s_per_rider, recommended, "
     "reason_not, rules_version, max_bronze_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)")
+# FR-035: append-only record of the "do nothing" departures. The same snapshot gives the same rows, so a repeated
+# cycle is a no-op (ON CONFLICT DO NOTHING); nothing updates or deletes these rows.
+_PROJECTION_INSERT = (
+    "INSERT INTO gold.mpc_projection (snapshot_id, bus_id, stop_id, as_of_ts, projected_departure_ts, lead_s, "
+    "rules_version, max_bronze_id) "
+    "SELECT %(sid)s::uuid, t.bus_id, t.stop_id, %(as_of)s::timestamptz, t.ts, t.lead, %(rules_version)s, %(max_id)s "
+    "FROM unnest(%(buses)s::text[], %(stops)s::text[], %(ts)s::timestamptz[], %(lead)s::numeric[]) "
+    "AS t(bus_id, stop_id, ts, lead) ON CONFLICT (snapshot_id, bus_id, stop_id) DO NOTHING")
 
 
 @dataclass(frozen=True)
@@ -65,6 +74,7 @@ class ModelResult:
     n_candidates: int
     n_published: int  # rows in this cycle's top list
     n_written: int
+    n_projected: int = 0  # rows offered to gold.mpc_projection (FR-035)
 
 
 # -- configuration ----------------------------------------------------------------------------------------------
@@ -337,14 +347,19 @@ def run_model(conn: psycopg.Connection, snapshot_id: UUID | str, as_of: datetime
     existing = load_existing(conn)
     derived = derive_all(existing, load_decisions(conn, max_bronze_id), load_passed(conn, existing), as_of, params)
     picks, evaluation, lineage, n_cands = None, [], {}, 0
+    record: tuple = ()
     ran = False
     if on and is_fresh(snapshot_age_s(conn, sid) if age_s is None else age_s, params):
         inp, facts = load_inputs(conn, sid, as_of, max_bronze_id, params)
         stop_ids = [s.stop_id for s in inp.stops]
+        base = project(inp)  # "do nothing", once per cycle: it is both the record (FR-035) and the baseline
+        # Before the first report the roster buses are placeholders: nothing to measure (research R17).
+        has_report = conn.execute("SELECT EXISTS (SELECT 1 FROM silver.bus_current_state)").fetchone()[0]
+        record = projection_record(inp, base) if has_report else ()
         cands = generate_candidates(inp, facts)
         picks, ran, n_cands = [], True, len(cands)
         if cands:
-            base, evs = evaluate_candidates(inp, cands)
+            base, evs = evaluate_candidates(inp, cands, base)
             unsafe = frozenset(b.bus_id for b in inp.buses if b.quality in NON_LIVE)
             ranking = rank_candidates(evs, params, stop_ids, resting_keys(derived, as_of, params.rest_s), unsafe)
             picks = ranking.picks
@@ -384,7 +399,12 @@ def run_model(conn: psycopg.Connection, snapshot_id: UUID | str, as_of: datetime
         for seq, doc, case, score, saving, recommended, reason in evaluation:
             cur.execute(_EVAL_INSERT, (sid, seq, Jsonb(doc), case, score, saving, recommended, reason,
                                        RULES_VERSION, max_bronze_id))
-    return ModelResult(ran, n_cands, len(picks or []), written)
+        if record:
+            cur.execute(_PROJECTION_INSERT, {
+                "sid": sid, "as_of": as_of, "rules_version": RULES_VERSION, "max_id": max_bronze_id,
+                "buses": [r[0] for r in record], "stops": [r[1] for r in record], "ts": [r[2] for r in record],
+                "lead": [Decimal(repr(r[3])) for r in record]})
+    return ModelResult(ran, n_cands, len(picks or []), written, len(record))
 
 
 def _jsonable(value):

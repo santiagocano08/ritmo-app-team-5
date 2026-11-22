@@ -2,7 +2,7 @@
 
 **Feature**: `specs/006-decision-mpc` | **Date**: 2026-11-22
 
-Owner of every object below: the data layer (`src/data/pipeline/`, `src/data/rules/`). All DDL is in `src/data/db/init/009_decision_mpc.sql`, idempotent (`IF NOT EXISTS`, `OR REPLACE`), with one section per phase. An existing volume does not re-run init scripts: apply the file by hand (quickstart.md). Every derived row carries `rules_version` and `max_bronze_id` (ADR-0001). Bronze is not touched.
+Owner of every object below: the data layer (`src/data/pipeline/`, `src/data/rules/`). All DDL is in `src/data/db/init/009_decision_mpc.sql`, idempotent (`IF NOT EXISTS`, `OR REPLACE`), with one section per phase (2, 2b, 4, 6). An existing volume does not re-run init scripts: apply the file by hand (quickstart.md). Every derived row carries `rules_version` and `max_bronze_id` (ADR-0001). Bronze is not touched.
 
 Naming follows the repository: tables in lower snake case; `doc` columns hold exactly the JSON Schema object.
 
@@ -19,6 +19,8 @@ Naming follows the repository: tables in lower snake case; `doc` columns hold ex
 | M7 | `gold.decision_log` | gold | 4 | replaced every cycle |
 | M8 | In-memory projection types | not stored | 1 | per cycle |
 | M9 | Removed: `config.seed_recommendation` | | 2 | dropped |
+| M10 | `gold.mpc_projection` | gold, append-only | 2b | appended every cycle (never rewritten) |
+| M11 | `gold.v_projection_accuracy` | gold, view | 2b | computed on read |
 
 ## M1. `config.decision_model` (one row)
 
@@ -170,13 +172,46 @@ Index on `proposed_ts` (Q11 filter and order). Rebuilt by DELETE + INSERT after 
 
 `config.seed_recommendation` (`DROP TABLE IF EXISTS`), its section in `007_scenarios.sql`, `src/data/seeds/`, `pipeline/seeds.py`. See research.md R4.
 
+## M10. `gold.mpc_projection` (phase 2b, FR-035)
+
+The model's "do nothing" departures, kept so the data owner can measure the model over time. One row per (snapshot, bus, stop) with a projected departure inside the 1,800 s window. Written only by `pipeline/recommend.py` in the cycle transaction, after the evaluation write; append-only like `gold.snapshots` (code never updates or deletes it). Written when the model is on and the snapshot is fresh, including cycles with no candidate; not written when `MPC_ENABLED=off`, when the snapshot is older than `freshness_max_s`, or before any bus has reported (`silver.bus_current_state` empty: the roster buses are placeholders and the cycle's time is not the feed's).
+
+| Column | Type | Note |
+|---|---|---|
+| `snapshot_id` | UUID, FK `gold.snapshots` | PK part 1 |
+| `bus_id` | TEXT | PK part 2 |
+| `stop_id` | TEXT | PK part 3 |
+| `as_of_ts` | TIMESTAMPTZ | the cycle reference time (copied from the snapshot, so the view needs no join) |
+| `projected_departure_ts` | TIMESTAMPTZ | `as_of_ts` + projected seconds (5 s grid, rounded to 3 decimals) |
+| `lead_s` | NUMERIC CHECK BETWEEN 0 AND 1800 | projected departure − `as_of_ts`; the 1,800 s is the scoring window |
+| `rules_version`, `max_bronze_id` | | lineage (ADR-0001) |
+
+Index `(bus_id, stop_id, as_of_ts)` serves the view's lookup. Insert is `ON CONFLICT DO NOTHING`: the snapshot id is a deterministic function of `(as_of, rules_version, max_bronze_id)`, so running the same cycle twice leaves the same rows and a replay of the same bronze produces identical rows (SC-001, SC-016). Buses included: every bus the projector gives a departure to in the baseline (service, estimated, `sources_down` obstacles, and waiting buses with a terminal slot); a reserve is not dispatched in "do nothing", so it has no row.
+
+## M11. `gold.v_projection_accuracy` (phase 2b, FR-036)
+
+A view over M10, `silver.stop_visits` and `gold.recommendation`; nothing is stored, so it reflects visits that arrive after the row was written.
+
+| Column | Meaning |
+|---|---|
+| `snapshot_id`, `bus_id`, `stop_id`, `as_of_ts`, `projected_departure_ts`, `lead_s` | from M10 |
+| `lead_bucket` | `0-5 min` (lead < 300 s), `5-10 min` (300 ≤ lead < 600), `10-30 min` (lead ≥ 600) |
+| `actual_departure_ts` | the `departure_ts` of the bus's first `silver.stop_visits` row at that stop with `departure_ts ≥ as_of_ts`; NULL if there is none yet or if that visit is an estimated departure (`estimated_at_departure`) |
+| `error_s` | `actual_departure_ts − projected_departure_ts` in seconds (positive: the bus left later than projected); NULL when `actual_departure_ts` is NULL, never 0 |
+| `abs_error_s` | `|error_s|` |
+| `affected_by_decision` | true when a `gold.recommendation` row with `status = 'applied'` for the same bus has `close_ts` (the decision's event time) after `as_of_ts` and, if the real departure exists, at or before it |
+| `rules_version`, `max_bronze_id` | from M10 |
+
+Matching rules and their reasons are in research R17. The aggregate query for SC-016 is in [contracts/projection-accuracy.md](contracts/projection-accuracy.md).
+
 ## Relationships
 
 ```text
 bronze.events (decision, source=backend) --first per rec_id--> gold.recommendation.status
 gold.snapshots --first_snapshot_id--> gold.recommendation --1:1--> gold.decision_log
 gold.recommendation (type=hold) --rec_id--> gold.instruction_status (004, now reads M5)
-gold.decision_inputs.doc + gold.m1_baseline + gold.m2_baseline + silver.* --> Inputs --> projector
+gold.decision_inputs.doc + gold.m1_baseline + gold.m2_baseline + silver.* --> Inputs --> projector --> gold.mpc_projection (2b)
+gold.mpc_projection + silver.stop_visits + gold.recommendation(applied) --> gold.v_projection_accuracy (2b)
 ```
 
 ## Validation rules (by object)

@@ -1,5 +1,5 @@
 -- 009_decision_mpc.sql — feature 006 (decision model, simulation-based MPC). Owner: data layer (CODEOWNERS).
--- Idempotent: IF NOT EXISTS / OR REPLACE / DROP IF EXISTS. One section per phase; phase 2 is below.
+-- Idempotent: IF NOT EXISTS / OR REPLACE / DROP IF EXISTS. One section per phase: phase 2, then phase 2b (projection record).
 -- Bronze is not touched. Every derived row carries rules_version and max_bronze_id (ADR-0001).
 -- An existing volume does not re-run init scripts: apply this file by hand (specs/006-decision-mpc/quickstart.md).
 
@@ -100,3 +100,59 @@ BEGIN
     END LOOP;
 END
 $$;
+
+-- === Phase 2b: projection record (FR-035, FR-036, SC-016; data owner 2026-11-22) ====================
+
+-- M10: the model's "do nothing" departures, one row per (snapshot, bus, stop), appended every cycle by
+-- pipeline/recommend.py in the cycle transaction. Append-only like gold.snapshots: code never updates or deletes it.
+-- The insert is ON CONFLICT DO NOTHING, so the same snapshot (a function of as_of, rules_version and max_bronze_id)
+-- gives the same rows.
+CREATE TABLE IF NOT EXISTS gold.mpc_projection (
+    snapshot_id             UUID        NOT NULL REFERENCES gold.snapshots (snapshot_id),
+    bus_id                  TEXT        NOT NULL,
+    stop_id                 TEXT        NOT NULL,
+    as_of_ts                TIMESTAMPTZ NOT NULL,   -- cycle reference time
+    projected_departure_ts  TIMESTAMPTZ NOT NULL,   -- as_of_ts + lead_s
+    lead_s                  NUMERIC     NOT NULL CHECK (lead_s >= 0 AND lead_s <= 1800),  -- scoring window (FR-005)
+    rules_version           TEXT        NOT NULL,
+    max_bronze_id           BIGINT      NOT NULL,
+    PRIMARY KEY (snapshot_id, bus_id, stop_id)
+);
+CREATE INDEX IF NOT EXISTS gold_mpc_projection_bus_stop_idx ON gold.mpc_projection (bus_id, stop_id, as_of_ts);
+
+-- M11: each projected departure against the bus's first real departure from that stop at or after as_of_ts
+-- (silver.stop_visits). error_s = real - projected (positive: the bus left later). NULL error when there is no real
+-- departure yet or when that first visit is an estimated departure; never 0. affected_by_decision: an applied
+-- recommendation on the same bus was decided after as_of_ts and not after the real departure (the baseline is then
+-- not comparable). Research R17.
+CREATE OR REPLACE VIEW gold.v_projection_accuracy AS
+SELECT p.snapshot_id,
+       p.bus_id,
+       p.stop_id,
+       p.as_of_ts,
+       p.projected_departure_ts,
+       p.lead_s,
+       CASE WHEN p.lead_s < 300 THEN '0-5 min'
+            WHEN p.lead_s < 600 THEN '5-10 min'
+            ELSE '10-30 min' END AS lead_bucket,
+       CASE WHEN NOT v.estimated_at_departure THEN v.departure_ts END AS actual_departure_ts,
+       CASE WHEN NOT v.estimated_at_departure
+            THEN extract(epoch FROM v.departure_ts - p.projected_departure_ts)::numeric END AS error_s,
+       CASE WHEN NOT v.estimated_at_departure
+            THEN abs(extract(epoch FROM v.departure_ts - p.projected_departure_ts))::numeric END AS abs_error_s,
+       EXISTS (SELECT 1
+               FROM gold.recommendation r
+               WHERE r.status = 'applied'
+                 AND r.doc->'action'->>'bus_id' = p.bus_id
+                 AND r.close_ts > p.as_of_ts
+                 AND (v.departure_ts IS NULL OR r.close_ts <= v.departure_ts)) AS affected_by_decision,
+       p.rules_version,
+       p.max_bronze_id
+FROM gold.mpc_projection p
+LEFT JOIN LATERAL (
+    SELECT sv.departure_ts, sv.estimated_at_departure
+    FROM silver.stop_visits sv
+    WHERE sv.bus_id = p.bus_id AND sv.stop_id = p.stop_id AND sv.departure_ts >= p.as_of_ts
+    ORDER BY sv.departure_ts
+    LIMIT 1
+) v ON true;

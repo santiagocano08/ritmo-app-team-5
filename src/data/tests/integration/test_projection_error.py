@@ -1,102 +1,82 @@
-"""006 T048a — projection error of the model at the Phase 2 gate (data owner, 2026-11-22).
+"""006 T049g — SC-016: the projection error as `gold.v_projection_accuracy` reports it (data owner, 2026-11-22).
 
-For every cycle of the C1 forced-mode run (seed 42, 2,700 s), the departures the projector gives for the next 300 s
-and 600 s ("do nothing", as the model sees the snapshot) are compared with the departures that actually happened in
-the same run (`silver.stop_visits` after the last cycle). Nothing is tuned: the numbers are reported as they are.
-No production code: the test calls `load_inputs` and `project` and reads the run.
+Replaces the one-off T048a script (which called `load_inputs` and `project` itself): this test only reads what the
+model stored. C1 forced mode (seed 42, 2,700 s), a cycle every 15 s from 300 s (160 cycles), at scales 3 and 1.0.
+After the last cycle it runs the aggregate query of `contracts/projection-accuracy.md` and prints the SC-016 table.
+Only the structure is asserted (rows per cycle, identical rerun, NULL where nothing happened yet); no error value is
+asserted and nothing is tuned.
 
-Marked `slow` (about two minutes per scale); it is run by hand at the gate, not in the default suite:
+Marked `slow` (about two minutes per scale); run it by hand at the phase gate:
 
     uv run --extra dev pytest -m slow src/data/tests/integration/test_projection_error.py -s
 
-The statistics go to stdout and to the file named by PF006_PROJECTION_ERROR_OUT (default /tmp/pf006_projection_error.json).
+The table goes to stdout and to the file named by PF006_PROJECTION_ERROR_OUT (default /tmp/pf006_sc016.json).
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
-import statistics
-from datetime import timedelta
 
 import psycopg
 import pytest
 
-from src.data.pipeline import recommend
-from src.data.rules.projector import project
 from src.data.tests.fixtures.gold_support import clear_all, cycle
 from src.data.tests.fixtures.mpc_runs import ingest_run
+from src.data.tests.integration.test_projection_accuracy_query import aggregate_sql
 
 DURATION, START_S, STEP_S = 2700, 300, 15
-HORIZONS = (300, 600)
-BUCKETS = ((0, 150), (150, 300), (300, 450), (450, 600))
+ROWS = ("SELECT snapshot_id, bus_id, stop_id, as_of_ts, projected_departure_ts, lead_s, rules_version, max_bronze_id "
+        "FROM gold.mpc_projection ORDER BY snapshot_id, bus_id, stop_id")
 
 
-def _stats(errors: list[float]) -> dict:
-    abs_e = [abs(e) for e in errors]
-    if not abs_e:
-        return {"n": 0, "mean_abs_s": None, "median_abs_s": None, "worst_abs_s": None, "bias_s": None}
-    return {"n": len(abs_e), "mean_abs_s": round(statistics.fmean(abs_e), 1),
-            "median_abs_s": round(statistics.median(abs_e), 1), "worst_abs_s": round(max(abs_e), 1),
-            "bias_s": round(statistics.fmean(errors), 1)}
-
-
-def measure(conn: psycopg.Connection, scale: float) -> dict:
+def run_once(conn: psycopg.Connection, scale: float) -> dict:
     clear_all(conn)
     ingest_run(conn, "c1_bunching", DURATION, demand_scale=scale)
-    params = recommend.load_params(conn)
-    conn.rollback()
-    # (as_of, bus, stop_idx, stop_id, seconds ahead, kind of bus, stops ahead of its next stop); error = real - projected (the sign of FR-036: positive means the bus left later than projected)
-    projected: list[tuple] = []
+    per_cycle: list[int] = []
+    empty_with_service_bus: list[int] = []
     for t in range(START_S, DURATION, STEP_S):
         res = cycle(conn, t)
-        inp, _ = recommend.load_inputs(conn, res.snapshot_id, res.as_of_ts, res.max_bronze_id, params)
+        n = conn.execute("SELECT count(*) FROM gold.mpc_projection WHERE snapshot_id = %s", (str(res.snapshot_id),)
+                         ).fetchone()[0]
+        service = conn.execute("SELECT count(*) FROM silver.bus_current_state WHERE on_corridor "
+                               "AND distance_along_m IS NOT NULL").fetchone()[0]
         conn.rollback()
-        info = {b.bus_id: b for b in inp.buses}
-        for (bus, idx), sec in project(inp).departures:
-            b = info[bus]
-            if b.kind != "service":
-                where = "terminal_slot_bus"  # not on the corridor yet: its departure is the model's slot estimate
-            elif b.at_stop is not None and idx == b.next_stop_idx - 1:
-                where = "dwelling_now"  # the bus is at this stop: only the dwell is unknown
-            else:
-                where = f"stops_ahead_{min(max(idx - b.next_stop_idx, 0), 3)}"  # 0 = its next stop; 3 = three or more
-            projected.append((res.as_of_ts, bus, idx, inp.stops[idx].stop_id, sec, where, idx))
-    actual: dict[tuple[str, str], list] = {}
-    for bus, stop, dep in conn.execute("SELECT bus_id, stop_id, departure_ts FROM silver.stop_visits "
-                                       "ORDER BY bus_id, stop_id, departure_ts").fetchall():
-        actual.setdefault((bus, stop), []).append(dep)
+        per_cycle.append(n)
+        if service and not n:
+            empty_with_service_bus.append(t)
+    digest = hashlib.sha256(repr(conn.execute(ROWS).fetchall()).encode()).hexdigest()
+    table = [dict(zip(("lead_bucket", "n_compared", "mae_s", "median_abs_error_s", "worst_abs_error_s", "mean_error_s"),
+                      (str(v) if v is not None and not isinstance(v, (int, str)) else v for v in r)))
+             for r in conn.execute(aggregate_sql()).fetchall()]
+    totals = conn.execute("SELECT count(*), count(error_s), count(*) FILTER (WHERE affected_by_decision), "
+                          "count(*) FILTER (WHERE (error_s IS NULL) <> (actual_departure_ts IS NULL)) "
+                          "FROM gold.v_projection_accuracy").fetchone()
     conn.rollback()
-    rows = []
-    for as_of, bus, idx, stop, sec, where, _ in projected:
-        later = [d for d in actual.get((bus, stop), ()) if d >= as_of]
-        if not later:
-            continue  # the run ended before the bus left this stop
-        rows.append((sec, (later[0] - (as_of + timedelta(seconds=sec))).total_seconds(), where, idx))
-    out: dict = {"scale": scale, "cycles": len(range(START_S, DURATION, STEP_S)), "projected": len(projected),
-                 "matched": len(rows)}
-    for h in HORIZONS:
-        out[f"h{h}"] = _stats([e for sec, e, _, _ in rows if sec <= h])
-    out["by_look_ahead_s"] = {f"{lo}-{hi}": _stats([e for sec, e, _, _ in rows if lo <= sec < hi or (hi == 600 and sec == hi)])
-                              for lo, hi in BUCKETS}
-    where_names = ("dwelling_now", "stops_ahead_0", "stops_ahead_1", "stops_ahead_2", "stops_ahead_3", "terminal_slot_bus")
-    out["by_source_within_600s"] = {w: _stats([e for sec, e, ww, _ in rows if ww == w and sec <= 600]) for w in where_names}
-    out["h300_on_the_corridor_only"] = _stats([e for sec, e, ww, _ in rows if sec <= 300 and ww != "terminal_slot_bus"])
-    out["h600_on_the_corridor_only"] = _stats([e for sec, e, ww, _ in rows if sec <= 600 and ww != "terminal_slot_bus"])
-    return out
+    return {"scale": scale, "cycles": len(per_cycle), "rows": sum(per_cycle), "rows_per_cycle_min": min(per_cycle),
+            "rows_per_cycle_median": sorted(per_cycle)[len(per_cycle) // 2], "rows_per_cycle_max": max(per_cycle),
+            "empty_cycles_with_a_service_bus": empty_with_service_bus, "sha256": digest, "table": table,
+            "view_rows": totals[0], "compared": totals[1], "affected": totals[2], "null_mismatch": totals[3]}
 
 
 @pytest.mark.slow
 @pytest.mark.parametrize("scale", [3.0, 1.0])
-def test_projection_error_is_reported(module_db_dsn, scale) -> None:
+def test_projection_accuracy_is_reported(module_db_dsn, scale) -> None:
     with psycopg.connect(module_db_dsn) as conn:
-        result = measure(conn, scale)
-    print("\nPROJECTION_ERROR " + json.dumps(result, sort_keys=True))
-    path = os.environ.get("PF006_PROJECTION_ERROR_OUT", "/tmp/pf006_projection_error.json")
+        first = run_once(conn, scale)
+        again = run_once(conn, scale)
+    print("\nSC016 " + json.dumps(first, sort_keys=True))
+    path = os.environ.get("PF006_PROJECTION_ERROR_OUT", "/tmp/pf006_sc016.json")
     try:
         existing = json.load(open(path))
     except (OSError, ValueError):
         existing = {}
-    existing[str(scale)] = result
+    existing[str(scale)] = first
     with open(path, "w") as fh:
         json.dump(existing, fh, indent=1, sort_keys=True)
-    assert result["matched"] > 0 and result["h300"]["n"] > 0
+    assert first["rows"] > 0 and first["empty_cycles_with_a_service_bus"] == []
+    assert first["sha256"] == again["sha256"], "the same bronze must give identical rows"
+    assert first["null_mismatch"] == 0, "error_s is NULL exactly when there is no real departure"
+    assert first["view_rows"] > first["compared"], "rows without a real departure yet have a NULL error"
+    by_bucket = {r["lead_bucket"]: r for r in first["table"]}
+    assert by_bucket["0-5 min"]["n_compared"] > 0 and by_bucket["5-10 min"]["n_compared"] > 0

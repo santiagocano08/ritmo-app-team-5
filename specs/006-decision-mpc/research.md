@@ -256,6 +256,35 @@ Tests first, in this order per phase (details in `quickstart.md`):
 
 Coverage: new pure modules aim near 100 % (they protect the metric); total stays above 80 %.
 
+## R17. Projection record: matching, `affected_by_decision`, volume and cost (FR-035, FR-036, SC-016; phase 2b)
+
+Decided by the implementer from the amended spec (data owner, 2026-11-22). The data owner can overrule each point; each is one line of the view.
+
+**What is stored.** The "do nothing" projection that the model already computes as the baseline of every candidate. Until now it was computed only when a candidate existed (`evaluate_candidates`), so a cycle with no candidate had no baseline. Phase 2b projects the baseline in every fresh cycle with the model on, and passes it to `evaluate_candidates`, so a cycle with candidates does not project it twice. The stored rows are the baseline's departures inside the 1,800 s window (`lead_s ≤ 1800`, the projector already drops later ones). Rows come from the pure function `projection_record(inputs, projection)`; nothing is invented or recomputed in SQL.
+
+**No row before the first report (found by the first live run).** With the data clock the first cycles run before any event is in bronze, at the wall-clock time, and every roster bus is a placeholder with a terminal slot. Those rows were paired with the first departure of the feed two days later (errors of 196,000 s; 38 rows of 5,552). The record is therefore written only when `silver.bus_current_state` has at least one row (some bus has reported). The view is not bounded in time: a real error of any size, such as a breakdown, must stay visible.
+
+**Matching rule for the real departure.** For a row `(snapshot, bus, stop)` the real departure is the `departure_ts` of the first `silver.stop_visits` row of that bus at that stop with `departure_ts ≥ as_of_ts`, ordered by `departure_ts`. Reasons:
+
+- `≥ as_of_ts` (not `> as_of_ts`) keeps a bus that is dwelling at the stop at `as_of_ts` (arrival before, departure after), which the projector projects with its remaining dwell. T048a used the same rule.
+- The key is `(bus, stop)` and not `(bus, trip, stop)`: the projector has no trip id, and a bus normally does one trip in the window. The "first at or after" rule picks the current trip's visit because the next trip of the same bus is at least one full trip later (about 1,400 s of driving plus the layover, longer than the remaining lead of any row near the window end in the C1 runs). The edge where a short trip would be mispaired is not guarded; it would show as a large error in a high bucket and is noted as a limitation.
+- If that first visit is flagged `estimated_at_departure`, `actual_departure_ts` and the error are NULL. The alternative (skip it and take the next visit) was rejected: it could pair the row with the bus's next trip and invent a huge error. The spec says estimated departures are excluded from the comparison; NULL excludes the row without risking a false pairing.
+- No visit yet: NULL, never 0 (FR-036). The row is kept, so the denominator "projected" and the numerator "compared" are both readable.
+
+**`affected_by_decision`.** True when an applied recommendation on the same bus was decided between `as_of_ts` and the real departure. Implemented on `gold.recommendation`: `status = 'applied'`, `doc.action.bus_id = bus_id`, `close_ts > as_of_ts` and (no real departure yet, or `close_ts ≤` the first departure). `close_ts` is the decision's event time for an applied row (data-model M5). Notes: (1) it uses the time of the first departure found even when that visit is estimated, so the flag does not depend on the NULL error; (2) only the targeted bus is flagged. A hold on bus A also changes the queues that bus B finds, and a reserve changes everyone's queue; those effects on other buses are not flagged (the baseline is shared state), and the aggregate may show a small bias after an approved action. This is the narrowest reading of FR-036 and is stated, not hidden; the phase 5 report measures the action's own effect. (3) A discarded recommendation changes nothing and is not flagged.
+
+**Buckets.** `0-5 min` is `lead_s < 300`, `5-10 min` is `300 ≤ lead_s < 600`, `10-30 min` is `lead_s ≥ 600` (up to 1,800). SC-016 asks for the first two; the third is reported as the user story's view.
+
+**Aggregate.** Count of compared departures (non-NULL error), mean absolute error, median absolute error, worst absolute error, per bucket, excluding `affected_by_decision`. The median uses `percentile_cont(0.5)` on the absolute error. The mean signed error is added as a bias column because T048a found a constant +20 s lag; it is extra, not required. An empty bucket returns `n = 0` and NULL statistics.
+
+**Row volume per cycle.** T048a (C1 seed 42, scale 3): 8,319 projected departures over 160 cycles, about **52 rows per cycle**, with a range of about 20 (early, few buses) to about 90 (7 buses with 10 stops left each). Bounded by buses × stops in the window: at most 7 × 18 = 126. Per run at the real 5 s refresh interval: 45 minutes = 540 cycles, about **28,000 rows**; 4 hours = 2,880 cycles, about **150,000 rows**. A row is about 130 bytes of data plus the primary key and one secondary index, so roughly 250 bytes: about **7 MB for 45 minutes and 40 MB for 4 hours**. Retention is not designed here (like `gold.snapshots`): the table grows with the snapshots. The measured figures replace these estimates in `verification.md`. The `refresh` live recipe at pace 1 runs 108 cycles per 2,700 s, so its table is about 5,600 rows.
+
+**Cycle-time cost.** The baseline projection is about 2 ms (R9); it already ran in every cycle with candidates, so the new cost is the baseline in the cycles without candidates (about 2 ms), building about 50 rows (negligible) and one `INSERT ... SELECT FROM unnest(...)` of about 50 rows (about 1 to 3 ms with the primary-key and secondary-index maintenance). Estimate: **+3 to +6 ms per cycle**, against the added median of 4.9 ms and maximum of 10.4 ms of phase 2 (target: added median ≤ 60 ms, added maximum ≤ 150 ms). The view costs nothing per cycle: it is read on demand, one indexed lookup per row (`silver_stop_visits_stop_dep_idx`), about 50 lookups per cycle read.
+
+**Determinism.** `snapshot_id` is a function of `(as_of, rules_version, max_bronze_id)`, so the same bronze and rules give the same snapshot and the same projection; `ON CONFLICT DO NOTHING` makes a repeated cycle a no-op. `RULES_VERSION` moves to `1.7.0` because the gold output gains a table, so a snapshot of 1.7.0 has a different id from one of 1.6.0 on the same data (the rule of 005).
+
+**Effect on phase 5.** The projection error no longer needs a report of its own: `gold.v_projection_accuracy` has it for every run. Phase 5 reports only the actual effect of the approved action (and may quote the view).
+
 ## Alternatives considered (summary)
 
 | Decision | Chosen | Rejected and why |

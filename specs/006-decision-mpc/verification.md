@@ -434,3 +434,144 @@ Decisions (each in the code docstrings):
 - `test_range_guard.py` (a 005 guard) now excludes the four 006 contract paths.
 - At the real reference demand hold and slow down never reach the 15 s threshold in C1; the recommendations are reserve dispatch and a delayed terminal departure. This is the model's result as measured.
 - Phase 2b (projection record, FR-035, FR-036, SC-016) is not started.
+
+
+## Phase 2b: projection record (T049a–T049m; FR-035, FR-036, SC-016)
+
+**Time**: start 2026-11-22T15:05Z, end 2026-11-22T16:40Z (UTC). About 1.6 h of wall time against 0.6 h planned: the four live runs (C twice, A, B) take about 10 minutes each at pace 1, and the two suites take 11 and 6 minutes. Branch `feature/006-decision-mpc`; nothing committed. Phase 3 not started. The "Phase 2b is not started" line of the Phase 2 open items above is historical.
+**Environment**: compose project `pf006` only (`-p pf006 --env-file /tmp/pf006*.env`, Postgres on 55432, the default stack on 5432 untouched). `down -v` of `pf006` at the end.
+
+### Commands
+
+```text
+tests first: uv run --extra dev pytest src/data/tests/unit/test_projection_record.py src/data/tests/integration/test_projection_{schema,accuracy_view,accuracy_query,record}.py --no-cov -q
+slow (SC-016, forced mode): uv run --extra dev pytest -m slow src/data/tests/integration/test_projection_error.py -s     (15:28Z to 15:30Z, 2 passed in 96 s)
+host suite:  . /tmp/pf006_host.sh; uv run --extra dev pytest -m "not slow and not live" -p no:cacheprovider -q
+CI-ready:    docker compose -p pf006 --env-file /tmp/pf006.env --profile tools build tests
+             docker compose -p pf006 --env-file /tmp/pf006.env --profile tools run --rm tests      (DATABASE_URL unset in the shell)
+generate:    uv run --extra dev make generate-read   (twice; the second `git diff --stat` equals the first; no file under src/pulsoflota changed)
+live:        docker compose -p pf006 --env-file /tmp/pf006_{A,B,C}.env up -d db / up -d --build refresh /
+             run -d --no-deps --rm --name pf006-ingest-X -v "$PWD/src/data/tests/fixtures/scenarios:/scn:ro" ingestion
+             (A: scale 1, model on; B: MPC_ENABLED=off; C: SIM_DEMAND_SCALE=3; all C1 seed 42, 2,700 s, pace 1)
+stress:      PYTHONPATH=. uv run --extra dev python /tmp/stress2b.py   (4-hour C1, 15,396 events; not committed)
+```
+
+### Results
+
+| Run | Result |
+|---|---|
+| Red step | `test_projection_record.py` (unit and integration): `ImportError: projection_record`; the schema tests: `UndefinedTable`; the view and query tests: fixture error `relation gold.mpc_projection does not exist`; `test_rules_version`: `1.6.0 != 1.7.0`. The test added after the first live run (no row before any bus has reported) failed with `assert 36 == 0` before the guard. |
+| Host suite (16:18:03Z to 16:28:47Z) | **1162 passed, 22 skipped, 7 deselected; coverage 97.72 %** (phase 2: 1135 passed, 97.70 %). `rules/mpc.py` 100 %, `rules/projector.py` 99 % (line 313, as before), `pipeline/recommend.py` 99 % (lines 88 and 96, as before). |
+| CI-ready (16:28:54Z to 16:35:11Z) | **1164 passed, 27 skipped; coverage 97.72 %** (phase 2: 1137 passed, 97.70 %). |
+| Golden hash, seed 42, 3,600 s | unchanged: `8bae0e5229b2e547fac181f0f87176809d71be7a80600a4b066832b6274690bc` (unset and `SIM_DEMAND_SCALE=1.0`; the constant of `test_simulator_golden_hash.py`, green in both suites). The record touches no simulator file. |
+| `make generate-read` twice | second `git diff --stat` identical to the first; `RecommendationV110` and every generated model unchanged. |
+| `RULES_VERSION` | `1.7.0` (new gold table and view); `test_rules_version.py` updated, red first. |
+
+New tests: 27 (unit 5, integration 22: schema 4, view 5, query 3, record 10). Rewritten: `test_projection_error.py` (slow).
+
+### SC-016: forced mode, C1 seed 42, 2,700 s, a cycle every 15 s from 300 s (160 cycles), read from `gold.v_projection_accuracy`
+
+Aggregate query of `contracts/projection-accuracy.md`, run unchanged. Error = real − projected, so positive means the bus left later than projected; the statistics are on the absolute error. `affected_by_decision` rows: 0 (a replay has no decision). Nothing tuned.
+
+| Scale | Lead bucket | Compared departures | MAE (s) | Median (s) | Worst (s) | Mean signed (s) |
+|---|---|---|---|---|---|---|
+| 3 | 0–5 min | 1,260 | 37.6 | 15.0 | 400 | +22.2 |
+| 3 | 5–10 min | 1,175 | 77.0 | 45.0 | 400 | +27.9 |
+| 3 | 10–30 min | 3,316 | 114.4 | 75.0 | 435 | +33.4 |
+| 1.0 | 0–5 min | 1,269 | 37.0 | 15.0 | 400 | +16.2 |
+| 1.0 | 5–10 min | 1,198 | 70.6 | 45.0 | 370 | +18.3 |
+| 1.0 | 10–30 min | 3,262 | 106.9 | 90.0 | 330 | −7.0 |
+
+Rows: 8,319 at scale 3 (160 cycles; 8,337 at scale 1), all with a real departure or a NULL error: 5,751 compared at scale 3, 2,568 without a real departure yet (the run ended first). `error_s` is NULL exactly when `actual_departure_ts` is NULL (0 mismatches). Two replays of the same bronze give the same SHA-256 of the ordered rows (scale 3: `2d9ce59e8da63a155ec10e07777232a395a7db89b3d5a0c4869ed8797950e49c`, asserted by the test).
+
+**Comparison with T048a** (the one-off script, same run). T048a: scale 3, up to 300 s: 1,284 departures, MAE 37.8, median 15.0, worst 400; up to 600 s: 2,453, MAE 57.1, median 30.0, worst 400. The view's two buckets up to 600 s together: 2,435 departures, MAE 56.6 (weighted, 1,260 × 37.6 + 1,175 × 77.0), worst 400. Scale 1: T048a 2,478 and 53.6 against the view's 2,467 and 53.3. The same projected rows (8,319 and the same 5,751 matched at scale 3). The small differences: T048a put a departure at exactly 300 s and 600 s in the lower bucket (`≤`), the view puts them in the next (`<`), and T048a took the next visit when the first one was estimated, where the view gives NULL (18 and 11 fewer compared departures). The new 10–30 min bucket is not in T048a: it has the largest error (MAE 114 s at scale 3), consistent with the look-ahead trend T048a found (31 s at 0–150 s to 86 s at 450–600 s). The T048a table above stays as recorded.
+
+### Live check under `-p pf006` (C1 seed 42, 2,700 s, pace 1, `SIM_DEMAND_SCALE=3`, run C, final code)
+
+The live run reads the view from the database the `refresh` container filled (`REFRESH_CLOCK=data`, a cycle every 5 s of wall time).
+
+| Quantity | Run C (scale 3) | Run A (scale 1) | Run B (model off) |
+|---|---|---|---|
+| Snapshots / cycles with rows | 109 / 109 | 110 / 109 | 110 / 0 |
+| Rows total | 5,516 | 5,550 | 0 |
+| Rows per cycle min / median / max | 35 / 52 / 57 | 35 / 52 / 57 | |
+| Table size with indexes | 1,335,296 bytes (1.3 MB, 242 bytes per row) | | |
+| Compared / `affected_by_decision` | 3,938 / 0 | | |
+
+SC-016 table from the live run (aggregate query on the live database):
+
+| Scale | Lead bucket | Compared | MAE (s) | Median (s) | Worst (s) | Mean signed (s) |
+|---|---|---|---|---|---|---|
+| 3 (C) | 0–5 min | 785 | 36.8 | 15.0 | 390 | +21.2 |
+| 3 (C) | 5–10 min | 767 | 76.1 | 40.0 | 405 | +30.8 |
+| 3 (C) | 10–30 min | 2,386 | 126.3 | 80.0 | 430 | +57.9 |
+| 1 (A) | 0–5 min | 798 | 36.3 | 15.0 | 400 | +15.8 |
+| 1 (A) | 5–10 min | 779 | 69.9 | 45.0 | 370 | +21.1 |
+| 1 (A) | 10–30 min | 2,340 | 114.2 | 95.0 | 365 | +13.8 |
+
+The live and forced-mode tables agree (0–5 min about 37 s, 5–10 min about 70 to 77 s, medians 15 and 40 to 45 s). **Rerun identical**: not possible between two live runs, because the data clock takes `as_of` from the cycle's wall time against the feed, so two live runs have different `as_of` and `max_bronze_id` and therefore different snapshot ids. The strict rerun check is the forced-mode replay: `test_the_same_bronze_gives_identical_rows` (1,200 s at scale 3) and the slow test above (2,700 s, both scales) compare the ordered rows including the snapshot id, and are equal. No live decision was made, so `affected_by_decision` is exercised by the crafted tests only.
+
+**Finding of the first live run** (kept, not hidden): the first live run C, before the guard, gave `worst_abs_error_s` of 196,175 s and a MAE of 784 s in the 0–5 min bucket. The first cycles ran before any event was in bronze, at the wall-clock time (2026-11-22), and every roster bus was a placeholder with a terminal slot; the view paired those 38 rows with the first departure of the feed two days later. Fix: the record is written only when `silver.bus_current_state` has a row (some bus has reported); a test covers it (`test_a_cycle_with_no_bus_report_stores_nothing`, red with `36 == 0` first); the view is not bounded in time, so a real large error stays visible. The numbers above are from after the fix (run C repeated). Parameters were not touched.
+
+### Volume (research R17 estimates against measured)
+
+| | Estimate (R17) | Measured |
+|---|---|---|
+| Rows per cycle | about 52 (T048a) | 35 / 52 / 57 (min / median / max), live; 44 / 53 / 57, replay at scale 3; 52 on the 4-hour data |
+| Bytes per row | about 250 | 242 (1,335,296 B for 5,516 rows, with the primary key and the secondary index) |
+| 108-cycle live run (45 minutes at pace 1) | about 5,600 rows | 5,516 and 5,550 rows, 1.3 MB |
+| 45 minutes at the real 5 s interval (540 cycles) | about 28,000 rows, 7 MB | 540 × 52 = about 28,100 rows, about 6.8 MB |
+| 4 hours at 5 s (2,880 cycles) | about 150,000 rows, 40 MB | 2,880 × 52 = about 150,000 rows, about 36 MB |
+
+The last two rows are the measured row size and median times the cycle count (not a run). The table has no retention rule, like `gold.snapshots`.
+
+### Cycle time (SC-011), live runs of 110 cycles (C1 seed 42, 2,700 s, pace 1; one cycle per distinct snapshot)
+
+| Run | `duration_ms` median / p95 / max | `model_ms` median / p95 / max |
+|---|---|---|
+| A, model on, scale 1 (phase 2b) | 85.0 / 197 / 302 | 8.1 / 13.7 / 27.3 |
+| B, model off | 85.0 / 182 / 190 | 0.8 / 1.3 / 14.3 |
+| C, model on, scale 3 | 93 / 187 / 193 | 9.8 / 12.2 / 15.1 |
+| (phase 2, for comparison) A / B / C | 89.5 / 186 / 233; 83 / 179 / 206; 90.5 / 187 / 269 | 5.75 / 11.1 / 11.7; 0.8 / 0.9 / 1.3; 8.9 / 11.2 / 17.3 |
+
+**Model's added time (A − B, model step): median +7.3 ms, max +13.0 ms** (max of A's 27.3 ms is one outlier cycle; B's 14.3 ms max too). Phase 2 was +4.9 ms median and +10.4 ms max, so phase 2b adds about 2.4 ms at the median (the baseline projection in cycles with no candidate, about 50 rows and one insert). Targets: added median ≤ 60 ms, added max ≤ 150 ms, demo p95 ≤ 250 ms: met (**demo p95 197 ms** with the model on, 182 ms with it off). SC-011: max `duration_ms` 302 < 5,000, no cycle skipped. The A and B cycle figures differ by less than the noise of two laptop runs (A's max of 302 ms is one cycle; p95 differs by 15 ms; medians are equal).
+
+4-hour stress (14,400 simulated seconds, **15,396 events**, 40 cycles over the last 10 minutes on clones of the same data; the passes alternate; "norecord" is the final code with `projection_record` patched to return no row, so it still projects the baseline):
+
+| Pass | `duration_ms` median / p95 / max | `model_ms` median / p95 / max | Rows |
+|---|---|---|---|
+| model off (1st) | 664 / 681 / 682 | 2.0 / 2.7 / 2.9 | 0 |
+| model on, final (1st) | 684 / 711 / 736 | 16.9 / 22.3 / 23.8 | 2,077 |
+| norecord (1st) | 682 / 1,658 / 1,737 | 14.2 / 17.2 / 24.2 | 0 |
+| model on, final (2nd) | 688 / 1,635 / 1,721 | 16.4 / 20.6 / 22.6 | 2,077 |
+| norecord (2nd) | 685 / 1,640 / 1,669 | 15.3 / 19.0 / 23.6 | 0 |
+| model off (2nd) | 670 / 1,622 / 1,624 | 1.9 / 2.8 / 3.4 | 0 |
+
+The model adds about **+14.9 ms** to a 4-hour cycle's median (16.9 against 2.0 in the first pair; +20 ms of the cycle median, +3 %, inside the planned +3 % to +6 %). The record and its insert cost **+1.7 to +2.7 ms** of that (16.9 and 16.4 against 14.2 and 15.3). The p95 and maximum of 1.6 s in the later passes appear in the model-off pass too (the last row), so they are not the model; the same outliers were seen in phase 2's second pass and are reported, not explained. Added cost of phase 2b: about +2 ms (live: +2.4 ms).
+
+### Untouched check
+
+`git status --short` and `git diff --stat feature/005-data-fixes-metrics` for `docs/`, `.github/`, `.kiro/`, `.specify/`, `src/api/`, `CODEOWNERS` and `contracts/turn1-events`: no change. `contracts/` has no change in this phase (the two schema files and fixtures changed in phase 2 only). `docs/data-contract.md` and `docs/adr/` untouched. No change in `.env.example`, `docker-compose.yml` or the simulator.
+
+### Files changed in phase 2b
+
+CODEOWNERS paths (for the data owner's review): `src/data/rules/projector.py` (`projection_record`), `src/data/rules/mpc.py` (optional `base` argument of `evaluate_candidates`), `src/data/rules/__init__.py` (`RULES_VERSION` 1.7.0). Under `contracts/`: nothing.
+Other source: `src/data/db/init/009_decision_mpc.sql` (Phase 2b section: `gold.mpc_projection`, `gold.v_projection_accuracy`), `src/data/pipeline/recommend.py` (baseline projected every fresh cycle, one `INSERT … SELECT FROM unnest … ON CONFLICT DO NOTHING`).
+Tests: new `unit/test_projection_record.py`, `integration/test_projection_schema.py`, `test_projection_accuracy_view.py`, `test_projection_accuracy_query.py`, `test_projection_record.py`; rewritten `integration/test_projection_error.py` (slow, reads the view); edited `unit/test_rules_version.py`, `fixtures/gold_support.py` (`clear_all` empties `gold.mpc_projection` first), and the cleanup lists of `integration/test_incident_gold.py`, `test_scenarios_gold.py`, `test_stop_boarding_gold.py`, `test_stop_ewt_gold.py`, `test_rebuild.py`.
+Documents: `specs/006-decision-mpc/tasks.md` (Phase 2b, phase 5 reduced, hours and checkpoints, `RULES_VERSION` plan), `plan.md`, `data-model.md` (M10, M11), `research.md` (R17), `quickstart.md`, `contracts/projection-accuracy.md` (new), `contracts/README.md`, `verification.md`.
+
+### Rework and decisions made here
+
+Rework:
+- First full host run: 8 failures, all one cause: `gold.mpc_projection` has a foreign key to `gold.snapshots` and a view on `silver.stop_visits`, so five older tests that delete the gold tables or drop the silver and gold tables (`test_incident_gold`, `test_scenarios_gold`, `test_stop_boarding_gold`, `test_stop_ewt_gold`, `test_rebuild`) failed on cleanup. Their cleanup lists now name the new table (and the view) first. No assertion changed.
+- Test buses in the view test (`B-3`…) are outside the recommendation contract's bus enum; the crafted recommendation rows are inserted without model validation (`validate=False`, as the old seed rows allowed).
+- The finding of the first live run (above): guard and test added.
+
+Decisions (details in research R17; each is one line of the view or one condition in `recommend.py`, and the data owner can overrule):
+- Real departure = first `silver.stop_visits` departure of the bus at the stop with `departure_ts ≥ as_of_ts`. If that visit is an estimated departure, the error is NULL (the next visit is not used, to avoid a pairing with the next trip).
+- `affected_by_decision`: only an applied recommendation on the same bus, decided after `as_of_ts` and not after the real departure (via `gold.recommendation.close_ts`). Effects of an action on other buses' baselines are not flagged.
+- No row is stored before any bus has reported, when the model is off or when the snapshot is older than 15 s.
+- The projection is written for every bus the baseline gives a departure inside 1,800 s, including waiting buses with a terminal slot (their error is the largest, as T048a found) and `estimated` buses.
+- `RULES_VERSION` 1.7.0 (phase 4 and 6 move to 1.8.0 and 1.9.0 in the task list).
+- Phase 5 reduced from 0.60 h to 0.35 h; committed scope 6.45 h.
+- Phase 2 exit gate T049 is left unchecked in `tasks.md` (it is the data owner's confirmation); the data owner committed phase 2 and asked for 2b, which I took as the go-ahead.

@@ -36,7 +36,7 @@ import heapq
 import json
 import math
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from src.data.rules.holds import MAX_HOLD_S
@@ -148,6 +148,23 @@ def canonical_json(obj: Any) -> bytes:
 def inputs_json(inp: Inputs) -> dict:
     """`Inputs` as plain data with the buses in id order (for lineage and the determinism test)."""
     return _plain(dataclasses.replace(inp, buses=tuple(sorted(inp.buses, key=lambda b: b.bus_id))))
+
+
+def projection_record(inp: Inputs, projection: Projection) -> tuple[tuple[str, str, datetime, float], ...]:
+    """Rows of the projection record (FR-035) from a projection: `(bus_id, stop_id, projected_departure_ts, lead_s)`.
+
+    One row per departure the projection gives inside the scoring window, sorted by bus id and stop order, so the
+    same input always gives the same rows (SC-001). `lead_s` is the projected second after `as_of` (rounded to
+    milliseconds) and the timestamp is `as_of + lead_s`. A bus with no departure in the window has no row.
+    """
+    as_of = inp.as_of.astimezone(timezone.utc)
+    window = inp.params.scoring_window_s
+    rows = []
+    for (bus_id, idx), seconds in projection.departures:
+        lead = round(float(seconds), 3)
+        if 0 <= lead <= window:
+            rows.append((bus_id, inp.stops[idx].stop_id, as_of + timedelta(seconds=lead), lead))
+    return tuple(rows)
 
 
 def saving_s_per_rider(base: Projection, proj: Projection) -> float:
