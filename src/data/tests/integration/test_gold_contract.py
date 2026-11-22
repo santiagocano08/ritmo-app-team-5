@@ -47,14 +47,33 @@ def test_every_gold_row_of_a_cycle_has_lineage_and_shares_the_snapshot_id(gold_c
     assert result.max_bronze_id == max_id
 
 
+def _regular_visits() -> list[dict]:
+    """Three buses leave P-884, P-885 and P-886 every 600 s (1,800 / 2,400 / 3,000 s)."""
+    b = bb.Builder("regular-visits")
+    for bus, depart in (("B-103", 1800), ("B-102", 2400), ("B-101", 3000)):
+        for stop in ("P-884", "P-885", "P-886"):
+            b.stop_visit(bus, bb.trip_id(bus), stop, depart - 10, depart)
+    return b.events
+
+
 def test_service_metric_is_stored_with_the_cycle(gold_conn) -> None:
-    bb.ingest_all(gold_conn, bb.normal().events)
+    """Stop-based (005 US3): two headways of 600 s at each of three stops in the trailing 15 minutes."""
+    bb.ingest_all(gold_conn, bb.normal().events + _regular_visits())
     cycle(gold_conn, 3000)
     n, mean, sched, ewt, ok = gold_conn.execute(
         "SELECT n_headways, mean_wait_s, scheduled_wait_s, ewt_s, computable FROM gold.service_metric").fetchone()
-    assert (n, ok) == (4, True)
+    assert (n, ok) == (6, True)
     assert float(sched) == 300.0 and float(mean) == pytest.approx(300.0, abs=0.01)
     assert float(ewt) == pytest.approx(0.0, abs=0.01)
+
+
+def test_service_metric_is_not_computable_without_stop_departures(gold_conn) -> None:
+    """Positions alone give no stop headway: the row exists, `computable` is false, values are NULL, not 0."""
+    bb.ingest_all(gold_conn, bb.normal().events)
+    cycle(gold_conn, 3000)
+    assert gold_conn.execute(
+        "SELECT n_headways, mean_wait_s, scheduled_wait_s, ewt_s, computable FROM gold.service_metric").fetchone() == (
+        0, None, None, None, False)
 
 
 def test_empty_bronze_gives_no_data_and_an_empty_corridor(gold_conn) -> None:

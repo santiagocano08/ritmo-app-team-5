@@ -102,7 +102,8 @@ def test_lineage_columns_and_rerun_stability(loaded) -> None:
                            "WHERE snapshot_id = %s", (res.snapshot_id,)).fetchall()
     assert lineage == [(RULES_VERSION, res.max_bronze_id)]
     # recompute the same bronze from scratch: same snapshot id, same rows
-    for table in ("incident", "service_metric", "decision_inputs", "corridor_now", "source_status", "snapshots"):
+    for table in ("incident", "service_metric", "service_metric_stop", "stop_ewt_band", "decision_inputs", "corridor_now",
+                  "source_status", "snapshots"):
         conn.execute(f"DELETE FROM gold.{table}")  # noqa: S608 - fixed names
     conn.commit()
     again = cycle(conn, 300)

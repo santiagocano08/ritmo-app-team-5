@@ -128,3 +128,92 @@ Open. Hand-over: the regenerated `data/reference/congestion_factor.csv` in the w
 ## T020 — Phase 1 exit gate (data owner's verifier, 2026-11-21 23:30)
 
 The independent mock (`mock_calculos.py`, run from a copy so its results file is not overwritten) was re-run on the Phase 1 working tree with the regenerated `data/reference/congestion_factor.csv`: **+25.8 s (27 intervals) without the hold, +10.6 s (28 intervals) with it**, hold saving 15.2 s, hold at P-887 17:27:45–17:29:15 local, slowest local hour 18 h. The whole report is identical to the post-US1 oracle file. Targeted tests (headway, reference build, golden hash, terminal headway, rules version): 57 passed. Gate passed; Phase 2 may start.
+
+## Phase 2 (US3: stop-based EWT), T021 to T035
+
+Start 2026-11-22T04:29Z. End 2026-11-22T05:12Z (UTC). Agent: implement-code. Nothing committed. Phase 3 not started.
+`.specify/extensions.yml` does not exist, so no hooks applied.
+
+### Oracle results (all exact; none changed to fit the code)
+
+Independent oracle `src/data/tests/fixtures/oracle_stop_metrics.py` (raw simulator events, no import of the rules). Self-check before any code existed, then reproduced by gold:
+
+| Check | Plan value | Measured |
+|---|---|---|
+| 16-minute window (22:28:55, 22:44:55]Z, P-888..P-900, no hold | 27 intervals, +25.8 s (S h 13,290, S h2 8,660,350) | 27, +25.82 s, 13,290, 8,660,350 |
+| same window, 90 s hold of B-103 at P-887 | 28 intervals, +10.6 s | 28, +10.6 s (hold saving 15.2 s) |
+| Live 15-minute value at 22:44:55Z, all 18 stops, no hold / hold | 33 / +17.6 s, 35 / +2.8 s | 33 / +17.596 s, 35 / +2.8 s |
+| Live value, P-888..P-900 from the per-stop rows | 25 / +21.0 s, 27 / +1.8 s | 25 / +21.0 s, 27 / +1.8 s |
+| Band 69, no hold / hold (P-888..P-900) | 6 / 5 intervals | 6 (S h 4,770, S h2 4,190,600) / 5 |
+| Band 70, no hold / hold | 25 / 27 intervals | 25 (12,180; 7,819,850) / 27 |
+| Bands 69 + 70 sums, no hold | 31, 16,950, 12,010,450 | 31, 16,950, 12,010,450 |
+| Bands 69 + 70 sums, hold | 32, 18,165, 12,361,525 | 32, 18,165, 12,361,525 |
+| Band 68 on P-888..P-900 | no row | no row (the 18-stop table has 1 band-68 row, on another stop) |
+| Bunched snapshot 22:30:00Z, no hold | 15 headways, +116.6 s | 15, +116.636 s |
+| Gold band rows vs oracle grouped by band, all stops, hold and no hold | 0 differences | 0 differences (n, S h, S h2, S hp, S hp2, n_excluded) |
+
+Band sums are the sums of the stop sums over the closing departures; the corridor row is the sum of the 18 stop rows (checked: 33 = 33 on the live stack).
+
+Plan figure that does not occur: "B-103 195 s behind". On this stream B-103 stays bunched at 204 to 230 s (1,340 s to 2,080 s) and the stop EWT is +80 to +129 s over the whole stretch; `test_bunched_snapshot_has_positive_stop_ewt` asserts it for every such snapshot (38 snapshots checked). Not an oracle value; the plan's own oracles above are unchanged.
+
+### Minimum sample (`min_stop_headways = 5`)
+
+Corridor row of `gold.service_metric`: `computable = n >= 5 and S h > 0`. Below it `mean_wait_s`, `scheduled_wait_s` and `ewt_s` are NULL and `n_headways` keeps the count. Checked every 100 s over the 2,700 s run against the oracle (both branches occur: n in 1..4 not computable; n >= 5 computable); exactly 5 and exactly 4 in `test_service_metric.py`. A stop with fewer than two usable departures gets a row with `n_headways = 0`, `computable = false` and zero sums (never 0 as a value); it adds nothing to the corridor sums.
+
+### Test runs (one at a time)
+
+| # | Command | Result | Time (UTC) |
+|---|---|---|---|
+| 1 | `uv run --extra dev pytest -m "not slow and not live" -p no:cacheprovider -q` (host, DATABASE_URL to localhost) | first full run 9 failed / 852 passed (see Rework); after the fixes **862 passed, 0 failed, 0 skipped**, 5 deselected; coverage **96.66 %** (gate 80 %); `rules/stop_metrics.py` 100 %, `rules/service_metric.py` 100 %, `pipeline/stop_metrics.py` 100 % | 04:48:55Z to 04:55:51Z |
+| 2 | `docker compose --profile tools build tests && docker compose --profile tools run --rm tests` | run as `docker compose -p pulsoflota-verify --profile tools ...` with `POSTGRES_PORT=5433 API_PORT=8001` (the default project has a running stack on 5432/8000; the rule is to never touch it). **859 passed, 8 skipped, 0 failed**; coverage **96.66 %**. Same 8 container-only skips as Phase 1. The fresh volume applied `008` through the init directory | 04:56:08Z to 05:00:33Z |
+
+Passed count 862 vs 820 at the end of Phase 1: +42 new tests.
+
+### Live check (project `pulsoflota-verify`, ports 5433 / 8001, fixture mounted through `/tmp/verify-override.yml`)
+
+`SIM_SEED=42 SIM_DURATION_S=2700 SIM_PACE_S=0.15 SIM_SCENARIO_FILE=/scn/c1_bunching.json REFRESH_CLOCK=data`, fresh volume (`008` from `docker-entrypoint-initdb.d`):
+
+| Check | Result |
+|---|---|
+| bronze events / snapshots | 2,881 / 84, last snapshot 22:44:55Z |
+| `gold.service_metric_stop` rows of the newest snapshot | 18 |
+| newest `gold.service_metric` row | 33 headways, ewt 17.596 s, computable (= oracle +17.6 s) |
+| sum of the 18 stop rows vs corridor row | 33 = 33 |
+| `gold.stop_ewt_band` | band 68: 1 row; band 69: 10 rows, 15 headways; band 70 absent (closes at 22:45:00Z, last snapshot 22:44:55Z); band 68 on P-888..P-900: 0 rows |
+| two consecutive cycles over the same bronze (second run, 3 s apart) | identical band table: md5 `d4a1bbbe7b9c213e8e7a20da60035abf`, 11 rows both times |
+| `cycle_failed` in the refresh log | 0 (both runs) |
+| cleanup | `docker compose -p pulsoflota-verify --profile tools down -v`; default stack untouched and still running |
+
+The first attempt at the md5 comparison had a quoting error in my psql command and I removed the stack before fixing it, so the live check was run a second time with a shorter pace (47 snapshots) for the md5 comparison. No product impact.
+
+### Cycle time (scratch recipe: throwaway database, C1 seed 42, 2,700 s, 108 cycles, 2,881 events; `/tmp/cycletime.py`, not in the repo)
+
+| Run | Median | p95 | Max |
+|---|---|---|---|
+| Baseline (T001, before the story) | 47.7 ms | 67.0 ms | 69.8 ms |
+| After Phase 1 | 48.6 ms | 67.8 ms | 70.2 ms |
+| After Phase 2, run 1 | 61.8 ms | 88.5 ms | 99.8 ms |
+| After Phase 2, run 2 | 60.7 ms | 88.7 ms | 96.8 ms |
+| Live `refresh_cycle` `duration_ms` (130 cycles, host also ingesting) | 144 ms | 165 ms | 180 ms |
+| 4 simulated hours, 15,388 events, 15 cycles near the end (`/tmp/stress4h.py`) | 1,428 ms | | 1,475 ms |
+
+Required: p95 <= 250 ms at demo length (met, 88.7 ms; the new steps add about 13 ms at the median, inside the 100 ms budget) and the 4-hour figure <= 1.5 s (met, but with 25 ms of margin; baseline was 1.27 to 1.31 s). The H-8 linear growth stays as recorded in the plan.
+
+### Rework and findings
+
+1. First full host run: 9 failed. Seven of them (`test_rebuild.py`) recreate silver from `004` alone, so the new `silver.stop_visits.estimated_at_departure` column was missing, and replay of the dropped gold tables did not include the new ones. `test_incident_gold.py` deleted `gold.snapshots` before the new child table. `test_waiting_buses.py` pinned the old spatial `n_headways == 1`. All fixed in the tests (listed below). No rule or oracle was relaxed.
+2. `test_instruction_status.py` pinned `rules_version == "1.2.0"` (same kind of literal as `test_rules_version.py`); changed to `1.3.0`.
+3. `test_waiting_buses.py::test_gold_ignores_waiting_buses_for_ahead_summary_and_metric`: that timeline has stop departures without arrivals, so no `silver.stop_visits` row exists. Under the stop-based definition the metric is `0 headways, NULL, not computable` and all stop rows are zero. The assertion now says that (it also asserts the per-stop rows). The intent (waiting buses add nothing) is kept. Flagged for the data owner.
+4. `test_gold_contract.py::test_service_metric_is_stored_with_the_cycle` pinned the old spatial `n_headways == 4`. `bb.normal()` has positions only and no stop events, so the fixture alone gives 0 headways. I added crafted stop visits (three buses, three stops, 600 s apart; expected 6 headways, mean 300 s, EWT 0) and a second test for "positions only: not computable".
+5. D1 silence fixture (`d1_silence.json`): the departure that follows the silence is preceded by a report within 120 s, so it is not flagged; the lost departures simply leave no row (the R4 limit). The exclusion path is therefore covered by a crafted stream (`test_estimated_departure_excludes_both_headways_and_counts_them`: B-102 last reported at 200 s and departs at 400 s) and by the pure unit tests, not by D1. The D1 stream is still compared with the oracle (band rows equal).
+6. `conftest.py` needed no change (it uses `clear_all`, which now deletes the two new tables before `snapshots`).
+
+### Untouched check
+
+`git diff --stat feature/004-scenario-injectors` on `contracts/`, `docs/adr/`, `docs/data-contract.md`, `src/data/db/init/001`-`007`, `.github/`, `Dockerfile`, `pyproject.toml`, `uv.lock`, `docker-compose.yml`, `.env.example`, `src/pulsoflota/config.py`, `src/data/simulator/`, `src/data/ingestion/`, `.kiro/`, `.specify/`: **empty**. `git status` shows no change outside the list below.
+
+### Files changed in Phase 2 (CODEOWNERS paths marked)
+
+Created: `src/data/db/init/008_data_fixes_metrics.sql` (CODEOWNERS: db), `src/data/rules/stop_metrics.py` (CODEOWNERS: rules), `src/data/pipeline/stop_metrics.py`, `src/data/tests/fixtures/oracle_stop_metrics.py`, `src/data/tests/unit/test_stop_metrics.py`, `src/data/tests/integration/test_stop_ewt_gold.py`.
+
+Modified: `src/data/rules/__init__.py` (RULES_VERSION 1.3.0, CODEOWNERS: rules), `src/data/rules/service_metric.py` (CODEOWNERS: rules), `src/data/rules/sql/silver_stop_visits.sql` (CODEOWNERS: silver SQL), `src/data/pipeline/gold.py`, `src/data/pipeline/cycle.py`; tests `unit/test_service_metric.py`, `unit/test_rules_version.py`, `integration/test_schema_init.py`, `integration/test_gold_contract.py`, `integration/test_idempotency.py`, `integration/test_scenarios_gold.py`, `integration/test_incident_gold.py`, `integration/test_rebuild.py`, `integration/test_waiting_buses.py`, `integration/test_instruction_status.py`, `fixtures/gold_support.py`; `specs/005-data-fixes-metrics/tasks.md` (marks), `specs/005-data-fixes-metrics/verification.md`.
