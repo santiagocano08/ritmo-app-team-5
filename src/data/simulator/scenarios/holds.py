@@ -27,6 +27,7 @@ from typing import NamedTuple
 import psycopg
 
 from src.data.rules.holds import HOLD_ORDERS_SQL, MAX_HOLD_S, hold_in_range
+from src.data.simulator.scenarios.actions import ActionBoard
 from src.data.simulator.scenarios.truth import TruthSink
 
 MAX_BIGINT = 2**63 - 1
@@ -94,8 +95,10 @@ class HoldBoard:
     """Thread-safe orders by (bus, stop). The poller writes, the engine reads."""
 
     def __init__(self, seed: int, noncompliance: float,
-                 truth: TruthSink | None = None, when: Callable[[int], str] | None = None) -> None:
+                 truth: TruthSink | None = None, when: Callable[[int], str] | None = None,
+                 actions: ActionBoard | None = None) -> None:
         self._seed, self._p = seed, noncompliance
+        self._actions = actions  # 006: where an approved reserve_dispatch goes
         self._truth, self._when = truth, when or (lambda t: str(t))
         self._lock = threading.Lock()
         self._orders: dict[tuple[str, str], list[Order]] = defaultdict(list)
@@ -107,8 +110,8 @@ class HoldBoard:
     # -- intake (poller side) -----------------------------------------------------
     def apply_decision(self, rec_id: str, action: str, from_s: float, rec: RecAction | None) -> Order | None:
         """Turn a polled decision into an order. `discard` makes none; `rec` is the recommendation row (found by
-        the poller). Only a hold becomes an order in this story: `adjust_departure` and `skip_stop` are counted as
-        not executed (FR-024) and other types are ignored until their executors exist."""
+        the poller). A hold becomes an order here and an approved reserve goes to the action board; `adjust_departure` and
+        `skip_stop` are counted as not executed (FR-024) and other types are ignored until their executors exist."""
         rec_id = rec_id.lower()
         if action != "apply":
             self.ignored_discard += 1
@@ -120,6 +123,9 @@ class HoldBoard:
                 self._not_executed_seen.add(rec_id)
                 self.ignored_not_executed[rec.type] = self.ignored_not_executed.get(rec.type, 0) + 1
                 log_event("not_executed_in_this_story", rec_id=rec_id, type=rec.type)
+            return None
+        if rec.type == "reserve_dispatch" and self._actions is not None:
+            self._actions.add_reserve(rec_id, rec.bus_id, from_s, rec.ready_s)
             return None
         if rec.type != "hold":
             log_event("hold_order_ignored", rec_id=rec_id, reason="not_hold")

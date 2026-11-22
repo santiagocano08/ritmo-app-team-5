@@ -1,4 +1,4 @@
-# PulsoFlota — Data Contract for the Backend (v0.3, draft)
+# PulsoFlota — Data Contract for the Backend (v0.4, draft)
 
 - **Owner:** data owner (see `.github/CODEOWNERS`). **Consumer:** backend (BE).
 - **Status:** Proposed, 2026-11-21. Decisions recorded in ADR-0006 (backend data consumption; Proposed until the backend owner accepts items 1–5) and ADR-0007 (recommendation effect rule; Accepted by the data owner).
@@ -9,6 +9,10 @@
     - per-stop, per-band EWT and P(board ≤ 5/10/15 min) are readable now (Q14, Q15), before the H4 report table exists;
     - the congestion factor is read in local hour, and the position range and clock guards change what a reader sees (§5);
     - **data produces the recommendations** (story 006), so the `recommendation` command event of v0.2 §4.5 is withdrawn; the dispatcher's input stays the `decision` event (§4.2), with the discard `reason` (§4.6) and the shift log (H2) built in story 006.
+  - **v0.4 (2026-11-22, data owner)** records what the simulator executes after an approval (story 006 phases 3a and 3c). No schema changes. §4.5 step 5 now says, for each action type, whether it is executed and where you see it:
+    - an approved **hold** is executed and checked in `gold.instruction_status` (Q6), as before;
+    - an approved **reserve dispatch** now makes the reserve bus (B-106 or B-107) enter service at P-883 120 s after the decision. It appears in `corridor_now` (Q1) once it leaves P-883, like any bus and the free reserves in `decision_inputs` go down by one. It makes one trip and stops reporting after P-900;
+    - `adjust_departure`, `skip_stop` and `slow_down` are recorded as `applied` but **not executed** in turn 1 (the slow-down executor is backlog, issue #30).
 - **Scope:** Turn 1. Corridor C6-008, direction 1, buses B-101..B-105 in service and B-106/B-107 in reserve, stops P-883..P-900.
 - **Source of truth:** the JSON Schemas in `contracts/read/` and `contracts/turn1-events/`, plus ADR-0001, ADR-0002 and ADR-0003. This document says **how the BE reads and writes**. It adds no field to any schema. If this document and a schema disagree, the schema wins.
 
@@ -18,7 +22,7 @@
 - `[main]`: already in `main` (stories 001–003).
 - `[004]`: arrives when story 004 (`feature/004-scenario-injectors`) is merged.
 - `[005]`: arrives when story 005 is merged. Stories 004 (phases 1–2) and 005 travel together in PR #22.
-- `[006]`: arrives with story 006 (decision model, spec approved; plan not started).
+- `[006]`: arrives with story 006 (decision model). Phases 1, 2 and 2b are on `main` (PR #37); phases 3a and 3c, the execution of approved holds and reserve dispatches, follow.
 - `[proposed]`: not built yet.
 
 ---
@@ -613,9 +617,18 @@ ON CONFLICT (source, event_id) DO NOTHING;
 | 2. The console lists the active ones | BE | Reads Q13 |
 | 3. The dispatcher applies or discards (with a reason when discarding) | BE | Writes a `decision` event to `bronze.events` (§4.2, §4.6) |
 | 4. Data derives the status from the facts | data | `gold.recommendation.doc.status` |
-| 5. The simulator executes an applied action and data checks it | simulator, data | `gold.instruction_status` (Q6) |
+| 5. The simulator executes an applied action and data checks it (see "What is executed in turn 1" below) | simulator, data | Hold: `gold.instruction_status` (Q6). Reserve dispatch: the reserve bus in `corridor_now` (Q1) |
 | 6. After the horizon, data measures the effect | data | `gold.recommendation_effect` (H3) |
 | 7. The shift log joins all of the above | data | `gold.decision_log` (H2) |
+
+**What is executed in turn 1** (story 006 phases 3a and 3c; `applied` always means "the dispatcher approved it", never "it happened"):
+
+| Action type | Executed by the simulator? | What a reader sees |
+|---|---|---|
+| `hold` | Yes (story 004 executor, fed from `gold.recommendation` since 006) | `gold.instruction_status` row: `executed` if the observed dwell is within ±15 s of the hold, else `not_executed` (Q6) |
+| `reserve_dispatch` | Yes (006 phase 3c) | The reserve bus starts reporting at P-883 `params.ready_s` (120 s) after the decision (plus up to one poll and one 5 s step) and appears in `corridor_now` (Q1) once it leaves P-883, like any bus waiting at the terminal. `decision_inputs.resources.reserve_free` drops by one. It makes one trip and stops reporting after P-900. A second order for a reserve already ordered is ignored. No `instruction_status` row |
+| `adjust_departure`, `skip_stop` | No (FR-024): logged as `not_executed_in_this_story` | Only the `applied` status; the stream does not change |
+| `slow_down` | No, not in turn 1 (006 phase 3b, issue #30) | Only the `applied` status |
 
 **Derived status:**
 

@@ -32,6 +32,7 @@ from src.data.simulator.model import STEP_S
 from src.data.simulator.scenarios import scenario_events
 from src.data.simulator.scenarios.config import ScenarioConfigError, load_scenarios
 from src.data.simulator.scenarios.truth import TruthSink
+from src.data.simulator.scenarios.actions import ActionBoard
 from src.data.simulator.scenarios.holds import HoldBoard, HoldPoller
 from src.pulsoflota.config import (get_db_dsn, get_sim_hold_noncompliance, get_sim_hold_poll_s, get_sim_holds,
                                    get_sim_scenario_file, get_sim_truth_path)
@@ -79,13 +80,17 @@ def main(argv: list[str] | None = None, out: TextIO | None = None) -> None:
         print(f"scenario file rejected: {exc}", file=sys.stderr)
         raise SystemExit(2) from None
     truth = TruthSink(scenarios, path=args.truth_path or get_sim_truth_path())
-    board = poller = None
+    board = poller = actions = None
     try:
         holds_on = (args.holds == "on") if args.holds else get_sim_holds()
         if holds_on:
             start = sim_start()
-            board = HoldBoard(args.seed, get_sim_hold_noncompliance(), truth=truth,
-                              when=lambda t: (start + timedelta(seconds=t)).strftime("%Y-%m-%dT%H:%M:%SZ"))
+
+            def when(t: int) -> str:
+                return (start + timedelta(seconds=t)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+            actions = ActionBoard(truth=truth, when=when)
+            board = HoldBoard(args.seed, get_sim_hold_noncompliance(), truth=truth, when=when, actions=actions)
             poller = HoldPoller(get_db_dsn(), board, start, get_sim_hold_poll_s())
     except RuntimeError as exc:
         print(f"hold loop rejected: {exc}", file=sys.stderr)
@@ -93,7 +98,8 @@ def main(argv: list[str] | None = None, out: TextIO | None = None) -> None:
     if poller is not None:
         poller.poll_once()  # the only blocking call (2 s timeouts): decisions already written are known from step 0
         poller.start()
-    events = scenario_events(scenarios, args.seed, args.duration, truth, holds=board, demand_scale=demand_scale) \
+    events = scenario_events(scenarios, args.seed, args.duration, truth, holds=board, demand_scale=demand_scale,
+                            actions=actions) \
         if scenarios or board else run(args.seed, args.duration, demand_scale=demand_scale)
     last_ts = None
     try:
