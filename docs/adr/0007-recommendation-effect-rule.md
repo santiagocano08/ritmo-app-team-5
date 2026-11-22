@@ -103,3 +103,12 @@ applies in full: a further change of meaning would be major. Accepted by the dat
 - [NEEDS CLARIFICATION] Do the backend or frontend already build against the 1.0.0 meaning of
   `ewt_observed_s` (for example, through the `c1_bunching` fixture)? If yes, the data owner must tell
   them before phase 3. The data owner tells the team when the fixture changes in story 004 phase 3.
+
+## Amendment 2026-11-22 (story 005, data owner)
+
+"EWT before" and "EWT after" are now the **stop-based**, trailing-window EWT of story 005, not the spatial snapshot EWT. Consequences for the rule:
+- an "EWT before" early in a run, or after a long silence, can be not computable (fewer than 5 headways), which gives `no_data`, never zero;
+- the `c1_bunching` fixture numbers change meaning. The current reference for the same 90 s hold is −15.2 s on the 16-minute window (+25.8 s → +10.6 s, C1 seed 42);
+- the clamp at 0 and the "before" and "after" windows of story 004 phase 3 are reviewed before that phase is built (`docs/data-contract.md` v0.3 §6, item 13).
+
+The thresholds of the rule do not change.

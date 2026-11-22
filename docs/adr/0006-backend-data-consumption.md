@@ -178,3 +178,9 @@ Rules for the bands:
   seed uses its own value (data-contract §6, item 12). The backend must align.
 - [NEEDS CLARIFICATION] Operators: every bus reports `operator = 'OP-01'`, so MVP-5 shows one row
   unless the simulator assigns more operators (data-contract §6, item 10).
+
+## Amendment 2026-11-22 (stories 005 and 006, data owner)
+
+- **Item 4, recommendation door: superseded.** The decision model is data analytics (spec 006). Data computes and publishes `gold.recommendation`; the backend never sends a recommendation, so the `recommendation` command event type is not added. The backend's only input on a recommendation stays the `decision` event, which gains an optional `reason` (`command_event.schema.json` 1.1.0, built in story 006). See `docs/data-contract.md` v0.3 §4.5–§4.6.
+- **Expiry window: resolved.** A recommendation expires 2 minutes after creation or when the bus has passed the stop, whichever comes first; data sets it.
+- **§6 history layer.** Story 005 builds two of its producers per stop and 15-minute local band: `gold.stop_ewt_band` (stop headway sums) and `gold.stop_boarding_band` with the view `gold.stop_boarding_band_v` (P(board ≤ 5/10/15 min) counts, `closed` and `final`). The report table H4 sums them. Reports use `final` bands only.

@@ -1,9 +1,14 @@
-# PulsoFlota — Data Contract for the Backend (v0.2, draft)
+# PulsoFlota — Data Contract for the Backend (v0.3, draft)
 
 - **Owner:** data owner (see `.github/CODEOWNERS`). **Consumer:** backend (BE).
 - **Status:** Proposed, 2026-11-21. Decisions recorded in ADR-0006 (backend data consumption; Proposed until the backend owner accepts items 1–5) and ADR-0007 (recommendation effect rule; Accepted by the data owner).
   - v0.2 adds the freshness rule (§2.1), history and reporting (§3B), the recommendation door (§4.5) and the discard reason (§4.6). It was aligned with the team's "PulsoFlota · Mock-ups v2 (MVP and improvements)".
   - It also records the new "worked" rule (H3); ADR-0007 proposes it to replace ADR-0003 gate decision 6.
+  - **v0.3 (2026-11-22, data owner)** records story 005 and the recommendation flow of story 006:
+    - Q4 is now the **stop-based EWT** over a trailing 15-minute window, computable from 5 headways; new per-stop query Q4b;
+    - per-stop, per-band EWT and P(board ≤ 5/10/15 min) are readable now (Q14, Q15), before the H4 report table exists;
+    - the congestion factor is read in local hour, and the position range and clock guards change what a reader sees (§5);
+    - **data produces the recommendations** (story 006), so the `recommendation` command event of v0.2 §4.5 is withdrawn; the dispatcher's input stays the `decision` event (§4.2), with the discard `reason` (§4.6) and the shift log (H2) built in story 006.
 - **Scope:** Turn 1. Corridor C6-008, direction 1, buses B-101..B-105 in service and B-106/B-107 in reserve, stops P-883..P-900.
 - **Source of truth:** the JSON Schemas in `contracts/read/` and `contracts/turn1-events/`, plus ADR-0001, ADR-0002 and ADR-0003. This document says **how the BE reads and writes**. It adds no field to any schema. If this document and a schema disagree, the schema wins.
 
@@ -12,6 +17,8 @@
 **Availability tags used below:**
 - `[main]`: already in `main` (stories 001–003).
 - `[004]`: arrives when story 004 (`feature/004-scenario-injectors`) is merged.
+- `[005]`: arrives when story 005 is merged. Stories 004 (phases 1–2) and 005 travel together in PR #22.
+- `[006]`: arrives with story 006 (decision model, spec approved; plan not started).
 - `[proposed]`: not built yet.
 
 ---
@@ -52,6 +59,10 @@ gold.snapshots              ← one row per cycle; the "clock" of gold
         ├── gold.decision_inputs (snapshot_id PK, doc JSONB, rules_version, max_bronze_id)
         ├── gold.service_metric  (snapshot_id PK, n_headways INT, mean_wait_s, scheduled_wait_s,
         │                         ewt_s NUMERIC, computable BOOLEAN, rules_version, max_bronze_id)
+        │                         -- [005] stop-based, trailing 15 min, computable from 5 headways
+        │ 1:N                                                                          [005]
+        ├── gold.service_metric_stop (snapshot_id, stop_id) PK, n_headways, sum_headway_s, sum_headway_sq_s,
+        │                         sum_planned_s, sum_planned_sq_s, n_excluded, computable, ...
         │ 1:N                                                                          [004]
         └── gold.incident        (snapshot_id, inc_id) PK, active BOOLEAN, doc JSONB, ...
             gold.incident_current  VIEW: incidents of the latest snapshot
@@ -60,6 +71,11 @@ Not per snapshot:
   gold.instruction_status  (rec_id PK, bus_id, stop_id, hold_s, observed_dwell_s,
                             status 'executed'|'not_executed', ts_by_status JSONB, ...)     [004]
   gold.m1_baseline / gold.m2_baseline   -- already inside decision_inputs; the BE does not read them
+  gold.stop_ewt_band       ((local_date, band, stop_id) PK, n_headways, sums, n_excluded, ...)   [005]
+                           -- closed 15-minute local bands only; sparse (no row = no headway)
+  gold.stop_boarding_band  ((local_date, band, stop_id) PK, n_riders, n_board_le_5/10/15, ...)  [005]
+  gold.stop_boarding_band_v  VIEW: the same rows plus band_start_ts, band_end_ts, closed, final
+  gold.recommendation      (rec_id PK, doc JSONB, ...) -- produced by the decision model          [006]
 ```
 
 **Rules:**
@@ -198,17 +214,37 @@ SELECT doc FROM gold.decision_inputs WHERE snapshot_id = %(snapshot_id)s;
  "enabled_stops": ["P-883", "…", "P-900"]}
 ```
 
-### Q4. Service KPI: excess waiting time `[main]`
+### Q4. Service KPI: excess waiting time `[main]`, new meaning `[005]`
 **Screen:** dashboard KPI. This is **not a JSON Schema object**: it is plain columns.
-**Why:** the headline metric. EWT = mean wait − scheduled wait. It can be **negative**, which means better than planned. If `computable = false`, there are not enough headways: show "—", not 0.
+**Why:** the headline metric. EWT = mean wait − scheduled wait. It can be **negative**, which means better than planned.
+
+**What it measures since story 005:** the headways between consecutive reported departures **at each stop** (`silver.stop_visits`) in the **last 15 minutes** of simulated time, summed over the 18 stops. Before 005 it was a spatial snapshot of the gaps between buses; that value jumped by hundreds of seconds when a bus left the terminal and is withdrawn.
+
+- `computable = false` when fewer than `config.corridor_settings.min_stop_headways` (**5**) headways are in the window. Then `mean_wait_s`, `scheduled_wait_s` and `ewt_s` are **NULL** and `n_headways` still shows the count. Show "—", not 0.
+- In the first minutes of a run, and after a long silence, many snapshots are not computable. That is expected.
+- Headways that touch a departure reported after a gap of more than 120 s (an `estimated` bus) are excluded and counted in `n_excluded` (Q4b).
+
 ```sql
 SELECT s.as_of_ts, m.n_headways, m.mean_wait_s, m.scheduled_wait_s, m.ewt_s, m.computable
 FROM gold.service_metric m JOIN gold.snapshots s USING (snapshot_id)
 WHERE m.snapshot_id = %(snapshot_id)s;
 ```
 ```
-as_of_ts=2026-11-24T22:19:55Z  n_headways=1  mean_wait_s=272.5  scheduled_wait_s=300  ewt_s=-27.5  computable=true
+as_of_ts=2026-11-24T22:05:00Z  n_headways=1  mean_wait_s=NULL  scheduled_wait_s=NULL  ewt_s=NULL  computable=false
 ```
+The v0.2 example (`n_headways = 1`, `ewt_s = -27.5`, `computable = true`) can no longer happen. Reference value of the new measure: scenario C1, seed 42, stops P-888..P-900, 16-minute window around the hold: **+25.8 s without the hold, +10.6 s with the 90 s hold** (27 and 28 headways).
+
+### Q4b. EWT per stop `[005]`
+**Screen:** per-stop view of the KPI (which stop is waiting longest). 18 rows per snapshot.
+```sql
+SELECT stop_id, n_headways, n_excluded, computable,
+       sum_headway_sq_s / nullif(2 * sum_headway_s, 0)
+     - sum_planned_sq_s / nullif(2 * sum_planned_s, 0) AS ewt_s
+FROM gold.service_metric_stop
+WHERE snapshot_id = %(snapshot_id)s
+ORDER BY stop_id;
+```
+A stop with `computable = false` has `ewt_s` NULL. Coverage of a stop = `n_headways / (n_headways + n_excluded)`.
 
 ### Q5. Active incidents `[004]`
 **Screen:** US-12. **Schema:** `incident.schema.json`.
@@ -237,8 +273,10 @@ FROM gold.instruction_status WHERE rec_id = %(rec_id)s;
 - **No row = still pending.** This was verified: right after the `apply` decision, the table is empty until the bus visits the stop or the recommendation expires.
 - With a row (illustrative values, not from the run): `status = 'executed'` and `ts_by_status = {"executed": "2026-11-24T22:16:40Z"}`. The map has a single key, matching `status`, and the time is the bus departure.
 
-### Q7. Recommendations: temporary seed `[004]`
-**Why:** the decision engine and the "recommendation door" do not exist yet. Until they do, the demo recommendations live in `config.seed_recommendation`, one row per `rec_id`, each a valid `recommendation.schema.json`. The BE lists them, the dispatcher approves or discards (§4.2), and the BE owns the `status` shown on screen.
+### Q7. Recommendations: temporary seed `[004]`, retired by `[006]`
+**Story 006 retires this query.** Its recommendations go to `gold.recommendation` (Q13, §4.5) and the seed file and table are removed. Until 006 is merged, Q7 is the only source.
+
+**Why:** the decision engine does not exist yet. Until they do, the demo recommendations live in `config.seed_recommendation`, one row per `rec_id`, each a valid `recommendation.schema.json`. The BE lists them, the dispatcher approves or discards (§4.2), and the BE owns the `status` shown on screen.
 ```sql
 SELECT doc FROM config.seed_recommendation ORDER BY doc->>'rank';
 ```
@@ -267,6 +305,7 @@ last_insert_age_s=11.3  events_60s=1259  rejections_60s=0  duplicates_60s=0  rej
 SELECT stop_seq, stop_id, distance_along_m, segment_id FROM config.ref_stops ORDER BY stop_seq;   -- 18 rows, P-883..P-900
 SELECT bus_id, role FROM config.fleet_roster ORDER BY bus_id;                                    -- in_service | reserve
 SELECT corridor_id, headway_planned_s FROM config.corridor_settings;                              -- C6-008, 600
+SELECT min_stop_headways FROM config.corridor_settings;                                           -- 5   [005]
 ```
 `config.ref_stops` has no stop names. If the console needs names, raise it with data: it would be a new reference column.
 
@@ -284,6 +323,45 @@ Data owns these metrics (ADR-0003: the BE never computes headways or EWT). So da
 - **15-minute bands** of simulated **local** time (`band` 0–95), the same bands as M2. Local time is America/Bogota, a fixed UTC−5 offset (`src/data/rules/timebands.py`). The simulated day starts at 22:00Z, which is 17:00 local, the evening peak. Named bands ("evening peak", "off-peak", "whole day") are rows in `config.report_bands`, so changing them never needs a recompute.
 - **Additive counts, not ratios.** Band rows store counts and sums, and the query divides. Summing several bands or days then stays exact.
 - **Determinism.** A band row is rebuilt from bronze up to `max_bronze_id` (DELETE + INSERT for that band) and carries `rules_version`, `contract_version` and `computed_at`. Same bronze and rules give the same row.
+
+### Available now: EWT and P(board ≤ t) per stop and band `[005]`
+
+Story 005 builds the two **producers** that H4 will sum, per stop instead of per operator (the corridor has one operator, `OP-01`, today). Until H4 exists, the BE reads them directly. Bands are clock-aligned 15-minute bands of simulated **local** time (band 68 = 17:00–17:15).
+
+- `gold.stop_ewt_band` holds **closed** bands only.
+- `gold.stop_boarding_band` also holds the band that is still filling. The view `gold.stop_boarding_band_v` adds `closed` (the band has ended) and `final` (15 more minutes have passed, so every rider of the band has had the time the largest threshold needs). **Reports and payment use `final` bands only.** The dashboard may show a provisional value by dropping the filter.
+- Rows are sparse: no row means no headway or no rider, which is zero, not missing data.
+
+**Q14. EWT over a range of closed bands (corridor; per stop with `GROUP BY stop_id`)**
+```sql
+SELECT sum(n_headways) AS n_headways, sum(n_excluded) AS n_excluded,
+       sum(sum_headway_sq_s) / nullif(2 * sum(sum_headway_s), 0)
+     - sum(sum_planned_sq_s) / nullif(2 * sum(sum_planned_s), 0) AS ewt_s,
+       sum(n_headways) >= (SELECT min_stop_headways FROM config.corridor_settings) AS computable,
+       max(rules_version) AS rules_version, max(max_bronze_id) AS max_bronze_id
+FROM gold.stop_ewt_band
+WHERE local_date = %(day)s AND band BETWEEN %(from_band)s AND %(to_band)s;
+```
+Use `ewt_s` only when `computable` is true. Reference: band 70, stops P-888..P-900, C1 seed 42 without hold: 25 headways, Σh 12,180 s.
+
+**Q15. P(board ≤ 5 / 10 / 15 min) over a range of bands (corridor; per stop with `GROUP BY stop_id`)**
+```sql
+SELECT sum(n_riders) AS n_riders,
+       sum(n_board_le_5)::numeric  / nullif(sum(n_riders), 0) AS p_board_le_5,
+       sum(n_board_le_10)::numeric / nullif(sum(n_riders), 0) AS p_board_le_10,
+       sum(n_board_le_15)::numeric / nullif(sum(n_riders), 0) AS p_board_le_15
+FROM gold.stop_boarding_band_v
+WHERE local_date = %(day)s AND band BETWEEN %(from_band)s AND %(to_band)s AND final;
+```
+Reference: C1 seed 42, bands 68 / 69 / 70: 9 / 16 / 21 riders; ≤ 10 min: 9 / 16 / 14.
+
+**Limits every consumer must state:**
+- **One dominant stop.** In that run 37 of 46 riders arrive at P-883, where departures are regular, so the corridor P(board ≤ 10 min) can read 100 % while a gap exists downstream. Show the per-stop value too.
+- **Simple method.** The wait runs to the next departure of any bus; full buses are ignored. The FIFO method with capacity is an improvement (see "MVP vs improvements").
+- **Lost departures.** A departure that was never reported during a silence leaves no row. The silence shows as the bus `estimated`, and the headways around a late report are in `n_excluded`.
+- **Planned headway** is the single 600 s for every stop and hour.
+
+The full contract of these tables (guarantees and test matrix) is `specs/005-data-fixes-metrics/contracts/gold-stop-metrics.md`.
 
 ### H1. `gold.hist_bus_state`: one row per bus per snapshot
 | Column | Type | Note |
@@ -316,7 +394,7 @@ ORDER BY as_of_ts, bus_id;
 | `rec_id` | UUID PK | |
 | `case` | TEXT | C1 / C2 / C5 / D1 |
 | `action` | JSONB | The recommendation's `action` object |
-| `proposed_ts` | TIMESTAMPTZ | `event_ts` of the `recommendation` command event (§4.5) |
+| `proposed_ts` | TIMESTAMPTZ | When the decision model first published the `rec_id` in `gold.recommendation` (§4.5) |
 | `expires_ts` | TIMESTAMPTZ | |
 | `outcome` | TEXT | `proposed` / `applied` / `discarded` / `expired` (derived by data, §4.5) |
 | `decided_ts` | TIMESTAMPTZ NULL | |
@@ -326,7 +404,7 @@ ORDER BY as_of_ts, bus_id;
 | `effect_result` | TEXT NULL | From `gold.recommendation_effect.doc.result` |
 | `rules_version`, `max_bronze_id` | | Lineage |
 
-It is rebuilt each cycle from bronze (`recommendation`, `decision`), `gold.instruction_status` and `gold.recommendation_effect`.
+It is rebuilt each cycle from `gold.recommendation`, the `decision` events in bronze, `gold.instruction_status` and `gold.recommendation_effect`. **Built in story 006** `[006]` together with the discard reason (§4.6).
 
 **Q11. Shift log (MVP-4 list)**
 ```sql
@@ -377,10 +455,10 @@ This needs an ADR (an amendment of gate decision 6). The 50 % and 90 % threshold
 | `operator` | TEXT | From `bus_position.operator` (today only `OP-01`) |
 | `corridor_id` | TEXT | |
 | `n_snapshots_expected`, `n_snapshots` | INT | Missed snapshots lower the coverage |
-| `n_headways`, `sum_headway_s`, `sum_headway_sq_s` | INT, NUMERIC, NUMERIC | Observed headways |
+| `n_headways`, `sum_headway_s`, `sum_headway_sq_s` | INT, NUMERIC, NUMERIC | Observed **stop** headways, summed from `gold.stop_ewt_band` `[005]` |
 | `sum_planned_s`, `sum_planned_sq_s` | NUMERIC | Planned headways for the same intervals |
 | `n_riders` | INT | `rider_arrival` events in the band |
-| `n_board_le_5`, `n_board_le_10`, `n_board_le_15` | INT | Riders whose wait until the next departure from their stop is ≤ t min (simple method, below) |
+| `n_board_le_5`, `n_board_le_10`, `n_board_le_15` | INT | Riders whose wait until the next departure from their stop is ≤ t min (simple method, below), summed from `gold.stop_boarding_band` `[005]` |
 | `n_events`, `n_rejected` | INT | Accepted and rejected events, duplicates excluded |
 | `n_bus_snapshots`, `n_bus_estimated` | INT | Bus × snapshot rows, and how many of them were `estimated` |
 | `rules_version`, `contract_version`, `computed_at`, `max_bronze_id` | | Lineage. `computed_at` is wall time |
@@ -423,6 +501,37 @@ The BE computes coverage and "payable" from `pct_rejected` and `pct_estimated`. 
 | `evening_peak` | 68 | 75 | 17:00–19:00 |
 | `off_peak` | 40 | 63 | 10:00–16:00 |
 | `whole_day` | 0 | 95 | 00:00–24:00 |
+
+### H5. Projection record and accuracy `[006]`
+
+The decision model stores what it predicted, so its accuracy can be measured over time (data owner, 2026-11-22).
+
+- `gold.mpc_projection`: append-only, one row per (snapshot, bus, stop) of the "do nothing" baseline, written in every fresh cycle while the model is on. Columns: `snapshot_id`, `bus_id`, `stop_id`, `as_of_ts`, `projected_departure_ts` (`as_of_ts + lead_s`), `lead_s` (0 to 1,800 s), `rules_version`, `max_bronze_id`. Key: (`snapshot_id`, `bus_id`, `stop_id`). The projection uses the historical M1 travel times and the observed arrival rates. No row is written before any bus has reported. Volume: about 52 rows per cycle (about 7 MB for a 45-minute demo, 36 MB for 4 hours).
+- `gold.v_projection_accuracy`: pairs each projected departure with the bus's first real departure from that stop at or after `as_of_ts` (`silver.stop_visits`). Columns: the table's, plus `lead_bucket` (`'0-5 min'`, `'5-10 min'`, `'10-30 min'`; text, so sort by the bucket order, not alphabetically), `actual_departure_ts`, `error_s` (real − projected, seconds), `abs_error_s` and `affected_by_decision` (an applied recommendation on the same bus was decided after `as_of_ts` and not after the real departure, so the baseline is not comparable). No real departure yet, or the departure was estimated: NULL error, never zero.
+
+**Q16. Projection accuracy per lead bucket**
+```sql
+SELECT b.lead_bucket,
+       count(a.error_s) AS n_compared,
+       round(avg(a.abs_error_s), 1) AS mae_s,
+       round((percentile_cont(0.5) WITHIN GROUP (ORDER BY a.abs_error_s))::numeric, 1) AS median_abs_error_s,
+       max(a.abs_error_s) AS worst_abs_error_s,
+       round(avg(a.error_s), 1) AS mean_error_s
+FROM (VALUES ('0-5 min', 1), ('5-10 min', 2), ('10-30 min', 3)) AS b(lead_bucket, ord)
+LEFT JOIN gold.v_projection_accuracy a
+       ON a.lead_bucket = b.lead_bucket
+      AND a.error_s IS NOT NULL AND NOT a.affected_by_decision
+      AND a.as_of_ts BETWEEN %(from_ts)s AND %(to_ts)s
+GROUP BY b.lead_bucket, b.ord
+ORDER BY b.ord;
+```
+```
+lead_bucket | n_compared | mae_s | median_abs_error_s | worst_abs_error_s
+0-5 min     | 1260       | 37.6  | 15.0               | 400
+5-10 min    | 1175       | 77.0  | 45.0               | 400
+10-30 min   | 3316       | 114.4 | 75.0               | 435
+```
+(C1 bunching, seed 42, `SIM_DEMAND_SCALE=3`, story 006 phase 2b; the 400 s worst case is the stall the scenario injects at P-884.) `mean_error_s` is omitted in the sample. Names fixed by story 006 phase 2b (`specs/006-decision-mpc/contracts/projection-accuracy.md`, `rules_version` 1.7.0); the time filter is the reporting addition.
 
 ### MVP vs improvements
 
@@ -492,45 +601,61 @@ ON CONFLICT (source, event_id) DO NOTHING;
 ```
 **What data does with it:** stores it for audit only. **Data does not read `confirmation` in turn 1.** `executed` / `not_executed` come from observed behaviour (Q6), not from this message. The "I told the driver by radio" mark of MVP-3 fits here as `status = 'radio'`, with no contract change.
 
-### 4.5 `recommendation`: the BE engine hands a recommendation to data `[proposed]`
+### 4.5 Recommendations: produced by data, decided by the dispatcher `[006]`
 
-**Today:** the BE has no door for this, so the demo recommendations are seeded (Q7). This door replaces the seed.
+**Change from v0.2.** v0.2 proposed that the BE engine send each recommendation as a new `recommendation` command event. That proposal is **withdrawn**: the decision model is data analytics (data owner decision; ADR-0006 item 4; spec 006). **Data computes and publishes the recommendations; the BE never writes one.** No new command type is needed, and `command_event.schema.json` changes only for the discard reason (§4.6).
 
-**Proposal (option A, agreed with the data owner, 2026-11-21; to be accepted by the BE owner):**
-- **Same command door, new type.** `event_type = 'recommendation'` in `command_event.schema.json`. Adding a value to the enum is non-breaking: **1.0.0 → 1.1.0**, which needs an ADR (it can be the same ADR as the freshness rule).
-- **The payload is the whole `recommendation.schema.json` object** (v1.0.0, unchanged), with `status = 'proposed'`.
-- `lineage.snapshot_id` must be the `decision_inputs` snapshot the engine used, so every recommendation can be explained.
+**The whole flow, and where each step is recorded:**
 
-```sql
-INSERT INTO bronze.events (source, event_id, schema_version, event_type, event_ts, arrival_ts, payload)
-VALUES ('backend', %(event_id)s, '1.1.0', 'recommendation', %(sim_now)s, clock_timestamp(),
-        %(recommendation_doc)s::jsonb)   -- a valid recommendation.schema.json object, status 'proposed'
-ON CONFLICT (source, event_id) DO NOTHING
-RETURNING id;
-```
+| Step | Who | Where it is recorded |
+|---|---|---|
+| 1. Every cycle the decision model (MPC) projects the corridor with and without each allowed action and keeps the top 3 whose saving per rider is at least the threshold | data | `gold.recommendation`, one row per `rec_id`, `status = 'proposed'` |
+| 2. The console lists the active ones | BE | Reads Q13 |
+| 3. The dispatcher applies or discards (with a reason when discarding) | BE | Writes a `decision` event to `bronze.events` (§4.2, §4.6) |
+| 4. Data derives the status from the facts | data | `gold.recommendation.doc.status` |
+| 5. The simulator executes an applied action and data checks it | simulator, data | `gold.instruction_status` (Q6) |
+| 6. After the horizon, data measures the effect | data | `gold.recommendation_effect` (H3) |
+| 7. The shift log joins all of the above | data | `gold.decision_log` (H2) |
 
-**What data does with it:** it publishes `gold.recommendation`, one row per `rec_id`, rebuilt each cycle. `doc` is the recommendation with **`status` derived by data from the facts**:
+**Derived status:**
 
-| Derived status | When |
+| Status | When |
 |---|---|
-| `proposed` | Received, no decision yet, `as_of_ts` ≤ `expires_ts` |
-| `applied` / `discarded` | A `decision` with that `rec_id` and `action` = `apply` / `discard` (the first one by bronze order wins) |
-| `expired` | `as_of_ts` > `expires_ts` with no decision |
+| `proposed` | Published, no decision yet, not expired |
+| `applied` / `discarded` | A `decision` with that `rec_id` and `action` = `apply` / `discard`; the first one by bronze order wins |
+| `expired` | No decision **2 minutes** after creation, or the bus has already passed the stop, whichever comes first. The same action on the same bus is not proposed again for 5 minutes |
+
+**When the situation changes:** a recommendation that is still valid at the next cycle keeps its `rec_id`, so a decision is never orphaned by a refresh. If the situation changes, the model publishes a new `rec_id` and the old one stays until it expires.
 
 The BE never writes a status. This keeps Principle IV checkable: nothing reaches `applied` without a dispatcher `decision`.
 
 ```sql
--- Q13. Active recommendations for the console (MVP-3)
+-- Q13. Active recommendations for the console (MVP-3)   [006]
 SELECT doc FROM gold.recommendation
 WHERE doc->>'status' = 'proposed'
 ORDER BY (doc->>'rank')::int;
 ```
+`doc` validates against `recommendation.schema.json`. Story 006 takes it from 1.0.0 to **1.1.0** (adds `slow_down` and `skip_stop` to `action.type`), an additive change with its ADR. Until 006 is merged, the console uses Q7.
 
-The seeds then become ordinary `recommendation` events, so the demo follows the same path as the real engine. The simulator and `hold_orders.sql` read the hold from bronze instead of from the seed file.
+### 4.6 Discard reason `[006]`
 
-### 4.6 Discard reason `[proposed]`
+MVP-3 requires a reason when the dispatcher discards, but the `decision` payload (`rec_id`, `action`, `user_id`, `ts`) has no field for it, so today the reason is lost.
 
-MVP-3 requires a reason when the dispatcher discards, but the `decision` payload (`rec_id`, `action`, `user_id`, `ts`) has no field for it. **Proposal:** add an optional `reason` (string, 1–200 characters) in the same 1.1.0 bump. It is required by the BE when `action = 'discard'`, and data copies it to `gold.decision_log.reason` (H2).
+**Decision (data owner, 2026-11-22; the BE owner confirms in the PR):**
+- Add an optional `reason` to the `decision` payload: a string of 1–200 characters. `command_event.schema.json` goes **1.0.0 → 1.1.0** (additive, with its ADR). Built in story 006.
+- The BE requires it when `action = 'discard'` and omits it on `apply`.
+- The console offers fixed choices plus free text: "Driver not available", "Unexpected traffic", "Does not apply on the road", "Other: …". The BE sends the text shown.
+- Data copies it to `gold.decision_log.reason` (H2). It is never used to compute anything.
+
+```sql
+INSERT INTO bronze.events (source, event_id, schema_version, event_type, event_ts, arrival_ts, payload)
+VALUES ('backend', %(event_id)s, '1.1.0', 'decision', %(sim_now)s, clock_timestamp(),
+        jsonb_build_object('rec_id', %(rec_id)s, 'action', 'discard',
+                           'user_id', %(user_id)s, 'ts', %(sim_now)s, 'reason', %(reason)s))
+ON CONFLICT (source, event_id) DO NOTHING
+RETURNING id;
+```
+Until 006 is merged, send `schema_version = '1.0.0'` without `reason`.
 
 ---
 
@@ -542,6 +667,14 @@ MVP-3 requires a reason when the dispatcher discards, but the `decision` payload
 - Reads never block the cycle (MVCC).
 - The simulator's hidden scenario truth is never reachable from gold.
 - A breaking change to any read object needs a new major version plus an ADR (ADR-0003 versioning rule). Additive optional fields are a minor bump.
+
+**What changed for readers with story 005** `[005]`:
+- **Congestion factor in local hour.** The SIMM file was read as local time but is UTC; it is now converted. The evening peak (17:00) factor goes 0.5011 → 0.4816 and the slowest hour is 18:00. Travel times, M1 and every downstream number change. `data/reference/SOURCES.md` records it.
+- **Terminal headway.** A bus leaving P-883 measures its headway from the leader's departure, not from the leader's waiting samples. In C1 seed 42 the false 1,240 / 1,835 / 2,440 s become 615 / 595 / 605 s.
+- **Position range guard.** A `bus_position` with `distance_along_m` outside 0–5,119.4 m (the route end from `config.ref_stops`) is rejected at ingestion with reason `value_out_of_range`. A bus that cannot be placed is `estimated` and listed in `sources_down`; the cycle keeps running.
+- **Clock guard.** One bus with a future clock no longer moves the snapshot time: `as_of_ts` ignores a bus whose newest report is more than 120 s ahead of the median of the others (with 0 buses the wall clock is used, with 1 bus its newest report).
+- **Snapshot ids change** with the rules version (now 1.5.0). Do not store snapshot ids across a deploy.
+- **Existing local databases** need `docker compose down -v` once: the new tables come from `src/data/db/init/008_data_fixes_metrics.sql`.
 
 **The BE must not:**
 - write to `silver`, `gold`, `config` or `ops`;
@@ -558,18 +691,20 @@ MVP-3 requires a reason when the dispatcher discards, but the `decision` payload
 
 | # | Item | Owner | Status |
 |---|---|---|---|
-| 1 | **Recommendation door** (§4.5): option A, a new `recommendation` command event plus `gold.recommendation` with derived status. Replaces the seed (Q7) | BE accepts; data builds | Proposed. Data effort ~4–6 h, after 004 |
+| 1 | **Recommendations** (§4.5): data produces `gold.recommendation` with derived status; the `recommendation` command event of v0.2 is withdrawn. Replaces the seed (Q7) | data | Decided 2026-11-22; built in story 006 |
 | 2 | `gold.recommendation_effect` (US-11, H3) | data | `[004]` phase 3, not built |
 | 3 | Public views `gold.v_source_status`, `v_corridor_now`, `v_decision_inputs` ("latest") + role `backend_reader` (SELECT on gold views and `config`, INSERT on `bronze.events`, LISTEN), so the BE does not depend on table layout | data | `[proposed]`, ~1–1.5 h, after 004 |
-| 4 | Story 004 merged to `main` (Q5, Q6, Q7 depend on it) | data | In progress |
+| 4 | Stories 004 (phases 1–2) and 005 merged to `main` (Q4b, Q5–Q7, Q14, Q15 depend on it) | data | PR #22, CI green, waiting for review |
 | 5 | Stop names for the console, if needed | BE/front → data | To confirm |
 | 6 | Should data consume `confirmation` (for example, `no_confirmation` → alert)? | BE + data | Turn 2 candidate |
-| 7 | **History layer** (§3B): H1 `hist_bus_state` + H4 `report_quality_band` (EWT, coverage, simple P(board ≤ t)) for the workshop; H2 `decision_log` after the door | data | Proposed. H1 + H4 ~4–5 h; all of §3B ~7–9 h |
-| 8 | **Discard reason** (§4.6): optional `reason` in `decision`, in the same 1.1.0 bump | BE + data | Proposed |
+| 7 | **History layer** (§3B): the H4 producers exist per stop and band (Q14, Q15, story 005); H1 and the H4 table itself are still proposed; H2 `decision_log` is built in story 006 | data | Partly built `[005]`; rest proposed |
+| 8 | **Discard reason** (§4.6): optional `reason` in `decision`, `command_event` 1.1.0, required by the BE on discard | data decides, BE confirms | Decided 2026-11-22; built in story 006 |
 | 9 | **"Worked" rule:** option B decided (H3). Next steps: ADR amending ADR-0003 gate decision 6; `recommendation_effect.schema.json` 1.1.0; update the 004 spec, plan and tasks of phase 3 (FR-025, SC-009, T047) and the `c1_bunching` fixture **before** phase 3 is built; seed `horizon_s = 600` | data (Kiro builds, Claude verifies) | **Decided 2026-11-21**; amendment pending |
 | 10 | **Operators:** MVP-5 shows several operators, but every bus today reports `operator = 'OP-01'`. The table will show one row unless the simulator assigns more operators | team | To confirm |
 | 11 | **Payable threshold** (90 % coverage) and the payment formula: still to be agreed with the client (MVP-5 note) | team / client | Open; stored in `config.report_settings` |
-| 12 | **Expiry window:** MVP-3 says a recommendation expires after 2 min. The engine sets `expires_ts` accordingly; the seed uses its own value | BE | To align |
+| 12 | **Expiry window:** 2 minutes or when the bus has passed the stop, whichever comes first; set by data (§4.5) | data | Decided (spec 006) |
+| 13 | **Effect rule with the stop-based EWT:** ADR-0007's "EWT before and after" is now stop-based and trailing-window, and can be not computable early in a run (`no_data`). The clamp and windows of 004 phase 3 are reviewed before it is built | data | Recorded in ADR-0007 (amendment 2026-11-22) |
+| 14 | **4-hour stress run:** cycle median ~1.55 s vs 1.5 s budget after the 005 guards; demo length ~0.1 s. Does not change any read object | data | Backlog, issue #21 |
 
 ---
 
@@ -584,3 +719,5 @@ On a throwaway database (`contract_check`) built from `src/data/db/init/001…00
 6. `gold.instruction_status` stays empty while the hold is pending, as documented.
 7. The freshness query (Q0 with `age_s`) ran on the developer's local stack, whose simulator had finished its day hours earlier. It returned `age_s = 28404` (about 7.9 h) while `as_of_ts` still read `2026-11-24 22:59:55`. Under §2.1 the BE would block every recommendation, and the `refresh` service was already `unhealthy`. This is exactly the "decide on yesterday's data" case, and it is caught.
 8. **Not verified:** Q10–Q13 and every `[proposed]` object (§3B, §4.5, §4.6). They are designs and the objects do not exist yet. They get verified when the stories that build them run.
+
+**v0.3 additions (2026-11-22).** Q4, Q4b, Q14 and Q15 are the read queries of story 005 (`specs/005-data-fixes-metrics/contracts/gold-stop-metrics.md`, Q-S1, Q-S2, Q-E1, Q-P1). They are run against an oracle from raw events by the integration tests `test_stop_ewt_gold.py` and `test_stop_boarding_gold.py` on `feature/005-data-fixes-metrics` (host suite 933 passed; CI 929 passed, 9 skipped). The reference numbers quoted here come from those tests and from the independent mock. §4.5, §4.6 and H2 stay designs until story 006.
