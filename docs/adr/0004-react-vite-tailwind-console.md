@@ -1,7 +1,7 @@
 # ADR-0004: React + Vite + Tailwind CSS as an Allowed Dispatcher Console Stack
 
-- Status: Proposed
-- Date: 2026-11-21
+- Status: Accepted
+- Date: 2026-11-21 (reaffirmed under the frontend/backend split)
 - Decided by: pending. Requires the unanimous sign-off of the Turn Owner, the Architect
   (Software / Security) and the Dispatcher Representative (Constitution, Governance, Amendments)
 - Turn: Turn 1 — Data and Minimal Loop (active)
@@ -37,20 +37,27 @@ Options considered:
 Add **React + Vite + Tailwind CSS** as a fourth allowed console stack. The existing options stay
 allowed. Conditions:
 
-1. **API-only access.** The SPA talks to the backend only through its REST/WebSocket API. It never
+1. **Frontend/backend split.** The console is a separate frontend service (React 19 + TypeScript +
+   Vite + Tailwind in `src/frontend/`) consuming a separate FastAPI backend (`src/backend/`, Pydantic
+   V2, psycopg 3 with parameterized SQL — no ORM). They ship as two of the four docker-compose
+   services (`pulsoflota-frontend`, `pulsoflota-backend`, alongside `ingestion-service` and
+   `database-redis`). The console no longer runs as part of any monolith.
+2. **API-only access.** The SPA talks to the backend only through its REST/WebSocket API. It never
    connects to PostgreSQL or Redis and never computes the service metric (P(board ≤ t), EWT,
    headway) itself.
-2. **Contract-First.** TypeScript types for API payloads are generated from the backend OpenAPI
-   document or from `contracts/read/*.schema.json`. Fixtures in `contracts/read/fixtures/` drive
-   component tests and a mock mode until each endpoint exists.
-3. **Authorization in the backend.** Hiding UI elements is not access control; every approval or
+3. **Contract-First with simulated mode.** TypeScript types for API payloads are generated from the
+   backend OpenAPI document or from the versioned `contracts/read/*.schema.json`. Fixtures in
+   `contracts/read/fixtures/` drive component tests and a **simulated (mock) mode** that lets the
+   console be built and demoed against the contract before each backend endpoint exists.
+4. **Authorization in the backend.** Hiding UI elements is not access control; every approval or
    command is authorized again by the backend.
-4. **Isolated container.** The console is built to static files and served by its own non-root
-   container (`pulsoflota-web`, UID 10001) with the mandatory security headers. No service in the
-   ingestion path depends on it.
-5. **Same gates.** ESLint in Gate 1, `npm audit` in Gate 2, Vitest coverage > 80 % for the
+5. **Isolated container.** The console is built to static files and served by its own non-root
+   container (`pulsoflota-frontend`, UID 10001) with the mandatory security headers. No service in
+   the ingestion path depends on it.
+6. **Same gates.** ESLint in Gate 1, `npm audit` in Gate 2, Vitest coverage > 80 % for the
    console code, a committed `package-lock.json` installed with `npm ci`.
-6. **Python stays the language** of the API, ingestion and data pipeline.
+7. **Python stays the backend language** of the API, ingestion and data pipeline; the frontend
+   adds TypeScript.
 
 ## Consequences
 

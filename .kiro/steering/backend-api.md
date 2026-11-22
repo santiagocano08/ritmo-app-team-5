@@ -6,12 +6,20 @@ description: When working on the PulsoFlota Python API/backend (FastAPI/Flask) -
 
 # Backend API — PulsoFlota
 
-Guidance for the control center's Python API/backend (`pulsoflota-web`): FastAPI or Flask.
+Guidance for the control center's Python API/backend (`pulsoflota-backend`
+service): FastAPI (or Flask) + Pydantic V2.
+
+> Target folder: `src/backend/`. The current Turn-1 tree is not yet reorganized
+> into it — backend code sits in `src/api/` (FastAPI app), `src/data/`
+> (ingestion, pipeline, rules, simulator) and `src/pulsoflota/` (shared
+> DB/config/models). Check `docs/turns-ritmo.md` for the active turn.
 
 ## Structure and routing
 
-- `pulsoflota-web` modular monolith (supervisory console, metric calculation,
-  interactive map). Expose REST + WebSocket endpoints.
+- The backend (`src/backend/`) is a **separate service** from the React frontend
+  (`src/frontend/`). It holds all business logic, metric calculation and
+  authorization, and exposes REST + WebSocket endpoints. The frontend consumes
+  this API and never decides access control.
 - Version the API under `/api/v1/...`.
 
 ## Access control (A01) — always in the backend
@@ -39,8 +47,9 @@ Guidance for the control center's Python API/backend (`pulsoflota-web`): FastAPI
 - Requests/responses validated with Pydantic V2; invalid ones are rejected with
   `422 Unprocessable Entity`. Schema and inter-module contract definitions live in
   `data-contracts.md`.
-- Parameterized queries (ORM / SQLAlchemy / asyncpg / Pydantic V2); SQL string
-  concatenation is forbidden.
+- Database access is **psycopg 3 with parameterized SQL only** — no ORM, no
+  SQLAlchemy, no Alembic. SQL string concatenation is forbidden (A05 injection
+  baseline). See `src/pulsoflota/db.py`.
 
 ## Errors and exceptions (A10)
 

@@ -27,10 +27,10 @@ PulsoFlota gestiona la telemetría de flota de buses en tiempo real (GPS, valida
 ## 2. Requisitos Técnicos de Seguridad (Matriz OWASP Top 10 - 2025 Adaptada)
 
 ### 2.1 Control de Acceso (A01:2025 - Broken Access Control)
-* **Requisito Técnico:** Todo endpoint de API REST o WebSocket en la aplicación Python (FastAPI/Backend) MUST autenticar la identidad del emisor y verificar explícitamente los permisos asignados mediante Control de Acceso Basado en Roles (*Role-Based Access Control* - RBAC) en la capa de middleware antes de ejecutar cualquier lógica de negocio.
+* **Requisito Técnico:** Todo endpoint de API REST o WebSocket en el backend FastAPI MUST autenticar la identidad del emisor y verificar explícitamente los permisos asignados mediante Control de Acceso Basado en Roles (*Role-Based Access Control* - RBAC) en la capa de middleware antes de ejecutar cualquier lógica de negocio.
 * **Criterios de Aceptación:**
   * **Prohibición de IDOR:** Quedan strictly prohibidas las Referencias Directas a Objetos Inseguros. Si un usuario intenta acceder o modificar un recurso de un operador distinto (ej. consultar `/api/v1/buses/{bus_id}` o alterar rutas de otra cuenca de transporte), el middleware MUST retornar un código `403 Forbidden` y registrar una alerta de seguridad.
-  * **Evaluación Centralizada en Backend:** Las autorizaciones MUST ser evaluadas exclusivamente en el servidor central en Python. El cliente web (*frontend*) no MUST tomar decisiones de acceso ni ocultar botones como único mecanismo de control.
+  * **Evaluación Centralizada en Backend:** Las autorizaciones MUST ser evaluadas exclusivamente en el backend FastAPI. El cliente web React (*frontend*, `src/frontend/`) no MUST tomar decisiones de acceso ni ocultar botones como único mecanismo de control.
   * **Aislamiento Multi-Tenant:** Los datos de telemetría de consorcios privados MUST estar aislados lógicamente, impidiendo que un operador acceda a la telemetría cruda de sus competidores.
 
 ### 2.2 Configuración de Seguridad e Infraestructura en Contenedores (A02:2025 - Security Misconfiguration)
@@ -62,7 +62,7 @@ PulsoFlota gestiona la telemetría de flota de buses en tiempo real (GPS, valida
 ### 2.5 Inyección y Validación de Esquemas IoT (A05:2025 - Injection)
 * **Requisito Técnico:** Todo flujo de datos entrante (peticiones REST, mensajes MQTT/WebSockets de telemetría IoT o parámetros de consulta) MUST ser sanitizado y validado formalmente antes de interactuar con la base de datos o el motor de reglas.
 * **Criterios de Aceptación:**
-  * **Consultas Parametrizadas:** Queda prohibida la concatenación directa de cadenas en sentencias SQL. El sistema MUST utilizar obligatoriamente un ORM parametrizado (SQLAlchemy / asyncpg / Pydantic V2).
+  * **Consultas Parametrizadas:** Queda prohibida la concatenación directa de cadenas en sentencias SQL. El sistema MUST utilizar psycopg 3 con SQL parametrizado únicamente (sin ORM, sin SQLAlchemy, sin Alembic); Pydantic V2 valida los datos en frontera.
   * **Validación Estricta de Esquemas con Pydantic:** Todo evento de ingesta de telemetría GPS o recaudo MUST ser validado contra un esquema estricto Pydantic V2 en la compuerta de ingesta. Si un paquete contiene tipos incorrectos, valores fuera de rango geográfico o campos adicionales no declarados, MUST ser rechazado en el acto con código HTTP `422 Unprocessable Entity`.
 
 ### 2.6 Diseño Seguro y Aislamiento de IA Generativa (A06:2025 - Insecure Design)
@@ -97,6 +97,7 @@ PulsoFlota gestiona la telemetría de flota de buses en tiempo real (GPS, valida
     4. Alteraciones o caídas en las fuentes de datos de ingesta.
   * **Protección de PII y Datos Sensibles:** Los registros de auditoría y los logs de aplicación no MUST incluir jamás contraseñas en texto plano, claves privadas, tokens JWT completos ni datos de identificación personal de conductores o pasajeros.
   * **Alertas en Tiempo Real:** Las anomalías de seguridad o picos de rechazo de mensajes IoT (>5% de fallos en 1 minuto) MUST disparar alertas inmediatas al equipo SRE/DevSecOps via PagerDuty/Slack.
+  * **SLO de Frescura y Presupuesto de Error:** El sistema MUST medir la frescura del dato como SLI (umbral `< 15 s`) con un SLO del `99 %` sobre una ventana de `28 días` (presupuesto de error compartido de `403 minutos`). La degradación de frescura MUST disparar alerta al equipo SRE/DevSecOps, y el agotamiento del presupuesto de error MUST congelar el despliegue de nuevas *features* hasta recuperar margen de fiabilidad (bucle Run → Change).
 
 ### 2.10 Gestión de Excepciones y Resiliencia en Tiempo Real (A10:2025 - Exceptional Conditions Handling)
 * **Requisito Técnico:** El backend en Python y la ingesta aislada MUST manejar las excepciones de manera defensiva, garantizando la continuidad de la operación y evitando la fuga de detalles de infraestructura.
@@ -117,6 +118,15 @@ En alineación con las vueltas del espiral RITMO, ningún incremento de software
 | **Compuerta 2: Integración y Supply Chain** | 4. Verificar | En integración continua (CI) | Escaneo SCA (`pip-audit`, `Trivy`) y suites de pruebas unitarias/integración. | Cobertura de pruebas $>80\%$; 0 vulnerabilidades conocidas en dependencias. | Agente de Pruebas / DevSecOps |
 | **Compuerta 3: Compuerta del Dato (DataOps)** | 4. Verificar | En tiempo de ejecución (Ingesta) | Pruebas de contrato de mensaje, validación HMAC y detección de anomalías. | Tasa de rechazo de paquetes $<0.1\%$; latencia de ingesta $\le 200\text{ ms}$. | DataOps Lead / Ingesta |
 | **Compuerta 4: Compuerta de Valor y Seguridad Operativa** | 5. Revisar | Cierre de Vuelta del Espiral | Validación *Human-in-the-Loop*, auditoría de desvíos y prueba de fallback. | Aprobación explícita del despachador; verificación de no interferencia de IA en tiempo real. | Despachador / Dueño de Vuelta |
+
+### 2.11 Orquestación CI/CD por Pipeline (Frontend y Backend)
+
+Dada la separación de frontend (`src/frontend/`, React 19 + TypeScript + Vite + Tailwind) y backend (`src/backend/`, FastAPI + Pydantic V2, con acceso a datos vía psycopg 3 y SQL parametrizado, sin ORM), las compuertas anteriores se ejecutan en dos pipelines de GitHub Actions independientes. Ambos MUST pasar antes de la fusión:
+
+* **`backend-ci`:** SAST con `Bandit`, validación de esquemas Pydantic V2, pruebas y cobertura `pytest` > 80 %, SCA con `pip-audit`/`Safety`, y escaneo de la imagen Docker con `Trivy` (bloqueo CVSS ≥ 7.0).
+* **`frontend-ci`:** SAST/lint con `ESLint`, verificación de tipos `tsc --noEmit`, pruebas `Vitest`, SCA de dependencias JS (`npm audit`/`Trivy`) y build de producción de Vite. El frontend no persiste secretos ni toma decisiones de autorización.
+
+Las compuertas **DevSecOps (SAST + SCA)** MUST bloquear la **publicación de imágenes de contenedor vulnerables** en el registro (GHCR): ninguna imagen con un hallazgo de severidad Alta/Crítica (CVSS ≥ 7.0) MUST promoverse ni publicarse. El despliegue del primer MVP es Docker + `docker-compose` (4 servicios); **Kubernetes + Helm + GitOps/Argo CD** se adopta como **evolución / objetivo futuro** de producción, no en el MVP (adopción vuelta por vuelta). Esta orquestación se detalla en ADR-0005.
 
 ---
 

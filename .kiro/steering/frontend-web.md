@@ -1,17 +1,21 @@
 ---
 inclusion: auto
 name: frontend-web
-description: When working on the dispatcher web console (Streamlit/Dash/HTML5+WebSockets or React+Vite+Tailwind) - interactive map, headway and congestion visualization, Human-in-the-Loop UI and contingency mode.
+description: When working on the dispatcher web console (React 19 + TypeScript + Vite + Tailwind) - interactive map, headway and congestion visualization, Human-in-the-Loop UI and contingency mode.
 ---
 
 # Dispatcher Web Console — PulsoFlota
 
 ## Stack
 
-- Streamlit / Dash, HTML5/Jinja2 with WebSockets, or a React + Vite + Tailwind
-  CSS single-page application (ADR-0004).
-- `pulsoflota-web` modular monolith: supervisory console, metric calculation and
-  interactive map. It belongs to the **Adaptive Lane** (see `ritmo-workflow.md`).
+- React 19 + TypeScript + Vite + Tailwind CSS single-page application (ADR-0004),
+  the `pulsoflota-frontend` service in **target folder `src/frontend/`**. It is a
+  **separate service** from the Python backend (`src/backend/`) and belongs to the
+  **Adaptive Lane** (see `ritmo-workflow.md`).
+
+> Target state: there is no frontend code yet in the Turn-1 tree. Check
+> `docs/turns-ritmo.md` for what the active turn requires (in turn 1 the console
+> shows fleet state and headway, no geographic map).
 
 ### React + Vite + Tailwind console
 

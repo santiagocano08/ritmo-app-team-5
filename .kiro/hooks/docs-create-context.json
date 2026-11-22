@@ -1,0 +1,26 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Create context on docs save",
+      "description": "Runs the create-context agent when a file under docs/ is saved.",
+      "trigger": "PostFileSave",
+      "matcher": "^docs/.*",
+      "action": {
+        "type": "agent",
+        "prompt": "A file under docs/ was changed. Run the create-context agent to regenerate/update the project context based on the current documentation."
+      },
+      "enabled": true
+    },
+    {
+      "name": "Create context on new docs file",
+      "description": "Runs the create-context agent when a new file is added under docs/.",
+      "trigger": "FileCreate",
+      "matcher": "^docs/.*",
+      "action": {
+        "type": "agent",
+        "prompt": "A new file was added under docs/. Run the create-context agent to regenerate/update the project context based on the current documentation."
+      }
+    }
+  ]
+}

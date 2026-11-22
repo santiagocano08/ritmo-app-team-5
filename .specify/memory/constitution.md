@@ -1,6 +1,48 @@
 <!--
 Sync Impact Report (temporary draft — remove before merge)
 ====================================================================
+- Proposed amendment 1.3.0 → 1.4.0 (MINOR, additive reliability norms), 2026-11-21,
+  PR `constitutional-amendment`, ADR-0005 (unified CI/CD; and ADR-0004 pinned as
+  Accepted). Adds two new, compatible normative items without touching the 5
+  NON-NEGOTIABLE principles or the 5-stage spiral: (1) a data-freshness SLO and
+  error-budget policy under *Performance and firm real time* — freshness SLI
+  < 15 s, 99 % availability over a rolling 28-day window (≈ 403 min error budget),
+  with budget exhaustion freezing new feature work until margin is recovered via
+  the Run → Change loop; (2) a low-autonomy generative-AI lane under Principle IV /
+  Security — GenAI agents operate in suggestion mode only and MUST NOT issue
+  on-road or on-board commands without explicit human-dispatcher authorization
+  (reinforces, does not redefine, Principle IV). Gate 2 references the DevSecOps
+  image publish-block to GHCR (CVSS ≥ 7.0). Deployment framing: Docker +
+  `docker-compose` is the MVP; GHCR image publishing is an intermediate target and
+  Kubernetes + Helm + GitOps/Argo CD is a future production target — all adopted
+  turn by turn per `docs/turns-ritmo.md`. NOT included (surfaced as open team
+  decisions, deliberately not applied here): whether the 10-stage E2E Run → Change
+  lifecycle redefines the 5-stage spiral (that would be MAJOR → 2.0.0 via the
+  amendment process), and turn-map reconciliation of the Turn-3 observability/SLO
+  deferral plus new GHCR and K8s turns (a Plan-stage turn-map PR, not an
+  amendment). Updated: .specify/memory/constitution.md only. Sources of truth:
+  docs/prd-ritmo.md (RNF-3.4.5/6/7), docs/omd-ritmo.md §3, docs/srd-ritmo.md §2.9/A09,
+  docs/adr/0004, docs/adr/0005, .kiro/steering/*. Templates and agents: no changes
+  required.
+- Proposed amendment 1.2.0 → 1.3.0 (MINOR, compatible stack change), 2026-11-21,
+  PR `constitutional-amendment`. Splits the dispatcher console into **separate**
+  frontend and backend services and folders under `src/` (`src/backend/`,
+  `src/frontend/`), superseding the single `pulsoflota-web` console. Backend is
+  FastAPI + Pydantic V2 holding all business logic and authorization; database
+  access is psycopg 3 with parameterized SQL only (no ORM, no SQLAlchemy, no
+  Alembic — this replaces the earlier "ORM / SQLAlchemy / asyncpg" wording in the
+  injection norm). Frontend is React 19 + TypeScript + Vite + Tailwind served as
+  static assets behind a reverse proxy, never deciding access control. The
+  `docker-compose` service list grows from three to four (`ingestion-service`,
+  `pulsoflota-backend`, `pulsoflota-frontend`, `database-redis`), and Gate 2 names
+  the two CI pipelines `backend-ci` and `frontend-ci`. Core Principles are
+  unchanged (Principle V rationale reworded from "modular monolith" to the
+  backend/frontend services). Sources of truth: AGENTS.md, docs/turns-ritmo.md
+  v0.1.3, src/pulsoflota/db.py. The psycopg/no-ORM decision is reconciled across
+  the source documents: PRD RNF-3.2.1, SRD §2.1/§2.11 and OMD §2.1 no longer name
+  SQLAlchemy or Alembic. Updated: AGENTS.md, .kiro/steering/deployment-containers.md,
+  backend-api.md, frontend-web.md, docs/turns-ritmo.md, docs/prd-ritmo.md,
+  docs/srd-ritmo.md, docs/omd-ritmo.md. Templates and agents: no changes required.
 - Proposed amendment 1.1.0 → 1.2.0 (MINOR, compatible stack change), 2026-11-21,
   PR `constitutional-amendment`, ADR-0004 (status: Proposed; pending the unanimous
   sign-off of the Turn Owner, the Architect and the Dispatcher Representative).
@@ -96,7 +138,7 @@ Sync Impact Report (temporary draft — remove before merge)
   branch.
 - NO developer or agent MAY skip the gates.
 - **Rationale:** prevents regressions in the P(board ≤ t) metric calculations
-  and keeps the modular monolith stable in production.
+  and keeps the backend and frontend services stable in production.
 
 ## Technical and Security Constraints
 
@@ -104,24 +146,29 @@ Sync Impact Report (temporary draft — remove before merge)
 > (under Governance) and `docs/turns-ritmo.md` define in which turn each one
 > becomes mandatory. The 5 Core Principles always apply.
 
-**Mandatory technology stack.**
+**Mandatory technology stack.** Frontend and backend are **separate** services
+and folders under `src/` (`src/backend/`, `src/frontend/`). The split is adopted
+turn by turn; `docs/turns-ritmo.md` records the current `src/` tree.
 
-- Language: Python 3.12+ for the API, ingestion and data pipeline. A React
-  console (next item) is written in JavaScript/TypeScript; it is the only
-  non-Python component.
-- API: FastAPI or Flask.
-- Dispatcher console: one of
-  - Streamlit / Dash;
-  - HTML5/Jinja2 with WebSockets;
-  - a React + Vite + Tailwind CSS single-page application that consumes the
-    backend only through its REST/WebSocket API (no direct database access)
-    and is served as built static files. Authorization stays in the backend.
+- Language (backend): Python 3.12+ for the API, ingestion and data pipeline. The
+  React frontend is written in TypeScript; it is the only non-Python component.
+- Backend: FastAPI (or Flask) + Pydantic V2 in `src/backend/` (REST + WebSocket
+  API, ingestion, metrics). Holds all business logic and authorization. Database
+  access MUST use psycopg 3 with parameterized SQL only — no ORM, no SQLAlchemy,
+  no Alembic (parameterized queries are the A05 injection baseline).
+- Frontend: a React + Vite + Tailwind CSS single-page application in
+  `src/frontend/` that consumes the backend only through its REST/WebSocket API
+  (no direct database access), is served as built static files behind a reverse
+  proxy (Nginx/Traefik), and MUST NEVER decide access control. Earlier console
+  options (Streamlit / Dash, HTML5/Jinja2 with WebSockets) are superseded by this
+  SPA under ADR-0004.
 - Persistence: PostgreSQL with the PostGIS extension (or SQLite for packaged
   development/testing environments).
 - Real time and cache: Redis (Pub/Sub for live telemetry events and in-memory
   state management).
-- Containers: Docker Engine and `docker-compose` with at least three services:
-  `ingestion-service`, `pulsoflota-web` and `database-redis`.
+- Containers: Docker Engine and `docker-compose` with at least four services:
+  `ingestion-service`, `pulsoflota-backend`, `pulsoflota-frontend` and
+  `database-redis`.
 
 **Performance and firm real time.**
 
@@ -133,6 +180,15 @@ Sync Impact Report (temporary draft — remove before merge)
   recommendation on the dispatcher console MUST be ≤ 10 s.
 - Automatic route recalculation after a road blockage MUST happen in ≤ 5 s.
 - The interactive map MUST refresh fleet positions with latency ≤ 2 s.
+- **Data-freshness SLO and error budget:** the system MUST track a data-freshness
+  SLI (newest ingested data no older than 15 s) and meet a 99 % availability
+  target over a rolling 28-day window, i.e. an error budget of ≈ 403 minutes per
+  window. When the budget is exhausted, new feature work MUST freeze and
+  reliability work takes priority until margin is recovered; freshness-SLI
+  breaches and budget-burn alerts enter the next turn's Plan stage as reliability
+  stories (the Run → Change loop). This norm is adopted turn by turn per
+  `docs/turns-ritmo.md`; the operational detail lives in
+  `.kiro/steering/realtime-ingestion.md`.
 
 **Security (aligned with OWASP Top 10 — 2025).** The operational detail of each
 acceptance criterion lives in `.kiro/steering/security.md`; what follows is the
@@ -162,15 +218,20 @@ governing norm.
   (or bcrypt with cost ≥ 12). Secrets MUST come from an external manager (Docker
   Secrets or HashiCorp Vault); they MUST NEVER be included in source code or in
   `.env` files in the repository.
-- **Injection and validation:** queries MUST be parameterized (ORM / SQLAlchemy
-  / asyncpg / Pydantic V2). Every ingestion event MUST be validated against a
-  strict Pydantic V2 schema; invalid packets MUST be rejected immediately with
-  `422 Unprocessable Entity`.
-- **Generative-AI isolation:** the deterministic real-time path MUST fully
-  isolate predictive AI models; no model or autonomous agent MAY have direct
-  write access to the production database or to the dispatch APIs of on-board
-  units. Every new disciplined-lane feature MUST have a documented STRIDE threat
-  model prioritized by risk.
+- **Injection and validation:** all database access MUST use psycopg 3 with
+  parameterized SQL only (no ORM, no SQLAlchemy, no Alembic); string-built SQL is
+  forbidden. Every ingestion event MUST be validated against a strict Pydantic V2
+  schema; invalid packets MUST be rejected immediately with `422 Unprocessable
+  Entity`.
+- **Generative-AI isolation and low-autonomy lane:** the deterministic real-time
+  path MUST fully isolate predictive AI models; no model or autonomous agent MAY
+  have direct write access to the production database or to the dispatch APIs of
+  on-board units. Generative-AI agents MUST operate in a low-autonomy lane in
+  suggestion mode only: they MAY propose regulation actions or route diversions
+  but MUST NOT issue any on-road or on-board command without explicit
+  human-dispatcher authorization (this reinforces Principle IV; it does not
+  redefine it). Every new disciplined-lane feature MUST have a documented STRIDE
+  threat model prioritized by risk.
 - **Authentication and sessions:** JWTs MUST be signed with `RS256`, expire in
   ≤ 15 min and travel only in `HttpOnly`, `Secure`, `SameSite=Strict` cookies.
   Administrators and basin supervisors MUST use MFA (TOTP). The system MUST lock
@@ -230,10 +291,15 @@ next stage or deployed to production without passing:
 - **Gate 1 — Contract and Static Analysis** (every PR): SAST (`Bandit`,
   `ESLint`) and Pydantic schema validation. Pass: 0 Critical/High SAST findings
   and a validated contract schema.
-- **Gate 2 — Integration and Supply Chain** (CI): SCA scan (`pip-audit`,
-  `npm audit` for the React console, `Trivy`) and unit/integration test suites.
-  The coverage threshold applies to the console code as well. Pass: coverage > 80 % and 0 known
-  dependency vulnerabilities.
+- **Gate 2 — Integration and Supply Chain** (CI): two GitHub Actions pipelines,
+  `backend-ci` (ruff, mypy, Bandit, pytest + coverage > 80 %, pip-audit, Trivy
+  image scan) and `frontend-ci` (ESLint, `tsc --noEmit`, Vitest, Vite build, JS
+  SCA); both MUST pass to merge. SCA scan (`pip-audit`, JS SCA, `Trivy`) and
+  unit/integration test suites. The coverage threshold applies to the frontend
+  code as well. Images are published to GHCR only after the scan passes; the
+  pipeline MUST block publishing any image with a High or Critical vulnerability
+  (CVSS ≥ 7.0) — see ADR-0005. Pass: coverage > 80 % and 0 known dependency
+  vulnerabilities.
 - **Gate 3 — Data Gate (DataOps)** (at ingestion runtime): message contract
   tests, HMAC validation and anomaly detection. Pass: packet rejection rate
   < 0.1 % and ingestion latency ≤ 200 ms.
@@ -281,4 +347,4 @@ next stage or deployed to production without passing:
   `.kiro/steering/*.md` files operationalize it by context. For security detail,
   see `.kiro/steering/security.md`.
 
-**Version**: 1.2.0 | **Ratified**: 2026-11-17 | **Last Amended**: 2026-11-21
+**Version**: 1.4.0 | **Ratified**: 2026-11-17 | **Last Amended**: 2026-11-21

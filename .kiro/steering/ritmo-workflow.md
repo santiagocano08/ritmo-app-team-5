@@ -41,6 +41,25 @@ description: When planning or running a RITMO spiral turn, a user story (US-XX),
   iterations driven by value hypotheses with the dispatcher; medium autonomy;
   mandatory review by the module owner.
 
+## Lane assignment by evidence
+
+- Assign a story to a lane with **executed repository evidence** (tests,
+  pipelines, reproducible results), not a subjective estimate.
+- Disciplined Lane requires a validated contract and green DataOps tests before
+  building. Adaptive Lane requires a measurable value hypothesis against
+  P(board ≤ t), validated with the dispatcher.
+
+## Low-autonomy generative-AI agents (Principle IV)
+
+- Regardless of lane, generative-AI agents run in **low autonomy**: they only
+  **propose** (text, code or regulation recommendations) and never issue direct
+  commands to on-board units without the human dispatcher's explicit
+  authorization.
+- This includes US-03 dynamic route rediversion: the AI proposes the diversion;
+  the human dispatcher authorizes it before it reaches the fleet.
+- The deterministic real-time path (≤ 10 s) never depends on a synchronous call
+  to a generative agent (Principle III). See `realtime-ingestion.md`.
+
 ## Compliance
 
 - At the close of each turn, review compliance with the 5 core principles and

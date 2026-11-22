@@ -29,6 +29,11 @@ description: When writing tests, configuring CI/CD, or checking a quality gate (
   console, which counts towards the same > 80 % threshold).
 - Pass: coverage > 80 % and 0 known dependency vulnerabilities (a CVE with
   CVSS ≥ 7.0 blocks the merge).
+- **DevSecOps publish block:** the SAST + SCA + image scan gates also block
+  publishing a vulnerable container image to the registry (GHCR). An image with
+  a High/Critical finding (CVSS ≥ 7.0) must not be promoted or published. The
+  pipeline runs two GitHub Actions workflows, `backend-ci` and `frontend-ci`
+  (both must pass to merge). See ADR-0005.
 
 ## Gate 3 — Data Gate (DataOps, ingestion runtime)
 
@@ -56,3 +61,5 @@ description: When writing tests, configuring CI/CD, or checking a quality gate (
 
 - OWASP Top 10 (2025) matrix and SAST/SCA criteria: `security.md`.
 - RITMO cycle, `feature/US-XX` branches and lanes: `ritmo-workflow.md`.
+- Unified CI/CD pipelines, GHCR publish policy and future K8s target: ADR-0005.
+- MVP `docker-compose` deployment vs GHCR/K8s evolution: `deployment-containers.md`.

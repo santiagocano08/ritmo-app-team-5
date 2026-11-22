@@ -29,21 +29,46 @@
 
 ### Principio 5: Pruebas Obligatorias y Compuertas Automatizadas (Test-First & Automated Gates) — [NON-NEGOTIABLE]
 * **Regla**: Todo Pull Request (PR) **DEBE** incluir pruebas unitarias y de integración que garanticen una cobertura superior al $80\%$, además de superar automáticamente las compuertas de contrato (DataOps) y de integración continua (CI) antes de su fusión en la rama principal. Ningún desarrollador o agente **DEBE** omitir el paso por compuertas.
-* **Justificación**: Previene regresiones en los cálculos de la métrica $P(\text{abordar} \le t)$ y asegura la estabilidad del monolito modular en producción.
+* **Justificación**: Previene regresiones en los cálculos de la métrica $P(\text{abordar} \le t)$ y asegura la estabilidad de los servicios backend y frontend separados en producción.
 
 ---
 
 ## 2. Definición de Arquitectura, Modelo de Objetos y Stack Tecnológico
 
 ### 2.1 Stack Tecnológico y Contenedores
-* **Lenguaje de Programación**: Python 3.12+
-* **Framework Web & API**: FastAPI / Flask para servicios API; Streamlit / Dash o HTML5/Jinja2 con WebSockets para la central del despachador.
-* **Base de Datos Persistente**: PostgreSQL (con extensión PostGIS para datos geoespaciales) o SQLite para entornos de desarrollo/testing empaquetados.
-* **Capa de Tiempo Real & Caching**: Redis (Pub/Sub para eventos de telemetría en vivo y gestión de estado en memoria).
-* **Contenerización**: Docker Engine y `docker-compose` con mínimo tres servicios definidos:
-  1. `ingestion-service`: Contenedor de ingesta síncrona de telemetría IoT y fuentes de tráfico mockeadas.
-  2. `pulsoflota-web`: Monolito modular con la central supervisor supervisoria, cálculo de métricas y mapa interactivo.
-  3. `database-redis`: Infraestructura de persistencia y caché de eventos.
+
+El sistema separa **frontend** y **backend** en servicios y carpetas independientes
+dentro de `src/`. El backend concentra toda la lógica de negocio, la ingesta y la
+evaluación de autorización (Principio IV y A01); el frontend es un cliente web que
+consume la API REST/WebSocket y nunca decide control de acceso por sí mismo.
+
+* **Lenguaje de Programación (backend)**: Python 3.12+
+* **Framework Web & API (backend)**: FastAPI con Pydantic V2 para servicios API REST y
+  WebSocket. El acceso a base de datos usa psycopg 3 con SQL parametrizado únicamente (sin
+  ORM, sin SQLAlchemy, sin Alembic).
+* **Frontend (central del despachador)**: React 19 + TypeScript + Vite + Tailwind CSS,
+  compilado a estáticos y servido tras el proxy inverso (Nginx/Traefik). Consume la API
+  del backend por REST/WebSocket.
+* **Base de Datos Persistente**: PostgreSQL (con extensión PostGIS para datos geoespaciales)
+  o SQLite para entornos de desarrollo/testing empaquetados.
+* **Capa de Tiempo Real & Caching**: Redis (Pub/Sub para eventos de telemetría en vivo y
+  gestión de estado en memoria).
+* **Contenerización**: Docker Engine y `docker-compose`. Estructura de repositorio:
+
+  ```
+  src/
+  ├── backend/          # FastAPI + Pydantic V2, psycopg 3 / SQL parametrizado (API, ingesta, métricas)
+  ├── frontend/         # Vite + React 19 + TypeScript + Tailwind CSS
+  └── docker-compose.yml
+  ```
+
+  Servicios mínimos definidos en `docker-compose`:
+  1. `ingestion-service`: Contenedor de ingesta síncrona de telemetría IoT y fuentes de
+     tráfico mockeadas (Python). Aislado del resto (Principio III).
+  2. `pulsoflota-backend`: API FastAPI, cálculo de métricas y lógica supervisoria.
+  3. `pulsoflota-frontend`: Build estático de React servido por Nginx (en desarrollo, el dev
+     server de Vite con proxy hacia el backend).
+  4. `database-redis`: Infraestructura de persistencia (PostgreSQL) y caché/pub-sub (Redis).
 
 ### 2.2 Modelo de Objetos de Dominio (Domain Object Model)
 
@@ -117,9 +142,28 @@
    - *Rigor*: Especificación estricta en primera instancia (Contract-First / SDD).
    - *Autonomía de Agentes*: Baja (el agente solo genera propuestas que deben ser validadas en código y compuertas).
    - *Criticidad*: Máxima. Se aplica integración continua estricta y pruebas de contrato DataOps.
-2. **Carril Adaptativo (Central Web, Visualización, Reglas de Alerta y Desvío)**:
+2. **Carril Adaptativo (Frontend React, Visualización, Reglas de Alerta y Desvío)**:
    - *Rigor*: Iteraciones guiadas por hipótesis de valor validadas con el despachador.
    - *Autonomía de Agentes*: Media (desarrollo automatizado en ramas aisladas con revisión obligatoria por el dueño del módulo).
+   - *Alcance*: El frontend React 19 + TypeScript + Vite + Tailwind vive en `src/frontend/`
+     y es el cliente de la central del despachador; consume la API del backend y no toma
+     decisiones de autorización (A01).
+
+**Carril de baja autonomía para agentes de IA Generativa**: Con independencia del carril,
+ningún agente de IA Generativa opera en modo autónomo de alta autonomía. Los agentes solo
+**proponen** (texto, código o recomendaciones de regulación) y **nunca** emiten comandos
+directos a los vehículos sin la **firma/autorización explícita del controlador humano**
+(Principio IV). Esto incluye el redireccionamiento dinámico de rutas de **US-03**: la IA
+propone el desvío y el **despachador humano lo autoriza** antes de que llegue a las unidades
+a bordo. El camino de tiempo real determinista ($\le 10\text{ s}$) nunca depende de una
+llamada síncrona a un agente generativo (Principio III).
+
+**Criterios de asignación de carril (con evidencia)**: La asignación de una historia a un
+carril (Disciplinado vs. Adaptativo) se justifica con **evidencia ejecutada del repositorio**
+(pruebas, pipelines y resultados reproducibles), no con una estimación subjetiva: el carril
+Disciplinado exige contrato validado y pruebas de DataOps verdes antes de construir; el carril
+Adaptativo exige una hipótesis de valor medible contra $P(\text{abordar} \le t)$ validada con
+el despachador.
 
 ---
 
@@ -133,10 +177,110 @@ Todas las vueltas de la espiral recorren secuencialmente cinco etapas estructura
 4. **Etapa 4 — Verificar**: Ejecución del pipeline de CI (linting, tests unitarios, cobertura $>80\%$), pruebas de contrato DataOps e inspección del revisor humano.
 5. **Etapa 5 — Revisar (Compuerta de Valor)**: Validación final de la hipótesis de valor midiendo impacto en $P(\text{abordar} \le t)$ con el despachador en el entorno de pruebas/simulación.
 
+### 3.1.1 Ciclo de Vida Extremo a Extremo (E2E) — 10 Etapas
+Las 5 etapas RITMO describen la vuelta de ingeniería; el ciclo de vida extremo a
+extremo (E2E) las enmarca en un flujo operativo de 10 etapas que integra **Agile +
+DevOps + SRE** y conecta el desarrollo (*change*) con la operación (*run*):
+
+1. **Planear** — priorización por riesgo (ASRs) y selección de la historia de la vuelta.
+2. **Especificar** — historia SDD medible y compuerta de contrato (Contract-First).
+3. **Construir** — implementación en rama aislada `feature/US-XX` con pruebas y reglas.
+4. **Verificar** — CI (`backend-ci` / `frontend-ci`), pruebas de contrato DataOps y revisión humana.
+5. **Revisar** — compuerta de valor con el despachador sobre $P(\text{abordar} \le t)$.
+6. **Empaquetar y publicar** — construcción de imágenes versionadas; las compuertas DevSecOps
+   (SAST + SCA) bloquean imágenes vulnerables antes de publicarlas en el registro de contenedores (GHCR).
+7. **Desplegar** — despliegue en el entorno objetivo (MVP: `docker-compose`; evolución: K8s/GitOps).
+8. **Operar** — operación en tiempo real firme ($\le 10\text{ s}$) con la ingesta aislada activa.
+9. **Observar** — las tres señales de observabilidad (logs, métricas, trazas) y los SLIs/SLOs con presupuesto de error.
+10. **Aprender (Run → Change)** — los incidentes de producción y las alertas de degradación de
+    frescura del dato se convierten en **historias de fiabilidad** que reingresan en la Etapa 1.
+
+**Bucle Run → Change (Agile-DevOps-SRE):** un incidente de producción o una alerta de
+degradación de frescura del dato entra en la **Etapa 1 — Planear** como una historia de
+fiabilidad, priorizada por riesgo (Principio I). Si el **presupuesto de error** del SLO
+está agotado, el desarrollo de nuevas *features* se **congela** hasta recuperar margen de
+fiabilidad (véase §3.4). El pipeline de CI/CD actúa como **Andon**: una compuerta roja
+detiene la línea y nadie avanza hasta corregir la causa raíz, bajo una cultura **Shift-Left**
+(calidad y seguridad desplazadas lo antes posible en el ciclo) y **post-mortems sin culpa**.
+
 ### 3.2 Las Tres Compuertas de Calidad Automatizadas y Humanas
 * **Compuerta 1: Compuerta de Contrato (DataOps)**: Verifica que no existan rupturas en los esquemas JSON/Pydantic y que los simuladores de datos sigan la especificación del contrato.
 * **Compuerta 2: Compuerta del Dato y CI (DevOps/SRE)**: Valida que la latencia de ingesta sea $\le 500$ ms, sin huecos temporales y con cobertura de pruebas aprobada.
 * **Compuerta 3: Compuerta de Valor y Humana (Despachador)**: Cierre formal de cada vuelta del espiral mediante la aprobación del despachador y el gestor del sistema.
+
+### 3.3 Prácticas DevOps y SRE
+
+Las compuertas de calidad definen *qué* se exige; esta sección define *cómo* se
+operan a través del ciclo de vida. Su adopción es incremental por vuelta según
+`docs/turns-ritmo.md`.
+
+* **Pipeline CI/CD (GitHub Actions)**: El repositorio usa GitHub Actions
+  (`.github/workflows/`). Hay dos pipelines por la separación frontend/backend:
+  - `backend-ci`: lint (`ruff`), tipos (`mypy`), SAST (`Bandit`), pruebas y cobertura
+    (`pytest` > 80 %), SCA (`pip-audit`), build de imagen y escaneo de imagen (`Trivy`).
+  - `frontend-ci`: lint (`ESLint`), tipos (`tsc --noEmit`), pruebas (`Vitest`), build de
+    Vite y SCA de dependencias JS (`npm audit` / `Trivy`).
+  Ambos pipelines se disparan en cada *Pull Request* y bloquean la fusión si falla
+  cualquier compuerta (Principio V). El `docker-compose` se valida en CI. Las compuertas
+  **DevSecOps** (SAST + SCA) bloquean la publicación de imágenes vulnerables en el registro
+  de contenedores (GHCR) antes de su promoción (véase ADR-0005).
+* **Entornos y despliegue**: Tres entornos lógicos — `development` (local con
+  `docker-compose`), `staging` (homologación) y `production`. `DEBUG=False` forzado en
+  staging y producción. Releases por imágenes versionadas (tag inmutable + SHA); rollback
+  por redeploy de la imagen anterior. Cambios de esquema de base de datos aplicados con
+  scripts SQL idempotentes versionados (sin Alembic), de forma controlada y con respaldo previo.
+* **Despliegue objetivo del MVP y evolución**: El **despliegue del primer MVP** es
+  **Docker + `docker-compose`** con los 4 servicios (`ingestion-service`, `pulsoflota-backend`,
+  `pulsoflota-frontend`, `database-redis`); es la meta actual/cercana. La **publicación de
+  imágenes versionadas en GHCR** por el pipeline unificado de CI/CD es un **objetivo intermedio**
+  (puede preceder a un orquestador completo y no bloquea el MVP). **Kubernetes + Helm + GitOps/Argo CD**
+  se documenta como **evolución / objetivo futuro** de producción para una vuelta posterior del
+  espiral; no se construye ni se exige en el MVP (adopción vuelta por vuelta, `docs/turns-ritmo.md`).
+* **SLIs y SLOs**: Indicadores derivados de los RNF — latencia de ingesta P99 ≤ 500 ms,
+  latencia de refresco de mapa ≤ 2 s, latencia detección→recomendación ≤ 10 s, tasa de
+  rechazo de paquetes < 0.1 % y disponibilidad de la ingesta aislada. Cada SLO tiene un
+  presupuesto de error; su agotamiento congela despliegues de features hasta recuperar
+  margen.
+* **SLO de frescura del dato y presupuesto de error compartido**: El SLI principal de
+  fiabilidad es la **frescura del dato** (*data freshness*): la antigüedad del último evento
+  de telemetría ingerido por bus activo. El umbral del SLI es **< 15 s**; una muestra con
+  antigüedad ≥ 15 s se cuenta como fallo. El **SLO es 99 %** de frescura sobre una ventana
+  móvil de **28 días**, lo que fija un **presupuesto de error de 403 minutos** (1 % × 28 días)
+  compartido por todo el equipo. Agotar este presupuesto **congela el desarrollo de nuevas
+  features** y prioriza historias de fiabilidad hasta restaurar el margen (bucle Run → Change, §3.1.1).
+* **Conjunto tripartito de indicadores**: El tablero de seguimiento combina tres familias de métricas:
+  - **Técnicos (DORA)**: frecuencia de despliegue, *lead time* de cambios, tasa de fallo de cambios
+    y tiempo de restauración del servicio (MTTR).
+  - **Operativos**: frescura del dato, tasa de rechazo de paquetes, latencia de ingesta P99 y
+    cumplimiento del tiempo real firme ($\le 10\text{ s}$).
+  - **De negocio**: $P(\text{abordar} \le t)$ y *Excess Wait Time* (EWT) leídos en percentiles
+    $P_{85}$ / $P_{95}$, que alimentan el pago por calidad a los operadores.
+* **Observabilidad (tres señales)**:
+  - **Logs**: JSON estructurado compatible con OpenTelemetry, sin PII (ver SRD A09).
+  - **Métricas**: exportadas en formato Prometheus (contadores de eventos, latencias,
+    tasa de rechazo, estado de buses), visualizadas en Grafana.
+  - **Trazas**: trazado distribuido con OpenTelemetry por el camino ingesta → cálculo →
+    recomendación, correlacionado con `correlation_id`.
+* **Alertas e incidentes**: Alertas al equipo SRE/DevSecOps (PagerDuty/Slack) ante rechazo
+  de mensajes IoT > 5 % en 1 min, **degradación de frescura del dato** (SLI < 15 s incumplido)
+  o agotamiento del presupuesto de error. Toda incidencia de severidad alta requiere *runbook*
+  y **post-mortem sin culpa** (*blameless*). Un incidente de producción o una alerta de
+  degradación de frescura genera una **historia de fiabilidad** que reingresa en la Etapa 1 — Planear
+  (bucle Run → Change, §3.1.1). El pipeline de CI/CD opera como **Andon**: una compuerta roja
+  detiene la integración hasta resolver la causa raíz.
+* **Healthchecks y resiliencia**: Cada servicio de `docker-compose` define `healthcheck`
+  (liveness/readiness) y dependencias con `depends_on: condition: service_healthy`. La
+  ingesta aislada sobrevive a la caída del frontend/backend (Principio III) y mantiene el
+  buffer persistente (A10).
+* **Respaldo y recuperación (DR)**: Respaldo periódico de PostgreSQL con objetivos
+  explícitos de RPO y RTO; restauración probada. Bronze es inmutable; silver y gold se
+  recalculan desde bronze, lo que acota el impacto de una pérdida.
+* **Linaje inmutable y antifraude de recaudo (DataOps)**: El pipeline del dato mantiene un
+  linaje inmutable que protege el pago por calidad a los operadores. Cada agregado de la capa
+  *gold* registra su `rules_version` y su origen en *bronze*, de modo que toda métrica de
+  liquidación ($P(\text{abordar} \le t)$, EWT) es reproducible y trazable a la versión de reglas
+  que la generó. Las reglas de calidad viven como código determinista y probado (nunca una
+  decisión de un LLM), lo que impide alterar retroactivamente los indicadores de pago.
 
 ---
 

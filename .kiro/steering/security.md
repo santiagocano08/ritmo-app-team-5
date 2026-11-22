@@ -55,8 +55,8 @@ criteria. These norms are adopted in the turn that `docs/turns-ritmo.md` assigns
 
 ## A05 — Injection
 
-- Parameterized queries (SQLAlchemy / asyncpg / Pydantic V2); SQL string
-  concatenation is forbidden.
+- Database access is **psycopg 3 with parameterized SQL only** — no ORM, no
+  SQLAlchemy, no Alembic. SQL string concatenation is forbidden.
 - Strict Pydantic V2 validation at ingestion: wrong types, values outside the
   geographic range or undeclared fields → `422 Unprocessable Entity`.
 
@@ -95,7 +95,9 @@ criteria. These norms are adopted in the turn that `docs/turns-ritmo.md` assigns
 - Never log plain-text passwords, private keys, full JWTs or PII of drivers or
   riders.
 - Real-time alerts to the SRE/DevSecOps team (PagerDuty/Slack) on security
-  anomalies or IoT message rejection > 5 % in 1 min.
+  anomalies, IoT message rejection > 5 % in 1 min, or data-freshness
+  degradation (freshness SLI < 15 s breached). Error-budget exhaustion freezes
+  new-feature deployments. SLO detail in `realtime-ingestion.md`.
 
 ## A10 — Exceptional Conditions Handling
 
