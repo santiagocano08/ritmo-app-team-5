@@ -58,6 +58,11 @@ Identifiers are kept exactly as defined in the OMD (`docs/omd-ritmo.md`).
 - HMAC signature on fare-collection packets, based on a secret of the on-board
   validator's secure module.
 - Record provenance, an immutable timestamp and a checksum per message.
+- Immutable lineage for anti-fraud: every gold aggregate records its
+  `rules_version` and its bronze origin, so each settlement metric
+  (P(board ≤ t), EWT) is reproducible and traceable to the rules version that
+  produced it. Quality rules are deterministic, tested code (never an LLM
+  decision), which prevents retroactively altering payment indicators.
 
 ## Headway and regularity
 

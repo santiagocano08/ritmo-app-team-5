@@ -21,6 +21,19 @@ At least four services:
    proxy. Consumes the backend API; never decides access control.
 4. **`database-redis`** — persistence and event cache/pub-sub infrastructure.
 
+## Deployment target and evolution
+
+- **MVP deployment is Docker + `docker-compose`** with the four services above;
+  this is the current target. Releases are versioned, immutable image tags
+  (semantic tag + commit SHA); rollback is a redeploy of the previous image.
+- **GHCR image publishing** by the unified CI/CD pipeline is an **intermediate
+  target**: it may precede any orchestrator and is not an MVP blocker. The
+  DevSecOps gates (SAST + SCA + image scan) block publishing any image with a
+  High/Critical finding (CVSS ≥ 7.0).
+- **Kubernetes + Helm + GitOps/Argo CD** is documented as a **future / evolution
+  production target** for a later spiral turn; it is never built or required for
+  the MVP (adopt turn by turn, `docs/turns-ritmo.md`). See ADR-0005.
+
 ## Isolation
 
 - `ingestion-service` runs in a container **fully isolated** from the
@@ -62,4 +75,5 @@ At least four services:
 ## References
 
 - OWASP Top 10 (2025) matrix: `security.md`.
-- SCA/CI gates: `testing-quality-gates.md`.
+- SCA/CI gates and GHCR publish policy: `testing-quality-gates.md`.
+- Unified CI/CD, GHCR and future K8s target: ADR-0005.

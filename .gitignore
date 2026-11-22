@@ -57,3 +57,5 @@ data/raw/
 drill-out/
 # Drill baseline evidence (feature 003) is committed even though it is a .log file
 !docs/ops/drill-baseline/*.log
+# Workflow run artifacts (reports, review verdicts); throwaway, per-run scratch
+.agents/

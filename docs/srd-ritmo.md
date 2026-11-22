@@ -97,6 +97,7 @@ PulsoFlota gestiona la telemetría de flota de buses en tiempo real (GPS, valida
     4. Alteraciones o caídas en las fuentes de datos de ingesta.
   * **Protección de PII y Datos Sensibles:** Los registros de auditoría y los logs de aplicación no MUST incluir jamás contraseñas en texto plano, claves privadas, tokens JWT completos ni datos de identificación personal de conductores o pasajeros.
   * **Alertas en Tiempo Real:** Las anomalías de seguridad o picos de rechazo de mensajes IoT (>5% de fallos en 1 minuto) MUST disparar alertas inmediatas al equipo SRE/DevSecOps via PagerDuty/Slack.
+  * **SLO de Frescura y Presupuesto de Error:** El sistema MUST medir la frescura del dato como SLI (umbral `< 15 s`) con un SLO del `99 %` sobre una ventana de `28 días` (presupuesto de error compartido de `403 minutos`). La degradación de frescura MUST disparar alerta al equipo SRE/DevSecOps, y el agotamiento del presupuesto de error MUST congelar el despliegue de nuevas *features* hasta recuperar margen de fiabilidad (bucle Run → Change).
 
 ### 2.10 Gestión de Excepciones y Resiliencia en Tiempo Real (A10:2025 - Exceptional Conditions Handling)
 * **Requisito Técnico:** El backend en Python y la ingesta aislada MUST manejar las excepciones de manera defensiva, garantizando la continuidad de la operación y evitando la fuga de detalles de infraestructura.
@@ -124,6 +125,8 @@ Dada la separación de frontend (`src/frontend/`, React 19 + TypeScript + Vite +
 
 * **`backend-ci`:** SAST con `Bandit`, validación de esquemas Pydantic V2, pruebas y cobertura `pytest` > 80 %, SCA con `pip-audit`/`Safety`, y escaneo de la imagen Docker con `Trivy` (bloqueo CVSS ≥ 7.0).
 * **`frontend-ci`:** SAST/lint con `ESLint`, verificación de tipos `tsc --noEmit`, pruebas `Vitest`, SCA de dependencias JS (`npm audit`/`Trivy`) y build de producción de Vite. El frontend no persiste secretos ni toma decisiones de autorización.
+
+Las compuertas **DevSecOps (SAST + SCA)** MUST bloquear la **publicación de imágenes de contenedor vulnerables** en el registro (GHCR): ninguna imagen con un hallazgo de severidad Alta/Crítica (CVSS ≥ 7.0) MUST promoverse ni publicarse. El despliegue del primer MVP es Docker + `docker-compose` (4 servicios); **Kubernetes + Helm + GitOps/Argo CD** se adopta como **evolución / objetivo futuro** de producción, no en el MVP (adopción vuelta por vuelta). Esta orquestación se detalla en ADR-0005.
 
 ---
 

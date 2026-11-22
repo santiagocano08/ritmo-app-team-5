@@ -45,6 +45,11 @@ Frontend and backend are **separate** services and folders under `src/`.
 - **CI/CD:** two GitHub Actions pipelines — `backend-ci` (ruff, mypy, Bandit,
   pytest + coverage > 80 %, pip-audit, Trivy image scan) and `frontend-ci`
   (ESLint, `tsc --noEmit`, Vitest, Vite build, JS SCA). Both must pass to merge.
+  DevSecOps gates (SAST + SCA + image scan) block publishing vulnerable images
+  to GHCR (ADR-0005).
+- **Deployment:** MVP is Docker + `docker-compose` (the 4 services). GHCR image
+  publishing is an intermediate target; Kubernetes + Helm + GitOps/Argo CD is a
+  future/evolution production target, never required for the MVP.
 
 These are adopted **turn by turn**: check `docs/turns-ritmo.md` for what the
 active turn requires and what is deferred.

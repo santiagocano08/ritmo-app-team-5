@@ -32,6 +32,17 @@ description: When working on the isolated ingestion service, the deterministic r
 - Interactive map refresh: ≤ 2 s.
 - Automatic route recalculation after a road blockage: ≤ 5 s.
 
+## Data-freshness SLO and error budget
+
+- The primary reliability SLI is **data freshness**: the age of the last
+  telemetry event ingested per active bus. SLI threshold: **< 15 s** (a sample
+  ≥ 15 s counts as a failure).
+- SLO: **99 %** over a rolling **28-day** window, giving a shared **403-minute**
+  error budget. Freshness degradation alerts the SRE/DevSecOps team.
+- Exhausting the error budget **freezes new-feature deployments** until
+  reliability margin is restored; the incident re-enters planning as a
+  reliability story (Run → Change loop). See `ritmo-workflow.md`.
+
 ## Classification
 
 - **Firm** real time: a late recommendation causes no catastrophic physical
