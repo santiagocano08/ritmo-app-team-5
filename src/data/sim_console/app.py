@@ -76,6 +76,7 @@ class RunConfig(BaseModel):
     demand_scale: float = Field(3.0, ge=0.1, le=10.0)
     seed: int = Field(42, ge=0, le=2**31 - 1)
     duration_s: int = Field(2700, ge=300, le=14400)
+    start_hour: int = Field(17, ge=0, le=23)  # local Medellin hour the simulated day starts at
     pace_s: float = Field(1.0, ge=0.0, le=5.0)
     holds: bool = True
     mpc: bool = True
@@ -112,6 +113,7 @@ def _start_run(cfg: RunConfig) -> None:
             "SIM_DURATION_S": str(cfg.duration_s),
             "SIM_PACE_S": str(cfg.pace_s),
             "SIM_DEMAND_SCALE": str(cfg.demand_scale),
+            "SIM_START_HOUR": str(cfg.start_hour),
             "SIM_SCENARIO_FILE": "" if cfg.scenario == "none" else f"/scn/{cfg.scenario}.json",
             "SIM_HOLDS": "on" if cfg.holds else "off",
             "MPC_ENABLED": "on" if cfg.mpc else "off",

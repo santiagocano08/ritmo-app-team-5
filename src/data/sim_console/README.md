@@ -26,7 +26,9 @@ Then press one of the **one-click demo** buttons (rehearsed parameters; each one
 | Apelotonamiento y recomendación | `c1_bunching` | B-102 delayed 400 s → gap; B-103 bunched; first recommendation after ~3 real minutes |
 | Bus varado | `c5_breakdown` | B-102 breaks down for 4 min around 17:20 simulated time |
 
-All presets: demand scale 3, seed 42, holds and decision model on; 2700 s (Demo completa: 3600 s). The console shows a **countdown to the next event** of the running scenario (real time = Δsimulated × pace / 5).
+All presets: demand scale 3, seed 42, holds and decision model on; 2700 s (Demo completa: 3600 s).
+
+**Start hour.** The *Hora de inicio simulada* selector above the buttons (default 17:00, the rehearsed evening peak) sets the local hour the simulated day starts at (`SIM_START_HOUR`, 0–23) for the buttons and for the custom run. Congestion, street demand and metro trains follow that hour; incidents keep their offsets. The rehearsed "visible" times were measured at 17:00, so at another hour the dispatcher console can show them sooner or later. 00:00–03:00 and 23:00 have no metro and no reference demand. The console shows a **countdown to the next event** of the running scenario (real time = Δsimulated × pace / 5).
 
 **What approving does.** An approved recommendation becomes `applied` through the command door. The simulator executes **holds** (story 004) and **reserve dispatches** (006 phase 3c): the reserve bus B-106 starts reporting at P-883 about 120 simulated seconds after the approval and shows in the dispatcher console once it leaves P-883 (rehearsal 2026-11-22: approved 17:17:05, first event 17:19:20, on screen 17:21:10, 51 real seconds after the click at pace 1). `adjust_departure` and `skip_stop` stay `applied` without execution; `slow_down` comes with phase 3b (#30). See `docs/data-contract.md` §4.5.
 

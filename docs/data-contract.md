@@ -13,6 +13,7 @@
     - an approved **hold** is executed and checked in `gold.instruction_status` (Q6), as before;
     - an approved **reserve dispatch** now makes the reserve bus (B-106 or B-107) enter service at P-883 120 s after the decision. It appears in `corridor_now` (Q1) once it leaves P-883, like any bus and the free reserves in `decision_inputs` go down by one. It makes one trip and stops reporting after P-900;
     - `adjust_departure`, `skip_stop` and `slow_down` are recorded as `applied` but **not executed** in turn 1 (the slow-down executor is backlog, issue #30).
+  - **v0.4.1 (2026-11-23, data owner)** the simulated start hour is a run setting: `SIM_START_HOUR` (local hour 0–23, default 17, chosen in the data simulation console). No schema change and no query change: every reader already takes time from `as_of_ts` / `event_ts`. With the default, every timestamp and example below is unchanged (§1.4, §3B).
 - **Scope:** Turn 1. Corridor C6-008, direction 1, buses B-101..B-105 in service and B-106/B-107 in reserve, stops P-883..P-900.
 - **Source of truth:** the JSON Schemas in `contracts/read/` and `contracts/turn1-events/`, plus ADR-0001, ADR-0002 and ADR-0003. This document says **how the BE reads and writes**. It adds no field to any schema. If this document and a schema disagree, the schema wins.
 
@@ -90,7 +91,7 @@ Not per snapshot:
 
 ### 1.4 Clock: simulated time, not wall time
 
-Gold time (`as_of_ts`, and every timestamp inside `doc`) is the **simulated clock**: the simulated day starts at `2026-11-24T22:00:00Z` and moves at the simulator's pace (`REFRESH_CLOCK=data`).
+Gold time (`as_of_ts`, and every timestamp inside `doc`) is the **simulated clock**: the simulated day starts at `2026-11-24T22:00:00Z` by default (17:00 local; `SIM_START_HOUR` moves it to another local hour of 2026-11-24, see v0.4.1) and moves at the simulator's pace (`REFRESH_CLOCK=data`).
 
 **Consequence for the BE:**
 - To know "now" in the system, read `as_of_ts` of the latest snapshot. Do not use `now()`.
@@ -324,7 +325,7 @@ The live objects (§3) answer "what is happening now", with one JSON document ev
 Data owns these metrics (ADR-0003: the BE never computes headways or EWT). So data keeps a **history layer** in gold: append-only facts written in the cycle transaction, plus additive aggregates per 15-minute band. The BE only filters and sums.
 
 **Design rules:**
-- **15-minute bands** of simulated **local** time (`band` 0–95), the same bands as M2. Local time is America/Bogota, a fixed UTC−5 offset (`src/data/rules/timebands.py`). The simulated day starts at 22:00Z, which is 17:00 local, the evening peak. Named bands ("evening peak", "off-peak", "whole day") are rows in `config.report_bands`, so changing them never needs a recompute.
+- **15-minute bands** of simulated **local** time (`band` 0–95), the same bands as M2. Local time is America/Bogota, a fixed UTC−5 offset (`src/data/rules/timebands.py`). The simulated day starts at 22:00Z, which is 17:00 local, the evening peak, unless the run sets another `SIM_START_HOUR` (v0.4.1); bands always follow the local hour of the data. Named bands ("evening peak", "off-peak", "whole day") are rows in `config.report_bands`, so changing them never needs a recompute.
 - **Additive counts, not ratios.** Band rows store counts and sums, and the query divides. Summing several bands or days then stays exact.
 - **Determinism.** A band row is rebuilt from bronze up to `max_bronze_id` (DELETE + INSERT for that band) and carries `rules_version`, `contract_version` and `computed_at`. Same bronze and rules give the same row.
 
