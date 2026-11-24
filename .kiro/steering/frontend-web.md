@@ -34,6 +34,23 @@ description: When working on the dispatcher web console (React 19 + TypeScript +
 - Lint: ESLint (Gate 1). Dependencies: committed `package-lock.json`,
   installed with `npm ci`; `npm audit` in Gate 2 (see `security.md` A03).
 
+## Design reference (UX/UI)
+
+- The authoritative visual reference is `docs/designs/global-desing-styles.md`:
+  design tokens (colour palette, semantic status pairs, typography — Inter +
+  Space Grotesk), spacing/border/radius scale, global components (sidebar,
+  status badge, alert banner, buttons, tables, chips, corridor diagram),
+  motion and accessibility rules. Match these tokens; do not invent new ones.
+- `docs/designs/resumen-historias.md` summarizes the UX/UI story set and its
+  mockups: `docs/designs/mockups/{escritorio,celular,historias}/UXUI-NN-*.png`.
+- **Two numbering schemes, do not conflate them:** `tickets/US-NN` are the
+  implementation stories wired to GitHub issues; `docs/designs/` uses
+  **`UXUI-NN`** for the design stories. They do not map one-to-one. A ticket may
+  cite a `UXUI-NN` mockup as its visual source (e.g. US-06 implements the
+  console whose desktop style spec lives in
+  `tickets/US-06-frontend-home/US-06-escritorio-estilos.md`, derived from
+  `UXUI-03`).
+
 ## Real-time interactive map
 
 - Up-to-date geospatial position of every active bus in the corridor.

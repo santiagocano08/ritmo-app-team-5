@@ -69,6 +69,8 @@ Build tooling (Node / Python) is already covered in `.gitignore`.
 | `src/` | Application code. Target: `src/backend/` + `src/frontend/`; current Turn-1 tree: `src/api/`, `src/data/`, `src/pulsoflota/` (backend) + `src/frontend/` (dispatcher console SPA). |
 | `docs/` | Source-of-truth documentation (OMD, PRD, SRD — in Spanish). |
 | `docs/turns-ritmo.md` | **Turn map:** which norms are mandatory in the active turn and which are deferred. |
+| `docs/designs/` | UX/UI reference: `global-desing-styles.md` (design tokens, components, a11y), `resumen-historias.md` and mockups `mockups/{escritorio,celular,historias}/UXUI-NN-*.png`. |
+| `tickets/` | Per-story tickets wired to GitHub issues, one folder `US-NN-slug/` with its `.md`. |
 | `specs/` | Generated per-feature artifacts (spec, plan, tasks, checklists). |
 | `.specify/memory/constitution.md` | **Constitution — supreme governing document.** |
 | `.kiro/steering/` | Situational guidance (loaded by context, not always). |
@@ -105,10 +107,14 @@ Build tooling (Node / Python) is already covered in `.gitignore`.
   convention; **Conventional Commits** is inferred (`type(scope): description`,
   e.g. `feat(ingestion): validate GPS schema with Pydantic V2`). If the team
   adopts another one, document it here and update the constitution.*
+- **Story numbering (two schemes, not interchangeable):** `tickets/US-NN` are
+  implementation stories tied to GitHub issues (the build sequence); `docs/designs/`
+  uses **`UXUI-NN`** for design stories. They do not map one-to-one — a ticket
+  may cite a `UXUI-NN` mockup as its visual reference.
 
 ## Governing document
 
-The **constitution** (`.specify/memory/constitution.md`, v1.3.0) is the supreme
+The **constitution** (`.specify/memory/constitution.md`, v1.4.0) is the supreme
 governing document: its 5 core principles are NON-NEGOTIABLE and prevail over
 any other practice. For situational detail, load the matching steering file
 (`.kiro/steering/*.md`).
