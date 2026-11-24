@@ -90,8 +90,8 @@ docker compose -f docker-compose.yml -f src/data/test_lab/compose.lab.yml up -d 
 ## Targets
 
 - `pfsim` (optional, listed first): the sim-console stack (`src/data/sim_console`), read through
-  its host ports (56432, 58100). Enable it with `PFSIM_DSN` in `.env`:
-  `PFSIM_DSN=postgresql://<user>:<password>@host.docker.internal:56432/<db>`.
+  its host ports (55432, 58100). Enable it with `PFSIM_DSN` in `.env`:
+  `PFSIM_DSN=postgresql://<user>:<password>@host.docker.internal:55432/<db>`.
 - `principal`: the default stack, read through the compose network (`db:5432`, `api:8000`).
 
 To see the loop move, start a run in the sim console (`Demo completa`) and approve a

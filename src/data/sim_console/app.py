@@ -8,14 +8,15 @@ contract (§4.1–§4.2): a `decision` event INSERTed into `bronze.events`, vali
 `contracts/read/command_event.schema.json`.
 
 Safety rules:
-- binds to 127.0.0.1 only; never expose it on a network interface;
+- binds to 127.0.0.1 by default; `SIM_CONSOLE_HOST=0.0.0.0` is an explicit opt-in to expose the
+  harness to the LAN (only on a trusted network: approve/discard has no authentication);
 - runs only fixed `docker compose` argument lists on project `pfsim` (no shell, no free text);
 - every run parameter is validated against an allow-list or a numeric range;
 - never touches the default stack or its `db_data` volume.
 
 Run from the repository root:
     cp src/data/sim_console/.pfsim.env.example src/data/sim_console/.pfsim.env   # once
-    uv run --frozen python -m src.data.sim_console.app   # then open http://127.0.0.1:8090
+    uv run --frozen --extra dev python -m src.data.sim_console.app   # then open http://127.0.0.1:8090
 """
 from __future__ import annotations
 
@@ -36,7 +37,7 @@ from fastapi.responses import FileResponse, RedirectResponse, Response
 from psycopg.rows import dict_row
 from pydantic import BaseModel, Field
 
-from src.data.sim_console import outcomes, report
+from src.data.sim_console import db_config, outcomes, report
 
 ROOT = Path(__file__).resolve().parents[3]
 HERE = Path(__file__).resolve().parent
@@ -48,8 +49,6 @@ COMMAND_SCHEMA = ROOT / "contracts/read/command_event.schema.json"
 PROJECT = "pfsim"
 COMPOSE = ["docker", "compose", "-p", PROJECT, "--env-file", str(ENV_FILE),
            "-f", str(ROOT / "docker-compose.yml"), "-f", str(HERE / "compose.sim.yml")]
-HOST = "127.0.0.1"
-PORT = int(os.environ.get("SIM_CONSOLE_PORT", "8090"))
 USER_ID = "sim-console"
 
 
@@ -67,8 +66,16 @@ def _read_env() -> dict[str, str]:
 
 
 ENV = _read_env()
-DSN = (f"postgresql://{ENV['POSTGRES_USER']}:{ENV['POSTGRES_PASSWORD']}@127.0.0.1:"
-       f"{ENV.get('POSTGRES_PORT', '56432')}/{ENV['POSTGRES_DB']}")
+
+# The containers use DATABASE_URL with host `db` (compose network). This process runs on the host,
+# so resolve a host-reachable DSN from the same .pfsim.env credentials (see db_config.py).
+DSN = db_config.dsn_for("pfsim")
+LAST_DB_ERROR: str | None = None
+
+# Bind address of this harness. Shell env wins over .pfsim.env so the launcher .bat can opt in
+# to LAN access without editing the env file. Default stays local-only.
+HOST = os.environ.get("SIM_CONSOLE_HOST", ENV.get("SIM_CONSOLE_HOST", "127.0.0.1"))
+PORT = int(os.environ.get("SIM_CONSOLE_PORT", ENV.get("SIM_CONSOLE_PORT", "8090")))
 
 
 def scenarios() -> list[str]:
@@ -187,8 +194,10 @@ def _connect() -> psycopg.Connection:
 
 
 def _db_status() -> dict[str, Any] | None:
+    global LAST_DB_ERROR
     try:
         with _connect() as conn:
+            LAST_DB_ERROR = None
             snap = conn.execute(Q_SNAPSHOT).fetchone()
             out: dict[str, Any] = {
                 "bronze_events": conn.execute("SELECT count(*) AS n FROM bronze.events").fetchone()["n"],
@@ -204,7 +213,8 @@ def _db_status() -> dict[str, Any] | None:
                     "SELECT n_headways, mean_wait_s, scheduled_wait_s, ewt_s, computable "
                     "FROM gold.service_metric WHERE snapshot_id = %(sid)s", sid).fetchone()
             return out
-    except psycopg.Error:
+    except psycopg.Error as exc:
+        LAST_DB_ERROR = str(exc).strip()
         return None
 
 
@@ -335,8 +345,16 @@ def status(window_min: int = 15) -> dict[str, Any]:
         ARCHIVED.add(rep["run_key"])
     if rep:
         rep.pop("decisions")
-    return {"run": STATE, "services": services, "db": _db_status(), "report": rep,
-            "now": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+    return {"run": STATE, "services": services, "db": _db_status(), "db_error": LAST_DB_ERROR,
+            "report": rep, "now": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+
+
+@app.get("/api/db-check")
+def db_check() -> dict[str, Any]:
+    """Diagnostic for the host-side DB connection (password masked)."""
+    ok, error = db_config.probe(DSN)
+    return {"dsn": db_config.mask_dsn(DSN), "port_open": db_config.port_open(DSN),
+            "ok": ok, "error": error or LAST_DB_ERROR}
 
 
 @app.post("/api/archive")
@@ -454,4 +472,8 @@ def decision(d: Decision) -> dict[str, Any]:
 if __name__ == "__main__":
     import uvicorn
 
+    ok, error = db_config.probe(DSN)
+    print(f"db: {db_config.mask_dsn(DSN)} port_open={db_config.port_open(DSN)} ok={ok}", flush=True)
+    if not ok:
+        print(f"db error: {error}", flush=True)
     uvicorn.run(app, host=HOST, port=PORT, log_level="warning")

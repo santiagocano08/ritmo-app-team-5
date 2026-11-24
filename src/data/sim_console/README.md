@@ -23,8 +23,14 @@ and only needed to look at the principal stack.
 
 ```bash
 cp src/data/sim_console/.pfsim.env.example src/data/sim_console/.pfsim.env   # once; set POSTGRES_PASSWORD
-uv run --frozen python -m src.data.sim_console.app                           # http://127.0.0.1:8090
+uv run --frozen --extra dev python -m src.data.sim_console.app               # http://127.0.0.1:8090
 ```
+
+On Windows, double-click `start-sim-console.bat` (root of the repo) instead: it checks `.pfsim.env`,
+binds to `0.0.0.0:8090` so other machines on the LAN can open `http://<your-ip>:8090`, and prints the
+detected IP plus the firewall command. `start-sim-console.bat --local` keeps the default `127.0.0.1`
+bind. The bind can also be set in `.pfsim.env` (`SIM_CONSOLE_HOST` / `SIM_CONSOLE_PORT`); a shell
+variable wins over the file. Stop any console already listening on 8090 before starting another one.
 
 Then press one of the **one-click demo** buttons (rehearsed parameters; each one resets `pfsim` and starts a new run, because scenarios are loaded at start so a seed always replays the same stream) or open
 *Parámetros avanzados* for a custom run. The UI text is in Spanish, like the dispatcher console.
@@ -58,14 +64,50 @@ the stop, or **run ended**: the simulated clock stops with the simulator, so a p
 in the report at the last simulated time). The decision buttons refuse a recommendation whose `expires_ts` is past
 in simulated time or whose run is over. The data flow viewer (8085, *Decisiones* tab) shows the same report.
 
+## Database connection (from Python on the host)
+
+The Docker services read `DATABASE_URL` from `.env` / `.pfsim.env` **at runtime** (compose
+substitution); the image does not bake any credential. Inside compose that URL uses host `db`,
+which only resolves on the compose network. A host-side Python process must use `127.0.0.1` and
+the **published** port, so this console resolves its DSN with `src/data/sim_console/db_config.py`:
+
+| Target | Env file | Host DSN | Published port |
+|---|---|---|---|
+| `pfsim` (console default) | `src/data/sim_console/.pfsim.env` | `postgresql://…@127.0.0.1:55432/pulsoflota` | 55432 |
+| `main` | `.env` (repo root) | `postgresql://…@127.0.0.1:5432/pulsoflota` | 5432 |
+
+`dsn_for(target)` takes `POSTGRES_USER/PASSWORD/DB` from that file and the port from
+`POSTGRES_PORT`; an explicit `SIM_CONSOLE_DSN_PFSIM` / `SIM_CONSOLE_DSN_MAIN` (shell or env file)
+wins. `mask_dsn()` hides the password for logs. `GET /api/db-check` returns the masked DSN,
+whether the port is open and a real `SELECT 1`; `/api/status` now includes `db_error` instead of
+silently swallowing the failure.
+
+**Diagnose from the host:**
+
+```bash
+uv run --frozen --extra dev python -m src.data.sim_console.check_db   # or double-click check-db.bat
+```
+
+If `pfsim` shows `port: CLOSED`, either no demo has been started yet (a demo is what creates the
+pfsim database) or Docker could not publish the port. On Windows, `56432` used to fall inside an
+excluded port range (Hyper-V/WSL) and Docker failed with *"An attempt was made to access a socket
+in a way forbidden by its access permissions"* — the default is now `55432`. Check with:
+
+```powershell
+netsh interface ipv4 show excludedportrange protocol=tcp
+```
+
+If the port is open but the `SELECT` fails, the password in `.pfsim.env` no longer matches the one
+the container was created with (pfsim does `down -v` on every run, so re-running a demo rebuilds it).
+
 ## Ports (`pfsim` never touches the default stack or its `db_data` volume)
 
 | Service | Host port |
 |---|---|
 | Dispatcher console (`frontend`) | 58080 |
 | API | 58100 (listens on 8000 inside the network: the frontend's Nginx proxies to `api:8000`) |
-| PostgreSQL | 56432 |
-| This console | 8090 (`SIM_CONSOLE_PORT` to change) |
+| PostgreSQL | 55432 (`POSTGRES_PORT` in `.pfsim.env`) |
+| This console | 8090 (`SIM_CONSOLE_PORT` to change; `SIM_CONSOLE_HOST=0.0.0.0` to expose it to the LAN) |
 
 ## Data contract
 
@@ -76,7 +118,9 @@ on the isolated `pfsim` database.
 
 ## Safety
 
-- Binds to `127.0.0.1` only.
+- Binds to `127.0.0.1` by default. `SIM_CONSOLE_HOST=0.0.0.0` (set by `start-sim-console.bat`)
+  is an explicit opt-in to LAN access; **approve/discard has no authentication**, so only do it on a
+  trusted network (or behind a VPN) and open TCP 8090 in the firewall only for that network.
 - Runs fixed `docker compose` argument lists on project `pfsim` (no shell, no free text).
 - Every run parameter is validated against an allow-list or a numeric range.
 - `IMAGE_TAG=pfsim` in `.pfsim.env`: the compose images are named `pulsoflota/<service>:${IMAGE_TAG}`, so a pfsim build never replaces the default stack images (`:dev`).

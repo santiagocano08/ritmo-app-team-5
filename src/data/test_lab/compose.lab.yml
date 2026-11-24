@@ -5,9 +5,9 @@
 #   open http://localhost:8085
 #
 # The lab reads the default stack through the compose network (db:5432, api:8000). The optional
-# `pfsim` target reads the sim-console stack through the host ports it publishes (56432, 58100);
+# `pfsim` target reads the sim-console stack through the host ports it publishes (55432, 58100);
 # set PFSIM_DSN in .env to enable it, e.g.
-#   PFSIM_DSN=postgresql://pulsoflota:<password>@host.docker.internal:56432/pulsoflota
+#   PFSIM_DSN=postgresql://pulsoflota:<password>@host.docker.internal:55432/pulsoflota
 services:
   test-lab:
     build:

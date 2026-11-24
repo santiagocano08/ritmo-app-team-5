@@ -62,4 +62,6 @@ drill-out/
 
 # Data simulation console (src/data/sim_console): local secrets and run history
 src/data/sim_console/.pfsim.env
+# Host-side scripts sometimes keep a copy at the repo root; it holds the same secrets
+/.pfsim.env
 src/data/sim_console/runs/
