@@ -1,0 +1,68 @@
+# Deploy — PulsoFlota (opción básica: SSH a una VM con Docker)
+#
+# Supuestos (ajústalos a tu infra real):
+#   - Hay una VM Linux (p. ej. Ubuntu) accesible por SSH con Docker + el plugin
+#     `docker compose` instalados.
+#   - El repositorio ya está clonado en la VM en DEPLOY_PATH y esa copia puede
+#     hacer `git pull` del remoto (deploy key o repo público).
+#   - El archivo .env de producción YA existe en DEPLOY_PATH en la VM (NO se
+#     versiona ni se copia desde aquí: contiene secretos — A04).
+#   - El stack se construye en la propia VM (`docker compose up -d --build`),
+#     porque el compose actual hace build local y todavía no publica a GHCR.
+#
+# Secrets requeridos en el repositorio (Settings → Secrets and variables → Actions):
+#   SSH_HOST         IP o dominio de la VM
+#   SSH_USER         usuario SSH (p. ej. deploy)
+#   SSH_PRIVATE_KEY  clave privada SSH (el .pub correspondiente va en la VM)
+#   SSH_PORT         (opcional) puerto SSH; por defecto 22
+#
+# Variable requerida (Settings → Variables → Actions), o edita el default:
+#   DEPLOY_PATH      ruta del repo clonado en la VM (p. ej. /opt/pulsoflota)
+
+name: Deploy
+
+on:
+  # Despliegue manual desde la pestaña Actions (opción más segura para empezar).
+  workflow_dispatch:
+  # Para desplegar en cada push a main, descomenta:
+  # push:
+  #   branches: [main]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - name: Configure SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${SSH_PORT:-22}" -H "$SSH_HOST" >> ~/.ssh/known_hosts
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+
+      - name: Pull latest code and redeploy on the VM
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" \
+            "set -euo pipefail && \
+             cd '$DEPLOY_PATH' && \
+             git fetch --all --prune && \
+             git reset --hard origin/main && \
+             docker compose pull --ignore-buildable && \
+             docker compose up -d --build --remove-orphans && \
+             docker image prune -f"
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/pulsoflota' }}
