@@ -19,6 +19,10 @@ Congestion, street demand and metro trains follow that hour; event timestamps mo
 
 `--pace` only throttles output in wall-clock seconds per 5 s sim step so a
 long-running container produces a steady stream; it never changes the bytes.
+
+`SIM_WARMUP_S` (demo setting, default 0) emits the first N simulated seconds without the pace, so a paced demo starts
+with the corridor already full of buses and with history for the metrics and the decision model. Like the pace it
+never changes the bytes, only when they are written.
 """
 from __future__ import annotations
 
@@ -62,6 +66,20 @@ def get_demand_scale() -> float:
 START_HOUR_DEFAULT = 17
 
 
+def get_warmup_s() -> int:
+    """SIM_WARMUP_S: unset or empty is 0; an integer from 0 to 14400 simulated seconds; anything else is an error."""
+    raw = os.environ.get("SIM_WARMUP_S")
+    if raw is None or raw.strip() == "":
+        return 0
+    try:
+        value = int(raw)
+    except ValueError:
+        raise RuntimeError(f"SIM_WARMUP_S must be an integer, got: {raw!r}") from None
+    if not 0 <= value <= 14400:
+        raise RuntimeError(f"SIM_WARMUP_S must be between 0 and 14400, got: {raw!r}")
+    return value
+
+
 def get_start_hour(raw: str | None = None) -> int:
     """SIM_START_HOUR (or `raw` from the CLI): unset or empty is 17; an integer from 0 to 23; anything else is an error."""
     raw = os.environ.get("SIM_START_HOUR") if raw is None else raw
@@ -103,6 +121,11 @@ def main(argv: list[str] | None = None, out: TextIO | None = None) -> None:
         print(f"start hour rejected: {exc}", file=sys.stderr)
         raise SystemExit(2) from None
     try:
+        warmup_s = get_warmup_s()
+    except RuntimeError as exc:
+        print(f"warm-up rejected: {exc}", file=sys.stderr)
+        raise SystemExit(2) from None
+    try:
         scenarios = load_scenarios(args.scenario_file or get_sim_scenario_file())
     except ScenarioConfigError as exc:
         print(f"scenario file rejected: {exc}", file=sys.stderr)
@@ -130,9 +153,11 @@ def main(argv: list[str] | None = None, out: TextIO | None = None) -> None:
                              demand_scale=demand_scale, actions=actions) \
         if scenarios or board else run(args.seed, args.duration, start_hour=start_hour, demand_scale=demand_scale)
     last_ts = None
+    # Simulated second from which the pace applies (the warm-up before it is written as fast as possible).
+    paced_from = (sim_start(start_hour) + timedelta(seconds=warmup_s)).strftime("%Y-%m-%dT%H:%M:%SZ")
     try:
         for event in events:
-            if args.pace > 0 and last_ts is not None and event["event_ts"] != last_ts:
+            if args.pace > 0 and last_ts is not None and event["event_ts"] != last_ts and event["event_ts"] > paced_from:
                 out.flush()
                 time.sleep(args.pace / STEP_S * _delta(last_ts, event["event_ts"]))
             last_ts = event["event_ts"]
