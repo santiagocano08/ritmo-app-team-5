@@ -88,7 +88,25 @@ steps:
       commit or push. Reviewer-owned requirements-quality checklists (generated
       by the validate-plan step) are NOT implementation state: if one has
       unchecked items, do not stop to ask about it and do not treat it as a
-      gate; proceed with implementation. When done, send a message with
+      gate; proceed with implementation.
+      SCOPED TESTING (performance): while iterating, run ONLY the tests for the
+      area you changed plus the critical zones that depend on it — not the whole
+      tree. If nothing under src/data/ changed, do NOT run the src/data/ tests
+      (they are slow and need the git-ignored data/raw/); for a backend change
+      run pytest src/api/tests (add src/pulsoflota tests if shared code changed).
+      Run pytest, ruff and mypy from the project .venv directly
+      (.venv/bin/python -m pytest, .venv/bin/ruff, .venv/bin/mypy) — do NOT use
+      uvx or `uv run` for already-installed tools, they pay a cold-start /
+      environment-revalidation cost on every call. While iterating, use the fast
+      scoped targets `make test-backend` and `make test-cov` (the latter uses
+      `-m "not data"`). For the FINAL coverage gate, run the whole suite ONCE in
+      the foreground (`make test`): the >80% gate is measured over all of src and
+      most of src/pulsoflota is exercised by the src/data suite, so excluding
+      src/data makes the global gate fail (~56%) — `-m "not data"` is an
+      ITERATION tool, NOT the final gate. Do NOT run the suite twice and do NOT
+      poll a background run with `sleep` or `while kill -0` loops (that polling,
+      not the single data run, was the main waste in US-08). See
+      .kiro/steering/testing-quality-gates.md. When done, send a message with
       severity=warning reporting what was implemented: files changed (list their
       paths), tasks completed vs pending, and the test/coverage, lint and gate
       status. Ask the user to approve before the final review. Do not advance on
@@ -104,6 +122,20 @@ steps:
       tasks, and repeat automatically until the review passes or no further
       progress is possible. Do NOT ask for approval between iterations. Then run
       the full validation suite: tests + coverage, lint, format, and validation.
+      SCOPED TESTING (performance): while iterating on convergence tasks, run
+      ONLY the tests for the changed area plus the critical zones that depend on
+      it; if nothing under src/data/ changed, do NOT run the src/data/ tests.
+      Run pytest, ruff and mypy from the project .venv directly
+      (.venv/bin/python -m pytest, .venv/bin/ruff, .venv/bin/mypy) — do NOT use
+      uvx or `uv run` for already-installed tools. While iterating on
+      convergence tasks, use the fast scoped targets `make test-backend` /
+      `make test-cov`. For the FINAL coverage gate, run the whole suite ONCE in
+      the foreground (`make test`): the >80% gate is measured over all of src,
+      so excluding src/data makes the global gate fail (~56%) — `-m "not data"`
+      is an ITERATION tool, NOT the final gate. Do NOT run the suite twice and do
+      NOT poll a background run with `sleep` or `while kill -0` loops (that
+      polling, not the single data run, was the main waste). See
+      .kiro/steering/testing-quality-gates.md.
       When the loop is finished, send ONE message with severity=warning
       containing the final review report. Start the message with the report
       artifact path on its own line, exactly: "Review findings: <absolute path to

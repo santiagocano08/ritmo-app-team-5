@@ -1,4 +1,4 @@
-.PHONY: generate generate-read reference up down test lint clean \
+.PHONY: generate generate-read reference up down test test-backend test-cov lint clean \
         up-db up-ingestion up-refresh up-api up-frontend \
         stop-db stop-ingestion stop-refresh stop-api stop-frontend
 
@@ -58,10 +58,17 @@ down:
 # Run all tests with coverage (must be > 80 %)
 test:
 	uv run pytest $(PYTEST_ARGS)
+# Fast backend-only tests (no src/data ETL, no DB, no global coverage gate) — used while iterating.
+test-backend:
+	.venv/bin/python -m pytest src/api/tests -q -p no:cacheprovider --no-cov
+# Coverage gate excluding the slow src/data suite (use when src/data/ is untouched).
+test-cov:
+	.venv/bin/python -m pytest --cov=src --cov-fail-under=80 -m "not slow and not live and not data"
 
 # Lint (placeholder — SAST/SCA deferred to turn 2)
 lint:
-	@echo "Linting deferred to turn 2 (SAST/SCA not in turn-1 scope)"
+	.venv/bin/ruff check src
+	.venv/bin/mypy --ignore-missing-imports src
 
 # Remove generated and cached artifacts
 clean:
