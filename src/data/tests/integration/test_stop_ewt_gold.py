@@ -77,7 +77,7 @@ def _metric(conn, snapshot_id) -> tuple:
 def _ewt(n: int, sum_h, sum_h2) -> float | None:
     if n == 0 or sum_h <= 0:
         return None
-    return float(ewt_from_sums(n, Decimal(sum_h), Decimal(sum_h2), 600)[2])
+    return float(ewt_from_sums(n, Decimal(sum_h), Decimal(sum_h2), oracle.PLANNED_S)[2])
 
 
 def _sum_stops(rows: dict[str, tuple], stops) -> tuple[int, Decimal, Decimal]:
@@ -104,33 +104,34 @@ def test_live_rows_equal_the_oracle_and_the_plan(gold_conn, load, hold) -> None:
         assert (n, sh, sh2, sp, sp2, excl) == (w["n"], w["sum_h"], w["sum_h2"], w["sum_p"], w["sum_p2"], w["n_excluded"])
         assert computable is (w["n"] >= 1)
 
-    # (a) all 18 stops: 33 headways +17.6 s without the hold, 35 headways +2.8 s with it
+    # Figures re-pinned for the 7 + 4 fleet at 420 s and the retimed c1_bunching (issue #42); the pipeline still equals
+    # the independent oracle above. (a) all 18 stops: 42 headways +9.6 s without the hold, 43 headways -4.0 s with it
     n, mean, sched, ewt, ok = _metric(gold_conn, result.snapshot_id)
-    assert (n, ok) == ((35, True) if hold else (33, True))
-    assert float(ewt) == pytest.approx(2.8 if hold else 17.6, abs=0.05)
+    assert (n, ok) == ((43, True) if hold else (42, True))
+    assert float(ewt) == pytest.approx(-4.01 if hold else 9.58, abs=0.05)
     assert float(mean) - float(sched) == pytest.approx(float(ewt), abs=0.002)
     assert float(ewt) == pytest.approx(oracle.ewt(oracle.window(events, T0 + LIVE_AT - 900, T0 + LIVE_AT)), abs=0.0006)
 
-    # (b) P-888..P-900 from the per-stop rows: 25 headways +21.0 s / 27 headways +1.8 s
+    # (b) P-888..P-900 from the per-stop rows: 31 headways +11.0 s / 32 headways -7.8 s
     n13, sh13, sh213 = _sum_stops(rows, oracle.CORRIDOR_STOPS)
-    assert n13 == (27 if hold else 25)
-    assert _ewt(n13, sh13, sh213) == pytest.approx(1.8 if hold else 21.0, abs=0.05)
+    assert n13 == (32 if hold else 31)
+    assert _ewt(n13, sh13, sh213) == pytest.approx(-7.78 if hold else 11.03, abs=0.05)
 
     # (c) the 16-minute oracle window (22:28:55, 22:44:55]Z through the pure rule on silver.stop_visits
     deps = [d for d in _silver_departures(gold_conn) if d.stop_id in oracle.CORRIDOR_STOPS]
     lo = datetime(2026, 11, 24, 22, 28, 55, tzinfo=timezone.utc)
     hi = datetime(2026, 11, 24, 22, 44, 55, tzinfo=timezone.utc)
     s = window_sums(deps, lo, hi)
-    assert s.n == (28 if hold else 27)
-    assert float(ewt_from_sums(s.n, s.sum_h, s.sum_h2, 600)[2]) == pytest.approx(10.6 if hold else 25.8, abs=0.1)
+    assert s.n == (33 if hold else 32)
+    assert float(ewt_from_sums(s.n, s.sum_h, s.sum_h2, oracle.PLANNED_S)[2]) == pytest.approx(-9.51 if hold else 9.65, abs=0.1)
 
 
 def test_the_hold_lowers_the_oracle_window_ewt(gold_conn, load) -> None:
-    """Saving of 15.2 s on the 16-minute window (data owner's mock)."""
+    """Saving of 19.2 s on the 16-minute window (15.2 s in the data owner's mock with the 5 + 2 fleet at 600 s)."""
     events = load(True)
     held = oracle.window(events, T0 + 28 * 60 + 55, T0 + 44 * 60 + 55, oracle.CORRIDOR_STOPS)
-    assert held["n"] == 28 and oracle.ewt(held) == pytest.approx(10.6, abs=0.05)
-    assert 25.8 - oracle.ewt(held) == pytest.approx(15.2, abs=0.1)
+    assert held["n"] == 33 and oracle.ewt(held) == pytest.approx(-9.51, abs=0.05)
+    assert 9.65 - oracle.ewt(held) == pytest.approx(19.2, abs=0.1)
 
 
 # -- (d) closed bands ------------------------------------------------------------------------------------------
@@ -159,11 +160,11 @@ def test_band_rows_equal_the_oracle_grouped_by_band(gold_conn, load, hold) -> No
     corridor = set(oracle.CORRIDOR_STOPS)
     assert band_sum(68, corridor) == (0, 0, 0)   # no closing departure on these stops in band 68
     b69, b70 = band_sum(69, corridor), band_sum(70, corridor)
-    assert (b69[0], b70[0]) == ((5, 27) if hold else (6, 25))
+    assert (b69[0], b70[0]) == ((14, 32) if hold else (15, 31))
     assert (b69[0] + b70[0], b69[1] + b70[1], b69[2] + b70[2]) == (
-        (32, 18165, 12361525) if hold else (31, 16950, 12010450))
+        (46, 17530, 7936250) if hold else (46, 17520, 8405450))
     if not hold:
-        assert b69[1:] == (4770, 4190600) and b70[1:] == (12180, 7819850)
+        assert b69[1:] == (5640, 3153800) and b70[1:] == (11880, 5251650)
     # lineage on every band row
     lineage = gold_conn.execute("SELECT DISTINCT rules_version, max_bronze_id FROM gold.stop_ewt_band").fetchall()
     assert lineage == [(RULES_VERSION, result.max_bronze_id)]
@@ -180,19 +181,19 @@ def test_only_closed_bands_have_rows(gold_conn, load) -> None:
 # -- (e) bunching no longer reads "better than planned" --------------------------------------------------------
 def test_bunched_snapshot_has_positive_stop_ewt(gold_conn, load) -> None:
     load(False)
-    result = cycle(gold_conn, 1800)  # 22:30:00Z, B-103 210 s behind B-102
+    result = cycle(gold_conn, 1800)  # 22:30:00Z, B-103 100 s behind B-102 (7 + 4 fleet at 420 s, issue #42)
     n, _, _, ewt, ok = _metric(gold_conn, result.snapshot_id)
-    assert (n, ok) == (15, True) and float(ewt) == pytest.approx(116.6, abs=0.05)
+    assert (n, ok) == (28, True) and float(ewt) == pytest.approx(56.6, abs=0.05)
 
     seen = 0
-    for t in range(1340, 2100, 20):  # B-103 stays bunched (204 to 230 s behind B-102) for this whole stretch
+    for t in range(960, 2140, 20):  # B-103 stays bunched (72 to 135 s behind B-102) for this whole stretch
         r = cycle(gold_conn, t)
         buses = {b["bus_id"]: b for b in docs(gold_conn, r.snapshot_id)["corridor_now"]["buses"]}
         if buses["B-103"]["bus_state"] == "bunched":
             seen += 1
             n, _, _, ewt, ok = _metric(gold_conn, r.snapshot_id)
             assert ok and float(ewt) > 0, t   # the spatial rule gave -202 s with B-103 195 s behind
-    assert seen >= 30
+    assert seen >= 55
 
 
 # -- (f) a bus with no departure in the window does not move the value ------------------------------------------
@@ -201,7 +202,7 @@ def test_a_bus_without_departures_changes_nothing(gold_conn, load) -> None:
     first = cycle(gold_conn, LIVE_AT)
     before = _metric(gold_conn, first.snapshot_id)
     b = bb.Builder("extra-bus")
-    b.drive("B-106", 2600, LIVE_AT)  # a reserve bus reporting positions only
+    b.drive("B-108", 2600, LIVE_AT)  # a reserve bus reporting positions only
     assert all(r.accepted for r in bb.ingest_all(gold_conn, b.events))
     second = cycle(gold_conn, LIVE_AT)
     assert second.snapshot_id != first.snapshot_id
@@ -267,7 +268,7 @@ def test_estimated_departure_excludes_both_headways_and_counts_them(gold_conn) -
     live = cycle(gold_conn, 1400)   # window (500, 1400]: closings 700 (touches B-102) and 1,300
     flags = dict(gold_conn.execute("SELECT bus_id, estimated_at_departure FROM silver.stop_visits").fetchall())
     assert flags == {"B-101": False, "B-102": True, "B-103": False, "B-104": False}
-    assert _stop_rows(gold_conn, live.snapshot_id)["P-884"] == (1, 600, 360000, 600, 360000, 1, True)
+    assert _stop_rows(gold_conn, live.snapshot_id)["P-884"] == (1, 600, 360000, 420, 176400, 1, True)
     assert _metric(gold_conn, live.snapshot_id)[0] == 1
 
     cycle(gold_conn, 1800)  # bands 68 (0..900 s) and 69 (900..1800 s) closed
@@ -275,7 +276,7 @@ def test_estimated_departure_excludes_both_headways_and_counts_them(gold_conn) -
     got = _band_rows(gold_conn)
     assert set(got) == set(want) == {("2026-11-24", 68, "P-884"), ("2026-11-24", 69, "P-884")}
     assert got[("2026-11-24", 68, "P-884")] == (0, 0, 0, 0, 0, 2)    # both headways touch B-102
-    assert got[("2026-11-24", 69, "P-884")] == (1, 600, 360000, 600, 360000, 0)
+    assert got[("2026-11-24", 69, "P-884")] == (1, 600, 360000, 420, 176400, 0)
 
 
 def test_d1_silence_stream_equals_the_oracle(gold_conn, load) -> None:

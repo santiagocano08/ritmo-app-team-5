@@ -63,8 +63,9 @@ def test_service_metric_is_stored_with_the_cycle(gold_conn) -> None:
     n, mean, sched, ewt, ok = gold_conn.execute(
         "SELECT n_headways, mean_wait_s, scheduled_wait_s, ewt_s, computable FROM gold.service_metric").fetchone()
     assert (n, ok) == (6, True)
-    assert float(sched) == 300.0 and float(mean) == pytest.approx(300.0, abs=0.01)
-    assert float(ewt) == pytest.approx(0.0, abs=0.01)
+    # planned 420 s since issue #42 (scheduled wait 210 s); the crafted departures stay 600 s apart (mean wait 300 s)
+    assert float(sched) == 210.0 and float(mean) == pytest.approx(300.0, abs=0.01)
+    assert float(ewt) == pytest.approx(90.0, abs=0.01)  # 300 - 210: the crafted service is worse than the 420 s plan
 
 
 def test_service_metric_is_not_computable_without_stop_departures(gold_conn) -> None:

@@ -81,18 +81,18 @@ def test_demand_window_across_the_local_midnight_uses_band_zero(gold_conn) -> No
 
 def test_reserve_free_loses_a_dispatched_reserve_bus(gold_conn) -> None:
     result, doc = _run(gold_conn, bb.normal().events, 3000)
-    assert doc["resources"] == {"reserve_free": ["B-106", "B-107"], "drivers_free": 2}
+    assert doc["resources"] == {"reserve_free": ["B-108", "B-109", "B-110", "B-111"], "drivers_free": 4}
     assert doc["action_cost"] == {"hold_penalty_s": 0, "early_departure_penalty_s": 0}
     assert doc["enabled_stops"] == [f"P-{n}" for n in range(883, 901)]
 
     b = bb.Builder("reserve-dispatched")
-    b.drive("B-106", 2000, 3000)
+    b.drive("B-108", 2000, 3000)
     assert all(r.accepted for r in bb.ingest_all(gold_conn, b.events))
     gold_conn.commit()
     result2 = cycle(gold_conn, 3000)
     doc2 = _stored(gold_conn, result2.snapshot_id)
-    assert doc2["resources"]["reserve_free"] == ["B-107"]
-    assert "B-106" in {x["bus_id"] for x in doc2["buses"]}
+    assert doc2["resources"]["reserve_free"] == ["B-109", "B-110", "B-111"]
+    assert "B-108" in {x["bus_id"] for x in doc2["buses"]}
 
 
 def test_active_incidents_are_ordered_by_id_and_drop_when_elapsed(gold_conn) -> None:
@@ -118,11 +118,11 @@ def test_a_config_change_changes_the_output_without_code_change(gold_conn) -> No
     gold_conn.execute("UPDATE config.corridor_settings SET drivers_free = 1, hold_penalty_s = 12.5, "
                       "early_departure_penalty_s = 7")
     gold_conn.execute("DELETE FROM config.enabled_stops WHERE stop_id IN ('P-883', 'P-900')")
-    gold_conn.execute("DELETE FROM config.fleet_roster WHERE bus_id = 'B-107'")
+    gold_conn.execute("DELETE FROM config.fleet_roster WHERE bus_id IN ('B-109', 'B-110', 'B-111')")
     gold_conn.commit()
     result2 = cycle(gold_conn, 3000 + 5)
     changed = _stored(gold_conn, result2.snapshot_id)
-    assert changed["resources"] == {"reserve_free": ["B-106"], "drivers_free": 1}
+    assert changed["resources"] == {"reserve_free": ["B-108"], "drivers_free": 1}
     assert changed["action_cost"] == {"hold_penalty_s": 12.5, "early_departure_penalty_s": 7}
     assert changed["enabled_stops"] == [f"P-{n}" for n in range(884, 900)]
     assert base["enabled_stops"] != changed["enabled_stops"]

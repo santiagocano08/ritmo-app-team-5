@@ -30,7 +30,8 @@ def test_base_run_has_no_bunching_gaps_or_out_of_range_headways(gold_conn) -> No
             assert bus["bus_state"] not in ("bunched", "gap"), (minute, bus["bus_id"])
             if bus["headway_ahead_s"] is not None:
                 seen_headways.append(bus["headway_ahead_s"])
-                assert 300 <= bus["headway_ahead_s"] <= 900, (minute, bus["bus_id"], bus["headway_ahead_s"])
+                # 0.5x to 1.5x the planned 420 s (issue #42; 300 to 900 s with the old 600 s)
+                assert 210 <= bus["headway_ahead_s"] <= 630, (minute, bus["bus_id"], bus["headway_ahead_s"])
     assert seen_headways, "the run produced no headway at all"
     print(f"\nacceptance: {len(seen_headways)} headways, min {min(seen_headways):.1f} s, "
           f"max {max(seen_headways):.1f} s")

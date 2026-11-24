@@ -123,9 +123,10 @@ def _departures(events: list[dict]) -> list[Departure]:
 def test_the_16_minute_oracle_window_without_the_hold(c1_events) -> None:
     deps = [d for d in _departures(c1_events) if d.stop_id in oracle.CORRIDOR_STOPS]
     s = window_sums(deps, T0 + timedelta(seconds=28 * 60 + 55), T0 + timedelta(seconds=44 * 60 + 55))
-    assert (s.n, s.sum_h, s.sum_h2) == (27, Decimal(13290), Decimal(8660350))
-    ewt = ewt_from_sums(s.n, s.sum_h, s.sum_h2, 600)[2]
-    assert round(ewt, 1) == 25.8
+    # re-pinned for the 7 + 4 fleet at 420 s and the retimed c1_bunching (issue #42)
+    assert (s.n, s.sum_h, s.sum_h2) == (32, Decimal(11975), Decimal(5260675))
+    ewt = ewt_from_sums(s.n, s.sum_h, s.sum_h2, 420)[2]
+    assert round(ewt, 1) == 9.7
 
 
 def test_pure_rule_equals_the_oracle_on_every_stop_and_band(c1_events) -> None:

@@ -158,15 +158,15 @@ def test_a_new_trip_after_the_terminus_is_on_the_corridor_again(silver_conn) -> 
 
 def test_reserve_bus_is_reserve_when_off_corridor_and_in_service_when_dispatched(silver_conn) -> None:
     b = bb.Builder("reserve")
-    old = bb.trip_id("B-106", 1)
-    b.stop_arrival("B-106", old, "P-900", 1010)  # roster says reserve, finished a trip
-    b.position("B-107", bb.trip_id("B-107"), 1000, 40.0)  # reserve injected on the corridor
+    old = bb.trip_id("B-108", 1)
+    b.stop_arrival("B-108", old, "P-900", 1010)  # roster says reserve, finished a trip
+    b.position("B-109", bb.trip_id("B-109"), 1000, 40.0)  # reserve injected on the corridor
     b.stop_arrival("B-101", bb.trip_id("B-101"), "P-900", 1010)  # in-service roster, finished
     _load(silver_conn, b)
     build(silver_conn, 1020)
     rows = state(silver_conn)
-    assert rows["B-106"]["operational_status"] == "reserve"
-    assert rows["B-107"]["operational_status"] == "in_service"
+    assert rows["B-108"]["operational_status"] == "reserve"
+    assert rows["B-109"]["operational_status"] == "in_service"
     assert rows["B-101"]["operational_status"] == "off_corridor"
     assert "B-105" not in rows  # undispatched buses have no row at all
 
@@ -174,7 +174,7 @@ def test_reserve_bus_is_reserve_when_off_corridor_and_in_service_when_dispatched
 def test_undispatched_reserve_buses_have_no_row(silver_conn) -> None:
     bb.ingest_all(silver_conn, bb.normal().events)
     build(silver_conn, 3000)
-    assert {"B-106", "B-107"}.isdisjoint(state(silver_conn))
+    assert {"B-108", "B-109", "B-110", "B-111"}.isdisjoint(state(silver_conn))
 
 
 def test_broken_down_takes_precedence_while_the_incident_is_active(silver_conn) -> None:

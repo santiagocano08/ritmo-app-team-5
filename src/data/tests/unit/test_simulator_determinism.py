@@ -8,6 +8,7 @@ import json
 from src.pulsoflota.models.turn1_events import EventEnvelopeRoot
 from src.data.simulator import main as sim_main
 from src.data.simulator.engine import run
+from src.data.simulator.model import IN_SERVICE
 
 
 def _stream(seed: int, duration: int) -> bytes:
@@ -46,4 +47,4 @@ def test_lines_use_sorted_keys() -> None:
 
 def test_one_position_per_in_service_bus_every_5s() -> None:
     pos = [e for e in run(42, 60) if e["event_type"] == "bus_position"]
-    assert len(pos) == 5 * (60 // 5)
+    assert len(pos) == len(IN_SERVICE) * (60 // 5)

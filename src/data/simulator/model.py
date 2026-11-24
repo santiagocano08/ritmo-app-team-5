@@ -16,8 +16,10 @@ REFERENCE_DIR = Path(__file__).resolve().parents[3] / "data" / "reference"
 
 CAPACITY = 40
 STEP_S = 5
-IN_SERVICE = ("B-101", "B-102", "B-103", "B-104", "B-105")
-RESERVE = ("B-106", "B-107")  # not dispatched in turn 1
+# Fleet (issue #42, contract v0.5): 7 in service and 4 in reserve. Reserves start only on an approved
+# reserve_dispatch (006 phase 3c).
+IN_SERVICE = ("B-101", "B-102", "B-103", "B-104", "B-105", "B-106", "B-107")
+RESERVE = ("B-108", "B-109", "B-110", "B-111")
 OPERATOR = "OP-01"
 SOURCE = "simulator"
 SIGMA = 0.20  # lognormal travel-time noise (mean-preserving)

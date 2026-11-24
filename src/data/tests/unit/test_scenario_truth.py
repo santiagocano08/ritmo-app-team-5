@@ -35,7 +35,7 @@ def test_one_record_per_injector_with_the_data_model_fields() -> None:
     assert set(recs["c5-b104"]) == COMMON
     assert set(recs["d1-silence-b101"]) == COMMON
     assert set(recs["d1-dup"]) == COMMON | {"event_ids"}
-    assert recs["c1-b102"]["params"] == {"start_s": 700, "extra_s": 400}
+    assert recs["c1-b102"]["params"] == {"start_s": 520, "extra_s": 310}
     assert recs["c1-b102"]["bus"] == "B-102" and recs["c1-b102"]["stop"] == "P-884"
     assert recs["d1-dup"]["bus"] is None and recs["d1-dup"]["stop"] is None
     assert all(r["fired"] for r in recs.values())
@@ -45,7 +45,7 @@ def test_records_are_ordered_by_effective_time_then_configuration_order() -> Non
     scenarios = load_scenarios(FIXTURES / "phase1_live.json")
     _, truth = run_truth(scenarios)
     ids = [r["scenario_id"] for r in truth.records()]
-    # d1-silence-b101 starts 250 s, d1-dup 500 s, c1 fires at its arrival (725 s), c5 at 2,400 s
+    # d1-silence-b101 starts 250 s, d1-dup 500 s, c1 fires at its arrival (535 s), c5 at 1,860 s
     assert ids == ["d1-silence-b101", "d1-dup", "c1-b102", "c5-b104"]
     times = [r["effective_ts"] for r in truth.records()]
     assert times == sorted(times)
@@ -63,7 +63,7 @@ def test_tie_on_effective_time_follows_configuration_order() -> None:
 def test_never_fired_records_come_last_with_fired_false() -> None:
     scenarios = parse_scenarios([
         {"id": "late", "type": "C5", "start_s": 99999, "bus": "B-101", "duration_s": 60},
-        {"id": "c1", "type": "C1", "start_s": 700, "bus": "B-102", "stop": "P-884", "extra_s": 400},
+        {"id": "c1", "type": "C1", "start_s": 520, "bus": "B-102", "stop": "P-884", "extra_s": 310},
         {"id": "late-dup", "type": "D1_DUPLICATES", "start_s": 99999, "count": 3},
     ])
     _, truth = run_truth(scenarios)
@@ -89,7 +89,7 @@ def test_c1_records_the_follower_gap_and_whether_the_target_was_reached() -> Non
 
 def test_c1_gap_is_null_until_a_follower_departs() -> None:
     scenarios = load_scenarios(FIXTURES / "c1_bunching.json")
-    _, truth = run_truth(scenarios, duration=1000)  # the delayed bus is still dwelling at the stop
+    _, truth = run_truth(scenarios, duration=800)  # the delayed bus is still dwelling at the stop (535 + 310 s)
     (rec,) = truth.records()
     assert rec["fired"] is True
     assert rec["follower_gap_s"] is None and rec["target_reached"] is None

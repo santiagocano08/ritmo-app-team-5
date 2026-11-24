@@ -49,6 +49,10 @@ class BusId(StrEnum):
     B_105 = "B-105"
     B_106 = "B-106"
     B_107 = "B-107"
+    B_108 = "B-108"
+    B_109 = "B-109"
+    B_110 = "B-110"
+    B_111 = "B-111"
 
 
 class Direction(IntEnum):
@@ -95,7 +99,7 @@ class BusPositionPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     bus_id: BusId
-    """Vehicle identifier. B-106 and B-107 are reserve buses."""
+    """Vehicle identifier. B-101 to B-107 run in service; B-108 to B-111 are reserve buses."""
     operator: Annotated[str, Field(min_length=1)]
     """Operator identifier (id_operador in the OMD)."""
     trip_id: Annotated[str, Field(min_length=1)]
@@ -118,7 +122,7 @@ class StopArrivalPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     bus_id: BusId
-    """Vehicle identifier. B-106 and B-107 are reserve buses."""
+    """Vehicle identifier. B-101 to B-107 run in service; B-108 to B-111 are reserve buses."""
     trip_id: Annotated[str, Field(min_length=1)]
     """Trip identifier on the standard route."""
     stop_id: Annotated[str, Field(min_length=1)]
@@ -137,7 +141,7 @@ class StopDeparturePayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     bus_id: BusId
-    """Vehicle identifier. B-106 and B-107 are reserve buses."""
+    """Vehicle identifier. B-101 to B-107 run in service; B-108 to B-111 are reserve buses."""
     trip_id: Annotated[str, Field(min_length=1)]
     """Trip identifier on the standard route."""
     stop_id: Annotated[str, Field(min_length=1)]
@@ -197,7 +201,7 @@ class DriverConfirmationPayload(BaseModel):
     instruction_id: Annotated[str, Field(min_length=1)]
     """Identifier of the dispatch instruction being confirmed."""
     bus_id: BusId
-    """Vehicle identifier. B-106 and B-107 are reserve buses."""
+    """Vehicle identifier. B-101 to B-107 run in service; B-108 to B-111 are reserve buses."""
     status: Status
     """Driver response status."""
 

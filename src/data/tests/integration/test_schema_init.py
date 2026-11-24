@@ -121,7 +121,7 @@ def test_corridor_settings_seed(conn) -> None:
     row = conn.execute(
         "SELECT corridor_id, direction, headway_planned_s, drivers_free, hold_penalty_s, "
         "early_departure_penalty_s, min_sample_count, m2_stop_id FROM config.corridor_settings").fetchall()
-    assert row == [("C6-008", 1, Decimal(600), 2, Decimal(0), Decimal(0), 5, "P-883")]
+    assert row == [("C6-008", 1, Decimal(420), 4, Decimal(0), Decimal(0), 5, "P-883")]  # issue #42 (contract v0.5)
 
 
 def test_planned_headway_equals_simulator_default(conn, monkeypatch) -> None:
@@ -133,7 +133,7 @@ def test_planned_headway_equals_simulator_default(conn, monkeypatch) -> None:
 
 def test_roster_and_enabled_stops_seed(conn) -> None:
     roster = conn.execute("SELECT bus_id, role FROM config.fleet_roster ORDER BY bus_id").fetchall()
-    assert roster == [(f"B-10{i}", "in_service" if i <= 5 else "reserve") for i in range(1, 8)]
+    assert roster == [(f"B-{100 + i}", "in_service" if i <= 7 else "reserve") for i in range(1, 12)]  # 7 + 4 (issue #42)
     stops = [r[0] for r in conn.execute("SELECT stop_id FROM config.enabled_stops ORDER BY stop_id")]
     assert stops == [f"P-{n}" for n in range(883, 901)]
 
@@ -218,7 +218,7 @@ def test_init_scripts_are_idempotent(conn) -> None:
     for script in sorted(INIT.glob("*.sql")):
         conn.execute(script.read_text(encoding="utf-8"))
     conn.commit()
-    assert conn.execute("SELECT count(*) FROM config.fleet_roster").fetchone()[0] == 7
+    assert conn.execute("SELECT count(*) FROM config.fleet_roster").fetchone()[0] == 11
     assert conn.execute("SELECT count(*) FROM config.enabled_stops").fetchone()[0] == 18
     assert conn.execute("SELECT count(*) FROM config.corridor_settings").fetchone()[0] == 1
 

@@ -46,7 +46,7 @@ def test_gold_matches_the_scenario_fixture(gold_conn, scenario: str) -> None:
     assert [(s["bus_id"], s["since"]) for s in got["source_status"]["sources_down"]] == \
         [(s["bus_id"], _iso_of(s["bus_id"], tl)) for s in want_ss["sources_down"]]
     for entry in got["corridor_now"]["buses"]:
-        assert entry["headway_planned_s"] == 600
+        assert entry["headway_planned_s"] == 420  # config.corridor_settings since issue #42
 
 
 def _iso_of(bus_id: str, tl: bb.Timeline) -> str:

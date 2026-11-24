@@ -88,12 +88,13 @@ def test_buses_open_visits_slots_breakdown_and_resources(gold_conn) -> None:
     assert b101.next_stop_idx == 2 and b101.at_stop is None
     assert b101.broken_until == pytest.approx(20.0)
     assert b102.at_stop == (-20.0, 18.0) and b102.next_stop_idx == 4 and b102.occupancy == 9  # dwell 10+3*2+2*1
-    # B-103 and B-104 never reported: the next terminal slots are the last departure + 600 s, +600 s each
+    # B-103, B-104, B-106 and B-107 never reported: the next terminal slots are the last departure + 420 s, +420 s
+    # each (7 + 4 fleet at 420 s, issue #42)
     waiting = sorted(x.bus_id for x in inp.buses if x.kind == "waiting")
-    assert waiting == ["B-103", "B-104"]
-    assert inp.next_departures == (500.0, 1100.0)
-    assert sorted(x.bus_id for x in inp.buses if x.kind == "reserve") == ["B-106", "B-107"]
-    assert facts.drivers_free == 2 and len(facts.enabled_stops) == 18 and facts.snapshot_id == str(res.snapshot_id)
+    assert waiting == ["B-103", "B-104", "B-106", "B-107"]
+    assert inp.next_departures == (320.0, 740.0, 1160.0, 1580.0)
+    assert sorted(x.bus_id for x in inp.buses if x.kind == "reserve") == ["B-108", "B-109", "B-110", "B-111"]
+    assert facts.drivers_free == 4 and len(facts.enabled_stops) == 18 and facts.snapshot_id == str(res.snapshot_id)
     assert dict(facts.bus_states)["B-101"] == "broken_down"
     assert len(inp.stops) == 18 and len(inp.m1) == 24 and all(len(r) == 17 for r in inp.m1)
     assert inp.alight_share[0] == pytest.approx(1 / 18) and inp.alight_share[17] == 1.0
@@ -130,8 +131,9 @@ def test_buses_waiting_at_the_terminal_leave_first_and_are_not_projected_as_depa
     b.stop_departure("B-101", bb.trip_id("B-101"), "P-900", 970)
     inp, _, _ = _run(gold_conn, b, 1000)
     waiting = {x.bus_id for x in inp.buses if x.kind == "waiting"}
-    assert waiting == {"B-101", "B-103", "B-104", "B-105"}
+    assert waiting == {"B-101", "B-103", "B-104", "B-105", "B-106", "B-107"}
     assert {x.bus_id for x in inp.buses if x.kind == "service"} == {"B-102"}
-    # last departure 900 s: slots at 500, 1100, 1700, 2300 s; B-103 (at the terminal) first, then B-101, B-104, B-105
+    # last departure 900 s, headway 420 s: slots at 320, 740, 1160, 1580, 2000, 2420 s; B-103 (at the terminal) first,
+    # then B-101, B-104, B-105, B-106, B-107
     by_id = dict(zip(sorted(waiting), inp.next_departures))
-    assert by_id == {"B-103": 500.0, "B-101": 1100.0, "B-104": 1700.0, "B-105": 2300.0}
+    assert by_id == {"B-103": 320.0, "B-101": 740.0, "B-104": 1160.0, "B-105": 1580.0, "B-106": 2000.0, "B-107": 2420.0}

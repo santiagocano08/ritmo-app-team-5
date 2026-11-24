@@ -50,7 +50,7 @@
         "properties": {
           "bus_id": {
             "type": "string",
-            "enum": ["B-101", "B-102", "B-103", "B-104", "B-105", "B-106", "B-107"]
+            "enum": ["B-101", "B-102", "B-103", "B-104", "B-105", "B-106", "B-107", "B-108", "B-109", "B-110", "B-111"]
           },
           "direction": { "type": "integer", "enum": [1] },
           "prev_stop_id": { "type": "string", "minLength": 1 },
@@ -134,7 +134,7 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["B-106", "B-107"]
+            "enum": ["B-108", "B-109", "B-110", "B-111"]
           },
           "description": "Reserve bus ids available for dispatch."
         },

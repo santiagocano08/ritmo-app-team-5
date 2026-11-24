@@ -73,9 +73,10 @@ def test_counts_equal_the_oracle_and_the_plan(gold_conn, load) -> None:
     assert set(got) == set(want)
     for key, w in want.items():
         assert got[key] == (w["n_riders"], w["n_le_5"], w["n_le_10"], w["n_le_15"]), key
-    assert _band_totals(gold_conn) == {68: (9, 3, 9, 9), 69: (16, 10, 16, 16), 70: (21, 9, 14, 15)}
-    assert sum(v[0] for v in got.values()) == 46
-    assert sum(v[0] for k, v in got.items() if k[2] == "P-883") == 37
+    # re-pinned for the 7 + 4 fleet at 420 s and the retimed c1_bunching (issue #42)
+    assert _band_totals(gold_conn) == {68: (15, 9, 14, 14), 69: (16, 10, 16, 16), 70: (18, 9, 14, 14)}
+    assert sum(v[0] for v in got.values()) == 49
+    assert sum(v[0] for k, v in got.items() if k[2] == "P-883") == 38
     lineage = gold_conn.execute("SELECT DISTINCT rules_version, max_bronze_id FROM gold.stop_boarding_band").fetchall()
     assert lineage == [(RULES_VERSION, result.max_bronze_id)]
 
@@ -96,7 +97,7 @@ def test_open_riders_of_the_stream_are_only_in_n_riders(gold_conn, load) -> None
     open_riders = [e for e in events if e["event_type"] == "rider_arrival"
                    and not any(d >= oracle.epoch(e["event_ts"]) and d <= T0 + AS_OF
                                for d in (x[0] for x in oracle.departures(events).get(e["payload"]["stop_id"], [])))]
-    assert len(open_riders) == 6
+    assert len(open_riders) == 4  # 7 + 4 fleet at 420 s, retimed c1_bunching (issue #42)
     assert all(oracle.band_of(oracle.epoch(e["event_ts"]))[1] == 70 for e in open_riders)
 
 
@@ -154,8 +155,9 @@ def test_q_p1_reads_final_bands_only(gold_conn, load) -> None:
     assert bounds[1].isoformat() == "2026-11-24T22:15:00+00:00" and bounds[2].isoformat() == "2026-11-24T22:30:00+00:00"
 
     p = gold_conn.execute(Q_P1, {"day": DAY, "from_band": 68, "to_band": 69}).fetchone()
-    assert p[0] == 25
-    assert float(p[1]) == pytest.approx(13 / 25) and float(p[2]) == 1 and float(p[3]) == 1
+    # bands 68 + 69 of the 7 + 4 fleet at 420 s (issue #42): 15 + 16 riders, 9 + 10 within 5 min, 14 + 16 within 10 and 15
+    assert p[0] == 31
+    assert float(p[1]) == pytest.approx(19 / 31) and float(p[2]) == pytest.approx(30 / 31) and float(p[3]) == pytest.approx(30 / 31)
     p69 = gold_conn.execute(Q_P1, {"day": DAY, "from_band": 69, "to_band": 69}).fetchone()
     assert float(p69[1]) == pytest.approx(0.625) and float(p69[2]) == 1
     # the open band is excluded by `final`, even when asked for
@@ -163,9 +165,9 @@ def test_q_p1_reads_final_bands_only(gold_conn, load) -> None:
     assert p70 == (None, None, None, None)
     # no rider in the range: NULL, never 0
     assert gold_conn.execute(Q_P1, {"day": DAY, "from_band": 10, "to_band": 11}).fetchone() == (None,) * 4
-    # without `final` the provisional value of band 70 is the plan's 9/21, 14/21, 15/21
+    # without `final` the provisional value of band 70 is 9/18, 14/18, 14/18 (the plan's 9/21, 14/21, 15/21 before issue #42)
     prov = gold_conn.execute(Q_P1.replace(" AND final", ""), {"day": DAY, "from_band": 70, "to_band": 70}).fetchone()
-    assert prov[0] == 21 and float(prov[1]) == pytest.approx(9 / 21) and float(prov[2]) == pytest.approx(14 / 21)
+    assert prov[0] == 18 and float(prov[1]) == pytest.approx(9 / 18) and float(prov[2]) == pytest.approx(14 / 18)
 
     # (g) per stop
     per_stop = gold_conn.execute(Q_P1_STOP, {"day": DAY, "from_band": 68, "to_band": 69}).fetchall()
