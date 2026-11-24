@@ -1,4 +1,5 @@
 import { useCorridorNow } from "./hooks/useCorridorNow";
+import { useTabTitle } from "./hooks/useTabTitle";
 import { useSourceStatus } from "./hooks/useSourceStatus";
 import { deriveFleetViewState } from "./hooks/useFleetViewState";
 import { FleetList } from "./components/fleet/FleetList";
@@ -36,6 +37,7 @@ export default function App() {
   const buses = snapshot?.buses ?? [];
   const { status, sourcesDown, detail } = resolveSourceStatus(fleet.lastSourceStatus);
   const stale = fleet.connection === "stale";
+  useTabTitle(status);
 
   return (
     <div className="flex h-full min-h-screen bg-app text-text-primary">
