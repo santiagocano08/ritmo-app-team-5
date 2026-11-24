@@ -1,0 +1,95 @@
+openapi: 3.1.0
+info:
+  title: PulsoFlota API — Version/Build Info (US-08)
+  version: "0.1.0"
+  description: >
+    Fragment describing the single read-only version/build-info endpoint added by
+    US-08. This fragment documents the contract the running FastAPI app must expose
+    at GET /api/v1/version; the full backend OpenAPI is generated from the app at
+    /openapi.json. The endpoint reports build-time metadata only and performs no
+    database or cache access.
+paths:
+  /api/v1/version:
+    get:
+      operationId: getVersionInfo
+      summary: Report the running backend build and read-contract version
+      description: >
+        Returns the backend application version, the read-contract version the
+        backend targets (fixed 1.0.0 this turn), and a source-revision identifier
+        for the running build (or "unknown" when the build captured none).
+        Unauthenticated in Turn 1 (FR-010). Reads no data store (FR-006).
+      responses:
+        "200":
+          description: Version/build info for the running backend.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VersionInfo"
+              examples:
+                withRevision:
+                  summary: Build with a source revision
+                  value:
+                    app_version: "0.1.0"
+                    read_contract_version: "1.0.0"
+                    source_revision: "a1b2c3d"
+                withoutRevision:
+                  summary: Build with no captured revision
+                  value:
+                    app_version: "0.1.0"
+                    read_contract_version: "1.0.0"
+                    source_revision: "unknown"
+        "500":
+          description: >
+            Unhandled server error. Returns the backend's standard generic error
+            body with a correlation_id; never a stack trace, path, or internals
+            (FR-008). Produced by the global exception handler, not the endpoint.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericError"
+              example:
+                error: "internal_server_error"
+                correlation_id: "3f1c0b2e-6a7d-4e5f-9b10-2c3d4e5f6a7b"
+components:
+  schemas:
+    VersionInfo:
+      type: object
+      additionalProperties: false
+      required:
+        - app_version
+        - read_contract_version
+        - source_revision
+      properties:
+        app_version:
+          type: string
+          minLength: 1
+          description: Running backend application version (SemVer-shaped).
+          example: "0.1.0"
+        read_contract_version:
+          type: string
+          enum: ["1.0.0"]
+          description: >
+            Version of the existing corridor_now / source_status read contracts the
+            backend targets. Reports an existing value only; implies no contract
+            change (FR-003).
+        source_revision:
+          type: string
+          minLength: 1
+          description: >
+            Short build-time source-revision identifier, or "unknown" when the build
+            captured none (FR-004).
+          example: "a1b2c3d"
+    GenericError:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+        - correlation_id
+      properties:
+        error:
+          type: string
+          example: "internal_server_error"
+        correlation_id:
+          type: string
+          format: uuid
+          description: Correlation identifier recorded in the server logs.
