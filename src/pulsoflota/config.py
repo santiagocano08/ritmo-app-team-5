@@ -12,6 +12,34 @@ from __future__ import annotations
 
 import math
 import os
+from importlib.metadata import PackageNotFoundError, version
+from typing import Final
+
+# Read-contract version the backend targets this turn. Single named source of truth
+# mirroring the existing corridor_now / source_status read contracts (both pinned to
+# 1.0.0). Reporting it implies no contract change (FR-003, R3).
+READ_CONTRACT_VERSION: Final = "1.0.0"
+
+
+def get_source_revision() -> str:
+    """Return the build-time source revision from APP_REVISION, or `unknown`.
+
+    The variable is injected at build/packaging time. When unset or empty the reader
+    returns the literal `unknown` so metadata-less builds still succeed (FR-004, R1).
+    """
+    return os.environ.get("APP_REVISION") or "unknown"
+
+
+def get_app_version() -> str:
+    """Return the backend application version from the installed package metadata.
+
+    Sourced from the single declaration in pyproject.toml (`version = "0.1.0"`) via the
+    installed distribution, avoiding a second inline literal (FR-007, R2).
+    """
+    try:
+        return version("pulsoflota")
+    except PackageNotFoundError:
+        return "0.0.0"
 
 
 def get_db_dsn() -> str:

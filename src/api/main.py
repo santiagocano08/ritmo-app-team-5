@@ -23,6 +23,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from src.api.routers.corridor_read import router as corridor_read_router
+from src.api.routers.version import router as version_router
 
 logger = logging.getLogger(__name__)
 
@@ -77,3 +78,9 @@ async def healthz() -> dict:
 # /api/v1 corridor read router (US-05)
 # ---------------------------------------------------------------------------
 app.include_router(corridor_read_router)
+
+
+# ---------------------------------------------------------------------------
+# /api/v1 version/build-info router (US-08)
+# ---------------------------------------------------------------------------
+app.include_router(version_router)
