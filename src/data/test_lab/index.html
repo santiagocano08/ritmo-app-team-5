@@ -5,15 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Flujo de datos</title>
 <style>
-  :root { --bg:#f6f7f9; --card:#fff; --text:#1d2330; --muted:#667085; --line:#e4e7ec; --accent:#2f5bd3; --accent-bg:#eef3ff;
-          --ok:#12805c; --ok-bg:#e7f6ef; --warn:#a15c07; --warn-bg:#fdf3e2; --bad:#b42318; --bad-bg:#fdecea; }
+  /* Same palette as the sim console page (src/data/sim_console/index.html); always light (Yasmin, 2026-11-23). */
+  :root { color-scheme: light; --bg:#f6f7f9; --card:#ffffff; --text:#1b1f24; --muted:#5d6673; --line:#dde1e6; --accent:#2457c5; --accent-text:#ffffff;
+          --accent-bg:#eaf0fc; --ok:#1f7a46; --ok-bg:#e6f4ec; --warn:#a15c00; --warn-bg:#fbf1e1; --bad:#b42318; --bad-bg:#fcebea;
+          --chip:#eef1f5; --hl:#fff7d6; --tan:#b08a3e; --gray:#98a2b3; }
   * { box-sizing:border-box; }
   body { margin:0; font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; background:var(--bg); color:var(--text); }
   header { display:flex; flex-wrap:wrap; gap:12px; align-items:center; padding:12px 20px; background:var(--card); border-bottom:1px solid var(--line); }
   h1 { font-size:17px; margin:0 auto 0 0; }
   h2 { font-size:15px; margin:0 0 10px; }
   h3 { font-size:13px; margin:14px 0 6px; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; }
-  select, button { font:inherit; padding:5px 10px; border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--text); }
+  select, button { font:inherit; padding:5px 10px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--text); }
   main { max-width:1280px; margin:0 auto; padding:16px 20px 48px; }
   .muted { color:var(--muted); }
   /* pipeline */
@@ -37,9 +39,9 @@
   td.wrap { white-space:normal; }
   th { font-size:12px; color:var(--muted); font-weight:600; }
   .scroll { overflow-x:auto; }
-  pre { margin:0; background:#f2f4f7; border-radius:6px; padding:8px 10px; font-size:12px; overflow:auto; max-height:320px; }
+  pre { margin:0; background:var(--chip); border-radius:6px; padding:8px 10px; font-size:12px; overflow:auto; max-height:320px; }
   details summary { cursor:pointer; color:var(--accent); font-size:13px; margin:4px 0; }
-  .pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:12px; font-weight:600; background:#f2f4f7; }
+  .pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:12px; font-weight:600; background:var(--chip); }
   .proposed { color:var(--accent); background:var(--accent-bg); } .applied, .executed, .apply { color:var(--ok); background:var(--ok-bg); }
   .expired, .discard, .discarded { color:var(--warn); background:var(--warn-bg); } .not_executed, .bunched, .gap { color:var(--bad); background:var(--bad-bg); }
   .cols { display:grid; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); gap:16px; }
@@ -47,35 +49,63 @@
   .timeline { border-left:3px solid var(--line); margin-left:10px; padding-left:18px; }
   .step { position:relative; margin-bottom:18px; }
   .step::before { content:attr(data-n); position:absolute; left:-32px; top:0; width:24px; height:24px; border-radius:50%;
-                  background:var(--accent); color:#fff; font-size:12px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+                  background:var(--accent); color:var(--accent-text); font-size:12px; font-weight:700; display:flex; align-items:center; justify-content:center; }
   .step .head { font-weight:600; } .step .head small { color:var(--muted); font-weight:400; font-family:ui-monospace,monospace; }
   #err { color:var(--bad); }
   /* tabs + what-if */
   .tabs { display:flex; gap:4px; }
-  .tabs button { border-radius:6px; } .tabs button.on { background:var(--text); color:#fff; border-color:var(--text); }
+  .tabs button { border-radius:6px; } .tabs button.on { background:var(--text); color:var(--card); border-color:var(--text); }
   input[type=number] { font:inherit; width:90px; padding:3px 6px; border:1px solid var(--line); border-radius:5px; }
   .ctrl { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:8px 16px; }
   .ctrl label { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:13px; }
   .ctrl label span { color:var(--muted); }
-  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button.primary { background:var(--accent); color:var(--accent-text); border-color:var(--accent); }
   .kpis { display:flex; flex-wrap:wrap; gap:14px; margin:4px 0 8px; }
   .kpis div { font-size:12px; color:var(--muted); } .kpis b { display:block; font-size:18px; color:var(--text); }
   .pos { color:var(--ok); font-weight:600; } .neg { color:var(--bad); }
-  .changed { background:#fff7d6; }
+  .changed { background:var(--hl); }
   svg text { font:10px system-ui,sans-serif; fill:var(--muted); }
+  /* decisions */
+  .open-recs { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:10px; }
+  .rec-card { border:1px solid var(--line); border-radius:10px; padding:10px 12px; display:grid; gap:6px; }
+  .rec-card.urgent { border-color:var(--bad); }
+  .rec-card .act { font-weight:650; }
+  .clock { font-variant-numeric:tabular-nums; font-size:18px; font-weight:650; }
+  .clock.urgent { color:var(--bad); }
+  .bar { height:6px; background:var(--line); border-radius:3px; overflow:hidden; }
+  .bar i { display:block; height:100%; background:var(--accent); }
+  .rec-card.urgent .bar i { background:var(--bad); }
+  .banner { border-radius:8px; padding:8px 12px; margin-bottom:10px; font-size:13px; }
+  .banner.warn { background:var(--warn-bg); color:var(--warn); } .banner.info { background:var(--accent-bg); }
+  .open { color:var(--accent); background:var(--accent-bg); }
+  .stack { display:flex; height:14px; min-width:120px; border-radius:3px; overflow:hidden; background:var(--chip); }
+  .stack i { display:block; height:100%; } .stack .a { background:var(--ok); } .stack .d { background:var(--tan); } .stack .e { background:var(--bad); opacity:.55; }
+  /* results */
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+  .tile { border:1px solid var(--line); border-radius:10px; padding:8px 12px; }
+  .tile .k { font-size:12px; color:var(--muted); } .tile .v { font-size:22px; font-weight:650; font-variant-numeric:tabular-nums; }
+  .tile .s { font-size:12px; color:var(--muted); }
+  .chart { position:relative; } .chart svg { display:block; width:100%; height:auto; overflow:visible; }
+  .chart .tip { position:absolute; pointer-events:none; background:var(--card); border:1px solid var(--line); border-radius:6px;
+                padding:6px 8px; font-size:12px; box-shadow:0 2px 8px rgba(0,0,0,.08); white-space:nowrap; display:none; }
+  .chart .legend { font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .chart .legend i { width:14px; height:3px; vertical-align:3px; }
+  .better { color:var(--ok); background:var(--ok-bg); } .worse { color:var(--bad); background:var(--bad-bg); }
+  .same, .measuring, .no_data, .ended { color:var(--muted); background:var(--chip); }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin:0 4px 0 10px; vertical-align:-1px; }
 </style>
 </head>
 <body>
 <header>
   <h1>Flujo de datos y decisiones · PulsoFlota</h1>
-  <div class="tabs"><button id="tab-flow" class="on">Flujo</button><button id="tab-whatif">¿Qué pasa si…?</button></div>
+  <div class="tabs"><a id="nav-sim" href="../" hidden><button type="button">Simulación</button></a><button id="tab-flow" class="on">Flujo</button><button id="tab-whatif">Modelo (¿qué pasa si…?)</button><button id="tab-dec">Decisiones</button><button id="tab-res">Resultados</button></div>
   <label>Stack <select id="target"></select></label>
-  <label><input type="checkbox" id="auto" checked> en vivo (5 s)</label>
+  <label><input type="checkbox" id="auto" checked> en vivo (cada 5 s)</label>
   <span id="at" class="muted"></span><span id="err"></span>
 </header>
 <main id="view-whatif" hidden>
   <div class="panel">
-    <h2>¿Qué pasa si…? El modelo de decisión con tus variables</h2>
+    <h2>Modelo de decisión: ¿qué pasa si…?</h2>
     <div class="explain">Carga las entradas del <b>último snapshot</b> tal como las lee el refresh, aplica tus cambios y corre el <b>mismo modelo</b> (candidatas → proyección a 30 min → umbral y top N). No escribe nada en la base de datos. El <i>estado</i> de cada bus (apelotonado, hueco…) lo pones tú: en el ciclo real sale de la clasificación de intervalos de <code>corridor_now</code>.</div>
     <div class="muted" id="wi-info"></div>
     <div id="wi-corridor" style="margin:10px 0"></div>
@@ -87,6 +117,71 @@
     </div>
   </div>
   <div class="cols"><div class="panel" id="wi-orig"></div><div class="panel" id="wi-scen"></div></div>
+</main>
+<main id="view-res" hidden>
+  <div class="panel">
+    <h2>Resultados: ¿el corredor funciona mejor con las decisiones?</h2>
+    <div class="explain"><b>Espera media</b>: lo que espera en promedio un pasajero que llega a una parada al azar, en los últimos 15 min simulados.
+      <b>Programada</b>: lo que esperaría si los buses pasaran justo según el plan. <b>EWT</b> = media − programada: positivo es peor que el plan, negativo mejor.
+      <b>P(abordar ≤ 10 min)</b>: de los pasajeros que llegaron, cuántos subieron a un bus antes de 10 min. Todo en hora simulada.</div>
+    <div class="tiles" id="res-tiles"></div>
+    <span id="res-err" style="color:var(--bad)"></span>
+  </div>
+  <div class="panel"><h2>Espera de los pasajeros a lo largo de la corrida</h2><div class="chart" id="res-wait"></div>
+    <p class="muted" style="font-size:12px;margin:6px 0 0">Las marcas verticales son decisiones: verde aplicada, ocre descartada, gris expirada. Pasa el mouse para ver los valores.</p></div>
+  <div class="panel"><h2>Flota: buses en servicio y apelotonados</h2><div class="chart" id="res-fleet"></div></div>
+  <div class="panel">
+    <h2>¿Las decisiones ayudaron?</h2>
+    <div class="explain">Para cada recomendación cerrada comparamos la espera media <b>al cerrarse</b> con la espera <b>15 min simulados después</b>.
+      Son dos ventanas de 15 min que no se cruzan: antes y después. <b>Mejoró</b> = bajó al menos 5 s; <b>empeoró</b> = subió al menos 5 s.
+      Las no aplicadas (descartadas y expiradas) sirven de referencia: muestran cómo se movió la espera sin actuar.
+      Es una lectura descriptiva, no causal: el tráfico y la demanda también cambian. La prueba fuerte es comparar dos corridas con la misma semilla (abajo).</div>
+    <div id="res-groups"></div>
+    <h3>Cada decisión</h3><div id="res-effects"></div>
+  </div>
+  <div class="panel"><h2>¿Qué tan bien predice el modelo?</h2>
+    <div class="explain">El modelo proyecta cuándo saldrá cada bus de cada parada si no se hace nada. Aquí se compara esa proyección con la salida
+      que de verdad ocurrió, según con cuánta anticipación se proyectó. <b>Error</b> = salida real − proyectada; <b>sesgo</b> positivo = el bus
+      salió más tarde de lo previsto. Se excluyen las salidas que cambió a propósito una decisión aplicada.</div>
+    <div id="res-acc"></div></div>
+  <div class="cols">
+    <div class="panel"><h2>Probabilidad de abordar por parada (toda la corrida)</h2><div id="res-board"></div></div>
+    <div class="panel"><h2>Corridas guardadas y comparación A/B</h2>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><button id="res-save">Guardar esta corrida</button><span class="muted" id="res-save-msg"></span></div>
+      <div class="explain">El simulador es determinista: con la misma semilla, escenario y hora, dos corridas son idénticas hasta la primera acción aplicada.
+        Corre <i>Demo completa</i> una vez <b>sin decidir nada</b> y otra <b>aplicando</b> recomendaciones; guarda las dos y compara aquí.</div>
+      <div id="res-runs"></div>
+      <p class="muted" style="font-size:12px">La consola guarda sola antes de borrar <code>pfsim</code>, al detener y al terminar cada corrida (carpeta <code>src/data/sim_console/runs/archive/</code>).</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0 4px">
+        <label>Corrida A <select id="ab-a"></select></label><label>Corrida B <select id="ab-b"></select></label></div>
+      <p class="muted" style="font-size:12px;margin:0 0 6px">Para el A/B: A = la que tiene decisiones aplicadas, B = la misma demo sin decidir nada (0 aplicadas).</p>
+      <div id="ab-sum"></div><div class="chart" id="ab-chart"></div></div>
+  </div>
+</main>
+<main id="view-dec" hidden>
+  <div class="panel">
+    <h2>Decisiones: ¿se tomó o no?</h2>
+    <div class="explain">Cada recomendación del modelo queda guardada en <code>gold.recommendation</code> y termina de una de tres formas:
+      <b>aplicada</b> o <b>descartada</b> (alguien decidió) o <b>expirada</b> (nadie decidió a tiempo). Una recomendación expira
+      porque <i>venció su tiempo</i> (2 min simulados), porque <i>el bus ya pasó la parada</i> o porque <i>terminó la corrida</i> con ella abierta.
+      Todo se mide en <b>hora simulada</b>, no en la del reloj. Aprobar o descartar escribe el evento <code>decision</code> en bronce (puerta de comandos) y solo funciona en el stack <code>pfsim</code>.</div>
+    <div id="dec-banner"></div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:6px">
+      <label>Ventana <select id="dec-window">
+        <option value="5">últimos 5 min simulados</option><option value="10">últimos 10 min</option>
+        <option value="15" selected>últimos 15 min</option><option value="30">últimos 30 min</option>
+        <option value="60">últimos 60 min</option><option value="0">toda la corrida</option></select></label>
+      <span class="muted" id="dec-range"></span><span id="dec-err" style="color:var(--bad)"></span>
+    </div>
+    <div class="kpis" id="dec-kpis"></div>
+  </div>
+  <div class="panel">
+    <h2>Abiertas ahora: decide antes de que venzan</h2>
+    <div id="dec-open"></div>
+    <p class="muted" id="dec-last" style="margin:8px 0 0"></p>
+  </div>
+  <div class="panel"><h2>Por cada 5 minutos simulados</h2><div id="dec-buckets"></div></div>
+  <div class="panel"><h2>Todas las recomendaciones de la corrida</h2><div id="dec-all"></div></div>
 </main>
 <main id="view-flow">
   <div class="pipe" id="pipe"></div>
@@ -103,22 +198,59 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const pill = (v) => v == null ? "" : `<span class="pill ${esc(v)}">${esc(v)}</span>`;
+// Spanish labels for the values the platform stores in English (contract enums, column names, model reasons).
+const ES = {leader: "líder", regular: "regular", bunched: "apelotonado", gap: "hueco", broken_down: "varado",
+  live: "en vivo", estimated: "estimado", proposed: "propuesta", applied: "aplicada", discarded: "descartada",
+  expired: "expirada", executed: "ejecutada", not_executed: "no ejecutada", apply: "aprobar", discard: "descartar",
+  in_service: "en servicio", off_corridor: "fuera del corredor", reserve: "reserva", service: "en servicio",
+  waiting: "espera en terminal", simulator: "simulador", backend: "backend", stale: "desactualizado", down: "caída"};
+const ACT = {hold: "retener", reserve_dispatch: "despachar reserva", adjust_departure: "ajustar salida",
+  slow_down: "reducir velocidad", skip_stop: "saltar paradas"};
+const es = (v) => v == null ? "" : (ES[v] ?? ACT[v] ?? v);
+const COLS = {event_type: "tipo de evento", source: "fuente", last_60s: "últimos 60 s", total: "total", last_id: "último id",
+  id: "id", sim_ts: "hora sim.", age_s: "antigüedad (s)", payload: "contenido", events: "eventos", max_id: "id máx.",
+  rejections: "rechazos", reason: "motivo", n: "cantidad", bus_id: "bus", operational_status: "estado operativo",
+  data_quality: "calidad del dato", prev_stop_id: "parada anterior", next_stop_id: "próxima parada", distance_m: "distancia (m)",
+  occupancy: "ocupación", last_report: "último reporte", position_history: "historial de posiciones", stop_visits: "visitas a paradas",
+  incidents: "incidentes", snapshot_id: "foto (snapshot)", rules_version: "versión de reglas", max_bronze_id: "id bronce máx.",
+  bus_state: "estado", headway_ahead_s: "intervalo adelante (s)", headway_planned_s: "intervalo plan (s)", n_headways: "intervalos",
+  mean_wait_s: "espera media (s)", scheduled_wait_s: "espera programada (s)", ewt_s: "EWT (s)", computable: "calculable",
+  n_gaps: "huecos", n_bunched: "apelotonados", buses_in_service: "buses en servicio", reserve_free: "reserva libre",
+  drivers_free: "conductores libres", action: "acción", case: "caso", score_s: "puntaje (s)", saving_s: "ahorro (s/pasajero)",
+  recommended: "recomendada", reason_not: "por qué no", proposed: "propuesta", status: "estado", doc: "recomendación",
+  closed: "cerrada", bronze_id: "id bronce", user_id: "usuario", action_type: "tipo de acción", rec_status: "estado de la rec.",
+  instruction: "instrucción", hold_s: "retención (s)", observed_dwell_s: "parada observada (s)", stop_id: "parada",
+  arrival: "llegada", departure: "salida", dwell_s: "permanencia (s)", boarded: "subieron", alighted: "bajaron",
+  arrival_utc: "llegada UTC", kind: "tipo", next_stop: "próxima parada", quality: "calidad", broken_min: "varado (min)",
+  incidents_n: "incidentes", active_incidents: "incidentes activos"};
+// The model writes its reason in English (rules/mpc._reason); these are its five templates.
+function reasonEs(t) {
+  if (!t) return "";
+  return String(t)
+    .replace(/saves ([\d.]+) s per rider/, "ahorra $1 s por pasajero")
+    .replace(/^hold (\S+) ([\d.]+) s at (\S+)/, "retener $1 $2 s en $3")
+    .replace(/^slow down (\S+) by ([\d.]+) % for (.+?) at (\S+)/, "reducir la velocidad de $1 un $2 % durante $3 en $4")
+    .replace(/^dispatch reserve (\S+)/, "despachar la reserva $1")
+    .replace(/^advance the next departure from (\S+) \((\S+)\) by ([\d.]+) s/, "adelantar $3 s la próxima salida desde $1 ($2)")
+    .replace(/^delay the next departure from (\S+) \((\S+)\) by ([\d.]+) s/, "retrasar $3 s la próxima salida desde $1 ($2)")
+    .replace(/^skip stops with an empty queue for (\S+) from (\S+)/, "saltar las paradas sin cola para $1 desde $2");
+}
+const pill = (v) => v == null ? "" : `<span class="pill ${esc(v)}">${esc(es(v))}</span>`;
 const json = (o, label = "ver JSON") => `<details><summary>${label}</summary><pre>${esc(JSON.stringify(o, null, 2))}</pre></details>`;
-const fmt = (v) => typeof v === "number" ? (Number.isInteger(v) ? v : v.toFixed(1)) : (typeof v === "object" && v !== null ? JSON.stringify(v) : v);
+const fmt = (v) => typeof v === "boolean" ? (v ? "sí" : "no") : typeof v === "number" ? (Number.isInteger(v) ? v : v.toFixed(1)) : (typeof v === "object" && v !== null ? JSON.stringify(v) : es(v));
 function table(rows, cols, render = {}) {
   if (!rows || !rows.length) return `<p class="muted">sin filas</p>`;
   cols = cols || Object.keys(rows[0]);
-  return `<div class="scroll"><table><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr>${rows.map((r) =>
+  return `<div class="scroll"><table><tr>${cols.map((c) => `<th>${esc(COLS[c] ?? c)}</th>`).join("")}</tr>${rows.map((r) =>
     `<tr>${cols.map((c) => `<td>${render[c] ? render[c](r[c], r) : esc(fmt(r[c]))}</td>`).join("")}</tr>`).join("")}</table></div>`;
 }
-const action = (a) => a ? `${a.type}${a.bus_id ? " · " + a.bus_id : ""}${a.stop_id ? " @ " + a.stop_id : ""}${a.duration_s ? " · " + a.duration_s + " s" : ""}` : "";
+const action = (a) => a ? `${ACT[a.type] ?? a.type}${a.bus_id ? " · " + a.bus_id : ""}${a.stop_id ? " en " + a.stop_id : ""}${a.duration_s ? " · " + a.duration_s + " s" : ""}` : "";
 
 const STAGES = [
-  ["raw", "Raw", "simulador → stdout"],
-  ["bronze", "Bronze", "bronze.events"],
-  ["silver", "Silver", "silver.*"],
-  ["gold", "Gold · analítica", "corridor_now, EWT"],
+  ["raw", "Crudo", "simulador → stdout"],
+  ["bronze", "Bronce", "bronze.events"],
+  ["silver", "Plata", "silver.*"],
+  ["gold", "Oro · analítica", "corridor_now, EWT"],
   ["decision", "Decisión", "decision_inputs → recommendation"],
   ["front", "Front", "api /api/v1 · consola"],
   ["response", "Respuesta", "evento decision → estado"],
@@ -139,72 +271,93 @@ function stageMetric(k, d) {
 }
 
 function renderPipe() {
-  $("pipe").innerHTML = STAGES.map(([k, t, src], i) => {
+  const pipeHtml = STAGES.map(([k, t, src], i) => {
     const [big, sub] = stageMetric(k, D);
     return (i ? `<div class="arrow">→</div>` : "") + `<div class="stage ${k === sel ? "sel" : ""}" data-k="${k}">
       <div class="n">${i + 1}</div><div class="t">${t}</div><div class="src">${src}</div>
       <div class="big">${esc(big)}</div><div class="sub">${esc(sub)}</div></div>`;
   }).join("");
+  if ($("pipe").dataset.html === pipeHtml) return;
+  $("pipe").innerHTML = pipeHtml; $("pipe").dataset.html = pipeHtml;
   document.querySelectorAll(".stage").forEach((el) => el.onclick = () => { sel = el.dataset.k; try { localStorage.setItem("stage", sel); } catch {} renderPipe(); renderDetail(); });
 }
 
 const DETAIL = {
-  raw: (d) => `<h2>1 · Raw: lo que emite el simulador</h2>
+  raw: (d) => `<h2>1 · Crudo: lo que emite el simulador</h2>
     <div class="explain">El simulador escribe un JSON por línea en stdout; la ingesta lo valida contra el contrato y lo inserta tal cual en <code>bronze.events</code> (con <code>arrival_ts</code> de llegada).</div>
     <h3>Tipos de evento</h3>${table(d.raw.types, ["event_type", "source", "last_60s", "total", "last_id"])}
     <h3>Últimos eventos del simulador (payload crudo)</h3>${table(d.raw.latest, ["id", "event_type", "sim_ts", "age_s", "payload"], {payload: (p) => `<code>${esc(JSON.stringify(p)).slice(0, 160)}</code>`})}`,
-  bronze: (d) => `<h2>2 · Bronze: aterrizaje inmutable</h2>
+  bronze: (d) => `<h2>2 · Bronce: aterrizaje inmutable</h2>
     <div class="explain">Solo INSERT. Idempotente por <code>(source, event_id)</code>: un duplicado va a <code>bronze.rejections</code>, nunca se sobreescribe. Aquí también entra la respuesta del despachador (paso 7).</div>
     ${table([d.bronze.totals])}<h3>Rechazos por motivo</h3>${table(d.bronze.rejections)}`,
-  silver: (d) => `<h2>3 · Silver: estado limpio por bus</h2>
+  silver: (d) => `<h2>3 · Plata: estado limpio por bus</h2>
     <div class="explain">El refresh lee bronze y deriva el estado actual de cada bus, las visitas a parada (llegada + salida) y los incidentes.</div>
     ${table([d.silver.counts])}<h3>silver.bus_current_state</h3>${table(d.silver.buses, null, {operational_status: pill, data_quality: pill})}`,
-  gold: (d) => { const c = d.gold.corridor_now; return `<h2>4 · Gold: el snapshot del corredor</h2>
+  gold: (d) => { const c = d.gold.corridor_now; return `<h2>4 · Oro: la foto (snapshot) del corredor</h2>
     <div class="explain">Cada ciclo (≈5 s) el refresh confirma un snapshot: estado del corredor con intervalos y estado de apelotonamiento por bus, la métrica de servicio (EWT) y el estado de las fuentes.</div>
     ${table(d.gold.snapshot ? [d.gold.snapshot] : [])}
     <h3>gold.corridor_now (${c ? c.buses.length : 0} buses)</h3>${c ? table(c.buses, ["bus_id", "bus_state", "headway_ahead_s", "headway_planned_s", "prev_stop_id", "next_stop_id", "data_quality"], {bus_state: pill}) : ""}
     <h3>gold.service_metric</h3>${table(d.gold.service_metric ? [d.gold.service_metric] : [])}
     ${json(d.gold.source_status, "gold.source_status")}`; },
-  decision: (d) => `<h2>5 · Decisión: entradas del modelo y recomendaciones</h2>
-    <div class="explain">El modelo de decisión (MPC) lee <code>gold.decision_inputs</code> del snapshot, evalúa acciones candidatas contra "no hacer nada" y publica las mejores en <code>gold.recommendation</code> con su linaje (snapshot, versión de reglas).</div>
-    <div class="cols"><div><h3>decision_inputs (snapshot actual)</h3>${d.decision.inputs ? table(d.decision.inputs.buses, null, {bus_state: pill}) + table([{...d.decision.inputs.summary, reserve_free: (d.decision.inputs.resources?.reserve_free || []).join(", "), drivers_free: d.decision.inputs.resources?.drivers_free}]) + json(d.decision.inputs) : `<p class="muted">sin entradas (¿falta la migración 009?)</p>`}</div>
-    <div><h3>Candidatos evaluados (último ciclo)</h3>${table((d.decision.evaluated || []).map((e) => ({...e, action: action(e.action)})), ["action", "case", "score_s", "saving_s", "recommended", "reason_not"])}</div></div>
-    <h3>gold.recommendation</h3>${table(d.decision.recommendations, ["proposed", "status", "case", "doc", "closed"], {status: pill, doc: (doc) => `${esc(action(doc.action))} · ahorra ${esc(doc.ewt_saving_s)} s/pasajero`})}`,
+  decision: (d) => { const i = d.decision.inputs, s = i?.summary || {}, r = i?.resources || {};
+    return `<h2>5 · Decisión: el modelo lee la foto y publica recomendaciones</h2>
+    <div class="explain">El modelo de decisión (MPC) lee <code>gold.decision_inputs</code> de la foto, evalúa acciones candidatas contra "no hacer nada" y publica las mejores en <code>gold.recommendation</code> con su linaje (foto, versión de reglas).</div>
+    ${i ? `<p>Foto actual: <b>${esc(s.buses_in_service)}</b> buses en servicio · <b>${esc(s.n_bunched)}</b> apelotonados · <b>${esc(s.n_gaps)}</b> huecos · reserva libre <b>${esc((r.reserve_free || []).join(", ") || "ninguna")}</b> · <b>${esc(r.drivers_free)}</b> conductores libres.</p>${json(i, "ver decision_inputs (JSON)")}`
+        : `<p class="muted">sin entradas (¿falta la migración 009?)</p>`}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+      <a href="#whatif"><button class="primary" type="button">Ver el modelo y sus candidatos →</button></a>
+      <a href="#dec"><button type="button">Ir a Decisiones (${(d.decision.recommendations || []).length} en la corrida) →</button></a></div>
+    <p class="muted" style="font-size:12px">Las entradas bus por bus, los candidatos y por qué el modelo publica o descarta cada uno están en <b>Modelo (¿qué pasa si…?)</b>, donde además puedes cambiarlos. Aquí no se repiten.</p>`; },
   front: (d) => `<h2>6 · Front: lo que ve el despachador</h2>
     <div class="explain">La consola del despachador lee la API (<code>${esc(d.front.corridor_now.url)}</code>), que sirve el documento gold del último snapshot validado contra el contrato. Las recomendaciones abiertas son los documentos <code>recommendation.schema.json</code> que se le muestran para aprobar o descartar.</div>
     <div class="cols"><div><h3>Respuesta de la API · corridor/now</h3>${d.front.corridor_now.ok ? json(d.front.corridor_now.body, `HTTP ${d.front.corridor_now.status} · ${d.front.corridor_now.body.buses?.length ?? 0} buses · ver JSON`) : `<p>API no responde (${esc(d.front.corridor_now.error)})</p>`}
       <h3>Respuesta de la API · source-status</h3>${d.front.source_status.ok ? json(d.front.source_status.body) : `<p>API no responde</p>`}</div>
-    <div><h3>Recomendaciones abiertas (${d.front.open_recommendations.length})</h3>${d.front.open_recommendations.length ? d.front.open_recommendations.map((r) => `<div><b>#${r.rank}</b> ${esc(action(r.action))} — ${esc(r.reason)} ${json(r)}</div>`).join("") : `<p class="muted">ninguna abierta ahora</p>`}</div></div>`,
+    <div><h3>Recomendaciones abiertas</h3><p><b>${d.front.open_recommendations.length}</b> abiertas ahora. Se aprueban o descartan en <a href="#dec">Decisiones</a>.</p>${d.front.open_recommendations.map((r) => json(r, `documento #${r.rank} · ${esc(action(r.action))}`)).join("")}</div></div>`,
   response: (d) => `<h2>7 · Respuesta: cómo se atrapa la decisión</h2>
     <div class="explain">Al aprobar o descartar, el backend (o la consola de simulación) inserta un evento <code>decision</code> en <code>bronze.events</code> por la puerta de comandos. En el siguiente ciclo el refresh lo lee y cambia el estado de la recomendación (<code>applied</code>/<code>discarded</code>); si es una retención, el simulador la ejecuta y <code>gold.instruction_status</code> dice si se cumplió.</div>
     ${table(d.response, ["bronze_id", "sim_ts", "source", "user_id", "action", "action_type", "bus_id", "rec_status", "instruction", "hold_s", "observed_dwell_s"], {action: pill, rec_status: pill, instruction: pill})}`,
 };
 
-function renderDetail() { $("detail").innerHTML = D ? DETAIL[sel](D) : ""; }
+// Re-render a panel only when its content changed, keeping the <details> the user opened and the scroll of its
+// tables: a blind innerHTML every 5 s closed "ver JSON" and jumped the page, which looked like a broken refresh.
+function patch(el, html) {
+  if (el.dataset.html === html) return;
+  const open = [...el.querySelectorAll("details")].map((d) => d.open);
+  const scroll = [...el.querySelectorAll(".scroll, pre")].map((x) => [x.scrollLeft, x.scrollTop]);
+  el.innerHTML = html; el.dataset.html = html;
+  el.querySelectorAll("details").forEach((d, i) => { if (open[i]) d.open = true; });
+  el.querySelectorAll(".scroll, pre").forEach((x, i) => { if (scroll[i]) [x.scrollLeft, x.scrollTop] = scroll[i]; });
+}
+function renderDetail() { patch($("detail"), D ? DETAIL[sel](D) : ""); }
 
+let traced = "";  // "rec_id|status" of the trace on screen: a new status (decision, expiry) reloads it
 function renderRecSelect() {
   const recs = D.decision.recommendations || [];
   const cur = $("rec").value;
-  $("rec").innerHTML = `<option value="">— elige una recomendación —</option>` + recs.map((r) =>
+  const opts = `<option value="">— elige una recomendación —</option>` + recs.map((r) =>
     `<option value="${r.rec_id}">${r.proposed} · ${r.status} · ${esc(action(r.doc.action))}</option>`).join("");
+  if ($("rec").dataset.html !== opts && document.activeElement !== $("rec")) { $("rec").innerHTML = opts; $("rec").dataset.html = opts; }
   if (recs.some((r) => r.rec_id === cur)) $("rec").value = cur;
-  else { const a = recs.find((r) => r.status === "applied") || recs[0]; if (a && !cur) { $("rec").value = a.rec_id; loadTrace(); } }
+  else if (!cur) { const a = recs.find((r) => r.status === "applied") || recs[0]; if (a) $("rec").value = a.rec_id; }
+  const r = recs.find((x) => x.rec_id === $("rec").value);
+  if (r && traced !== `${r.rec_id}|${r.status}|${r.closed}`) loadTrace();
 }
 
 async function loadTrace() {
-  const id = $("rec").value; if (!id) { $("trace").innerHTML = ""; return; }
-  const r = await fetch(`/api/trace/${encodeURIComponent($("target").value)}/${id}`);
+  const id = $("rec").value; if (!id) { $("trace").innerHTML = ""; traced = ""; return; }
+  const r = await fetch(`api/trace/${encodeURIComponent($("target").value)}/${id}`);
   if (!r.ok) { $("trace").innerHTML = `<p id="err">No se pudo trazar (HTTP ${r.status})</p>`; return; }
   const t = await r.json(), s = t.steps, doc = s.front.document;
+  traced = `${t.rec.rec_id}|${t.rec.status}|${t.rec.closed}`;
   $("recinfo").innerHTML = `${pill(t.rec.status)} caso ${esc(t.rec.case)} · reglas ${esc(t.rec.rules_version)}`;
   const g = s.gold.snapshot, ans = s.response.decision_events;
-  $("trace").innerHTML = `<div class="timeline">
-    <div class="step" data-n="1"><div class="head">Raw → Bronze <small>bronze.events id ≤ ${esc(s.raw.bronze_cut)}</small></div>
+  patch($("trace"), `<div class="timeline">
+    <div class="step" data-n="1"><div class="head">Crudo → Bronce <small>bronze.events id ≤ ${esc(s.raw.bronze_cut)}</small></div>
       <p class="muted">La recomendación se calculó con los primeros ${esc(s.raw.events_before)} eventos de bronze. Los últimos que el simulador había emitido:</p>
       ${table(s.raw.latest, ["id", "event_type", "sim_ts", "payload"], {payload: (p) => `<code>${esc(JSON.stringify(p)).slice(0, 140)}</code>`})}</div>
-    <div class="step" data-n="2"><div class="head">Silver <small>silver.stop_visits hasta ${esc(g?.sim_ts)}</small></div>
+    <div class="step" data-n="2"><div class="head">Plata <small>silver.stop_visits hasta ${esc(g?.sim_ts)}</small></div>
       ${table(s.silver.stop_visits)}</div>
-    <div class="step" data-n="3"><div class="head">Gold · snapshot <small>${esc(g?.snapshot_id)} · sim ${esc(g?.sim_ts)}</small></div>
+    <div class="step" data-n="3"><div class="head">Oro · foto <small>${esc(g?.snapshot_id)} · sim ${esc(g?.sim_ts)}</small></div>
       <p class="muted">Lo que el corredor mostraba en ese instante (el "por qué" de la recomendación):</p>
       ${s.gold.corridor_now ? table(s.gold.corridor_now.buses, ["bus_id", "bus_state", "headway_ahead_s", "headway_planned_s", "next_stop_id"], {bus_state: pill}) : ""}
       ${table(s.gold.service_metric ? [s.gold.service_metric] : [])}</div>
@@ -212,7 +365,7 @@ async function loadTrace() {
       ${s.decision.inputs ? table([{...s.decision.inputs.summary, reserve_free: (s.decision.inputs.resources?.reserve_free || []).join(", "), incidents: (s.decision.inputs.active_incidents || []).length}]) + json(s.decision.inputs) : `<p class="muted">sin fila</p>`}
       ${json(s.decision.params, "parámetros del modelo")}</div>
     <div class="step" data-n="5"><div class="head">Recomendación <small>gold.recommendation · propuesta ${esc(t.rec.proposed)} · vence ${esc(t.rec.expires)}</small></div>
-      <p><b>${esc(action(doc.action))}</b> — ${esc(doc.reason)} · ahorro ${esc(doc.ewt_saving_s)} s/pasajero · rango #${esc(doc.rank)}</p></div>
+      <p><b>${esc(action(doc.action))}</b> — ${esc(reasonEs(doc.reason))} · ahorro ${esc(doc.ewt_saving_s)} s/pasajero · rango #${esc(doc.rank)}</p></div>
     <div class="step" data-n="6"><div class="head">Front <small>documento recommendation.schema.json v${esc(doc.schema_version)}</small></div>
       <p class="muted">Este es el documento que la consola del despachador muestra para aprobar o descartar.</p>${json(doc, "ver documento")}</div>
     <div class="step" data-n="7"><div class="head">Respuesta capturada <small>bronze.events · event_type = decision</small></div>
@@ -221,13 +374,13 @@ async function loadTrace() {
       <p>Estado resultante: ${pill(s.response.status)} ${s.response.closed ? `cerrada ${esc(s.response.closed)}` : ""}</p>
       ${s.response.instruction_status ? `<p>Ejecución en el simulador (gold.instruction_status): ${pill(s.response.instruction_status.status)} · retención ${esc(s.response.instruction_status.hold_s)} s · permanencia observada ${esc(s.response.instruction_status.observed_dwell_s)} s</p>`
         : (doc.action.type === "hold" ? `<p class="muted">Retención aprobada: aún sin fila en instruction_status (pendiente hasta que el bus pase por la parada).</p>` : `<p class="muted">Hoy el simulador solo ejecuta retenciones (hold); una acción ${esc(doc.action.type)} queda registrada como aplicada pero no se ejecuta (fases 3a–3c).</p>`)}
-    </div></div>`;
+    </div></div>`);
 }
 
 async function refresh() {
   if (busy || !$("target").value) return; busy = true;
   try {
-    const r = await fetch(`/api/flow/${encodeURIComponent($("target").value)}`);
+    const r = await fetch(`api/flow/${encodeURIComponent($("target").value)}`);
     if (!r.ok) throw new Error((await r.json()).detail || `HTTP ${r.status}`);
     D = await r.json(); $("err").textContent = "";
     $("at").textContent = `actualizado ${new Date(D.at).toLocaleTimeString()}`;
@@ -235,6 +388,265 @@ async function refresh() {
   } catch (e) { $("err").textContent = ` · ${e.message}`; }
   busy = false;
 }
+
+// ------------------------------------------------------------------ decisions
+const TRIGGER = {manual: "a mano", before_reset: "antes de reiniciar", before_teardown: "antes de borrar", stopped: "al detener", run_ended: "al terminar"};
+const OUT = {open: "abierta", applied: "aplicada", discarded: "descartada", expired: "expirada"};
+const WHY = {time: "venció el tiempo", bus_passed: "el bus pasó la parada", run_ended: "terminó la corrida"};
+const hhmmss = (iso) => iso ? new Date(iso).toISOString().slice(11, 19) : "—";
+const mmss = (s) => { s = Math.max(0, Math.round(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+let DEC = null, decAt = 0, decBusy = false;
+const outPill = (r) => `<span class="pill ${r.outcome}">${OUT[r.outcome]}${r.reason ? " · " + WHY[r.reason] : ""}</span>${r.pending_cycle ? ' <small class="muted">(se refleja en el próximo ciclo)</small>' : ""}`;
+
+async function decLoad() {
+  if (decBusy || !$("target").value) return; decBusy = true;
+  try {
+    const r = await fetch(`api/decisions/${encodeURIComponent($("target").value)}?window_min=${$("dec-window").value}`);
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || `HTTP ${r.status}`);
+    DEC = d; decAt = Date.now(); $("dec-err").textContent = "";
+    decRender();
+  } catch (e) { DEC = null; $("dec-err").textContent = e.message; ["dec-kpis", "dec-open", "dec-buckets", "dec-all", "dec-banner"].forEach((id) => $(id).innerHTML = ""); }
+  decBusy = false;
+}
+
+function decRender() {
+  const d = DEC, w = d.window;
+  $("dec-banner").innerHTML = d.run_over
+    ? `<div class="banner warn">La corrida terminó: el simulador no envía datos hace ${Math.round(d.silent_s)} s. El reloj simulado se detuvo en ${hhmmss(d.as_of_ts)}; las recomendaciones que seguían abiertas cuentan como <b>expiradas · terminó la corrida</b>.</div>`
+    : !d.can_decide ? `<div class="banner info">Stack <b>${esc($("target").value)}</b>: solo lectura. Para aprobar o descartar elige <b>pfsim</b>.</div>` : "";
+  $("dec-range").textContent = `de ${hhmmss(w.from_ts)} a ${hhmmss(w.to_ts)} (hora simulada, UTC)`;
+  const k = (label, v, sub = "") => `<div>${label}<b>${v ?? "—"}</b>${sub ? `<small class="muted">${sub}</small>` : ""}</div>`;
+  $("dec-kpis").innerHTML = [
+    k("Propuestas", w.proposed),
+    k("Aplicadas", `<span class="pos">${w.applied}</span>`),
+    k("Descartadas", w.discarded),
+    k("Expiradas", w.expired, `${w.expired_time} tiempo · ${w.expired_bus_passed} bus pasó · ${w.expired_run_ended} fin corrida`),
+    k("Abiertas ahora", w.open),
+    k("% decididas", w.decided_pct == null ? "—" : `${w.decided_pct} %`, "decididas / cerradas"),
+    k("Mediana para decidir", w.median_decide_s == null ? "—" : `${w.median_decide_s} s`, "simulados"),
+    k("Total corrida", `${d.total.decided}/${d.total.proposed}`, "decididas / propuestas"),
+  ].join("");
+  decTick();
+  const max = Math.max(1, ...d.buckets.map((b) => b.applied + b.discarded + b.expired));
+  $("dec-buckets").innerHTML = `<div class="legend muted" style="font-size:12px;margin-bottom:6px"><i style="background:var(--ok)"></i>aplicadas<i style="background:var(--tan)"></i>descartadas<i style="background:var(--bad);opacity:.55"></i>expiradas</div>`
+    + table(d.buckets.slice().reverse(), ["desde", "propuestas", "aplicadas", "descartadas", "expiradas", "cierres"], {
+      desde: (_, b) => hhmmss(b.from_ts), propuestas: (_, b) => b.proposed, aplicadas: (_, b) => b.applied, descartadas: (_, b) => b.discarded, expiradas: (_, b) => b.expired,
+      cierres: (_, b) => `<div class="stack" style="width:${Math.max(4, 160 * (b.applied + b.discarded + b.expired) / max)}px">${["a", "d", "e"].map((c, i) => { const v = [b.applied, b.discarded, b.expired][i]; return v ? `<i class="${c}" style="flex:${v}"></i>` : ""; }).join("")}</div>`});
+  const rows = d.rows.slice(0, 60);
+  $("dec-all").innerHTML = table(rows, ["propuesta", "resultado", "acción", "caso", "ahorro", "cerrada", "tardó", "decidió", "motivo"], {
+    propuesta: (_, r) => hhmmss(r.proposed_ts) + (r.stale ? ' <small class="muted">fuera del top</small>' : ""),
+    resultado: (_, r) => outPill(r),
+    acción: (_, r) => esc(`${es(r.action)} · ${r.bus_id}${r.stop_id ? " en " + r.stop_id : ""}`),
+    caso: (_, r) => esc(CASES[r.case] || r.case), ahorro: (_, r) => r.saving_s == null ? "—" : `${r.saving_s.toFixed(1)} s por pasajero`,
+    cerrada: (_, r) => hhmmss(r.close_ts), tardó: (_, r) => r.decide_s == null ? "—" : `${Math.round(r.decide_s)} s`,
+    decidió: (_, r) => esc(r.decided_by || "—"), motivo: (_, r) => `<span class="muted">${esc(reasonEs(r.reason_text)).slice(0, 110)}</span>`,
+  }) + (d.rows.length > rows.length ? `<p class="muted">Se muestran las 60 más recientes de ${d.rows.length}; el archivo guardado las tiene todas.</p>` : "");
+}
+
+// Countdown between fetches: the server gives the remaining simulated seconds at as_of; real time runs sim_per_real
+// faster. The cards are rebuilt only when the set of open recommendations changes; every second only the clock and
+// the bar move, so a click on Aprobar never lands on a button that was just replaced.
+function decLeft(r) { return Math.max(0, r.remaining_s - (Date.now() - decAt) / 1000 * (DEC.sim_per_real || 0)); }
+function decTick() {
+  if (!DEC || $("view-dec").hidden) return;
+  const open = DEC.rows.filter((r) => r.outcome === "open");
+  const rate = DEC.sim_per_real || 0;
+  const live = (r) => DEC.can_decide && !DEC.run_over && decLeft(r) > 0;
+  // Empty state: say where the run is, so a quiet start does not look frozen.
+  const simMin = Math.floor((new Date(DEC.as_of_ts) - new Date(DEC.start_ts)) / 60000);
+  const firstHint = DEC.total.proposed === 0 && !DEC.run_over
+    ? ` La corrida va en el minuto <b>${simMin}</b> simulado (hora ${hhmmss(DEC.as_of_ts)}). Sin calentamiento, las primeras suelen salir hacia el minuto 12-15; la <i>Demo completa</i> arranca con 25 min de calentamiento para que salgan desde el inicio.` : "";
+  const html = !open.length ? `<p class="muted">${DEC.run_over ? "Ninguna: la corrida terminó." : `Ninguna abierta ahora. Aparecen cuando el modelo detecta un hueco, un apelotonamiento o un bus varado.${firstHint}`}</p>`
+    : `<div class="open-recs">${open.map((r) => `<div class="rec-card" data-card="${r.rec_id}">
+        <div class="act">#${r.rank} ${esc(es(r.action))} · ${esc(r.bus_id)}${r.stop_id ? " en " + esc(r.stop_id) : ""} <span class="muted">${esc(CASES[r.case] || r.case)}</span></div>
+        <div class="muted" style="font-size:12px">${esc(reasonEs(r.reason_text)).slice(0, 160)}</div>
+        <div>Ahorro <b>${r.saving_s == null ? "—" : r.saving_s.toFixed(1)} s</b> por pasajero · propuesta ${hhmmss(r.proposed_ts)}${r.stale ? ' · <span class="muted">fuera del top</span>' : ""}</div>
+        <div class="clock"></div><div class="bar"><i></i></div>
+        <div style="display:flex;gap:8px">${live(r) ? `<button class="primary" data-rec="${r.rec_id}" data-act="apply">Aprobar</button><button data-rec="${r.rec_id}" data-act="discard">Descartar</button>` : `<span class="muted">${DEC.can_decide ? "ya no se puede decidir" : "solo lectura"}</span>`}</div>
+      </div>`).join("")}</div>`;
+  const el = $("dec-open");
+  if (el.dataset.html !== html) { el.innerHTML = html; el.dataset.html = html; }
+  for (const r of open) {
+    const card = el.querySelector(`[data-card="${r.rec_id}"]`); if (!card) continue;
+    const left = decLeft(r), ttl = (new Date(r.expires_ts) - new Date(r.proposed_ts)) / 1000, urgent = left < 30;
+    card.classList.toggle("urgent", urgent);
+    const clock = card.querySelector(".clock");
+    clock.classList.toggle("urgent", urgent);
+    clock.innerHTML = `vence en ${mmss(left)} <small class="muted">simulados${rate ? ` · ~${mmss(left / rate)} reales` : ""}</small>`;
+    card.querySelector(".bar i").style.width = `${Math.max(0, Math.min(100, 100 * left / ttl))}%`;
+    if (left <= 0) card.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+  }
+}
+
+async function decDecide(btn) {
+  btn.disabled = true;
+  try {
+    const r = await fetch(`api/decisions/${encodeURIComponent($("target").value)}/decide`, {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify({rec_id: btn.dataset.rec, action: btn.dataset.act})});
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || `HTTP ${r.status}`);
+    $("dec-last").innerHTML = `<span class="pos">${btn.dataset.act === "apply" ? "Aprobada" : "Descartada"}</span> · evento decision en bronze id ${d.bronze_id} · hora simulada ${hhmmss(d.sim_ts)}. El refresh la cierra en ≤ 5 s.`;
+  } catch (e) { $("dec-last").innerHTML = `<span class="neg">No se registró:</span> ${esc(e.message)}`; }
+  decLoad();
+}
+
+$("dec-open").addEventListener("click", (ev) => { const b = ev.target.closest("button[data-rec]"); if (b) decDecide(b); });
+$("dec-window").onchange = decLoad;
+$("res-save").onclick = async () => {
+  $("res-save-msg").textContent = "guardando…";
+  const r = await fetch(`api/decisions/${encodeURIComponent($("target").value)}/save`, {method: "POST"});
+  const d = await r.json();
+  $("res-save-msg").innerHTML = r.ok ? `<span class="pos">Guardada</span> <code>${esc(d.run_key)}</code>` : `<span class="neg">${esc(d.detail)}</span>`;
+  resRuns();
+};
+setInterval(decTick, 1000);
+setInterval(() => { if ($("auto").checked && !$("view-dec").hidden) decLoad(); }, 3000);
+
+// ------------------------------------------------------------------ results
+const VERDICT = {better: "mejoró", worse: "empeoró", same: "igual", measuring: "midiendo…", ended: "sin medir: terminó la corrida", no_data: "sin datos"};
+const GROUP = {applied: "Aplicadas", not_applied: "No aplicadas (descartadas + expiradas)"};
+const MARK = {applied: "var(--ok)", discarded: "var(--tan)", expired: "var(--gray)"};
+const sec = (v) => v == null ? "—" : `${Math.round(v)} s`;
+const signed = (v) => v == null ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(1)} s`;
+let RES = null;
+
+// One-axis line chart in SVG with a crosshair tooltip. series: [{name, color, dash, key}], rows: [{t, ...}].
+function lineChart(el, rows, series, opts = {}) {
+  const W = 960, H = opts.h || 220, L = 44, R = 12, T = 10, B = 24;
+  const pts = rows.filter((r) => series.some((s) => r[s.key] != null));
+  if (pts.length < 2) { el.innerHTML = `<p class="muted">Todavía no hay suficientes datos.</p>`; return; }
+  const t0 = +new Date(pts[0].t), t1 = +new Date(pts[pts.length - 1].t);
+  const vals = pts.flatMap((r) => series.map((s) => r[s.key]).filter((v) => v != null));
+  let y0 = Math.min(opts.min ?? Infinity, ...vals), y1 = Math.max(...vals);
+  if (y1 === y0) y1 = y0 + 1; const pad = (y1 - y0) * 0.08; y1 += pad; if (opts.min == null) y0 -= pad;
+  const x = (t) => L + (W - L - R) * ((+new Date(t)) - t0) / Math.max(1, t1 - t0);
+  const y = (v) => T + (H - T - B) * (1 - (v - y0) / (y1 - y0));
+  const ticks = 4, grid = Array.from({length: ticks + 1}, (_, i) => y0 + (y1 - y0) * i / ticks);
+  const span = t1 - t0, step = [5, 10, 15, 30, 60, 120, 240].map((m) => m * 60000).find((st) => span / st <= 6) || 3600000 * 6;
+  const xt = []; for (let t = Math.ceil(t0 / step) * step; t <= t1; t += step) xt.push(t);
+  const path = (s) => { let d = "", on = false; for (const r of pts) { const v = r[s.key]; if (v == null) { on = false; continue; } d += `${on ? "L" : "M"}${x(r.t).toFixed(1)},${y(v).toFixed(1)}`; on = true; } return d; };
+  const marks = (opts.markers || []).filter((m) => +new Date(m.t) >= t0 && +new Date(m.t) <= t1);
+  const sig = `${pts.length}|${pts[pts.length - 1].t}|${marks.length}`;
+  if (el.dataset.sig === sig) return;  // same data: keep the chart (and the hover) as it is
+  el.dataset.sig = sig;
+  el.innerHTML = `<div class="legend">${series.map((s) => `<i style="background:${s.color}"></i>${esc(s.name)}`).join("")}${marks.length ? `<i style="background:var(--ok)"></i>aplicada<i style="background:var(--tan)"></i>descartada<i style="background:var(--gray)"></i>expirada` : ""}</div>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opts.label || "")}">
+      ${grid.map((g) => `<line x1="${L}" x2="${W - R}" y1="${y(g)}" y2="${y(g)}" stroke="var(--line)"/><text x="${L - 6}" y="${y(g) + 3}" text-anchor="end">${opts.fmt ? opts.fmt(g) : Math.round(g)}</text>`).join("")}
+      ${xt.map((t) => `<text x="${x(t)}" y="${H - 6}" text-anchor="middle">${new Date(t).toISOString().slice(11, 16)}</text>`).join("")}
+      ${marks.map((m) => `<line x1="${x(m.t)}" x2="${x(m.t)}" y1="${T}" y2="${H - B}" stroke="${MARK[m.outcome]}" stroke-width="2" stroke-dasharray="${m.outcome === "applied" ? "" : "3 3"}"/>`).join("")}
+      ${series.map((s) => `<path d="${path(s)}" fill="none" stroke="${s.color}" stroke-width="2" ${s.dash ? `stroke-dasharray="${s.dash}"` : ""} stroke-linejoin="round"/>`).join("")}
+      <line class="xh" y1="${T}" y2="${H - B}" stroke="var(--muted)" stroke-width="1" style="display:none"/>
+      <rect x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}" fill="transparent"/>
+    </svg><div class="tip"></div>`;
+  const svg = el.querySelector("svg"), xh = el.querySelector(".xh"), tip = el.querySelector(".tip");
+  svg.onmousemove = (ev) => {
+    const box = svg.getBoundingClientRect(), px = (ev.clientX - box.left) * W / box.width;
+    let best = pts[0]; for (const r of pts) if (Math.abs(x(r.t) - px) < Math.abs(x(best.t) - px)) best = r;
+    xh.setAttribute("x1", x(best.t)); xh.setAttribute("x2", x(best.t)); xh.style.display = "";
+    const near = marks.filter((m) => Math.abs(x(m.t) - px) < 8);
+    tip.innerHTML = `<b>${new Date(best.t).toISOString().slice(11, 19)}</b><br>${series.map((s) => `${esc(s.name)}: <b>${best[s.key] == null ? "—" : (opts.fmt ? opts.fmt(best[s.key]) : best[s.key])}</b>`).join("<br>")}${near.map((m) => `<br><span style="color:${MARK[m.outcome]}">●</span> ${esc(m.label)}`).join("")}`;
+    tip.style.display = "block";
+    const left = (x(best.t) / W) * box.width; tip.style.left = `${Math.min(left + 12, box.width - tip.offsetWidth - 4)}px`; tip.style.top = "24px";
+  };
+  svg.onmouseleave = () => { xh.style.display = "none"; tip.style.display = "none"; };
+}
+
+async function resLoad() {
+  if (!$("target").value) return;
+  try {
+    const r = await fetch(`api/outcomes/${encodeURIComponent($("target").value)}`);
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || `HTTP ${r.status}`);
+    RES = d; $("res-err").textContent = ""; resRender();
+  } catch (e) { $("res-err").textContent = e.message; }
+}
+
+function resRender() {
+  const d = RES, n = d.now || {}, dec = d.decisions, b = d.boarding;
+  const tile = (k, v, sub = "") => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`;
+  const ids = Array.isArray(n.reserve_ids) ? n.reserve_ids.join(", ") : "";
+  patch($("res-tiles"), [
+    tile("Buses en servicio", n.in_service ?? "—", `máx. ${d.run.max_in_service ?? "—"} en la corrida`),
+    tile("Reserva libre", n.reserve_free ?? "—", ids || "ninguna disponible"),
+    tile("Conductores libres", n.drivers_free ?? "—"),
+    tile("Apelotonados · huecos", `${n.bunched ?? "—"} · ${n.gaps ?? "—"}`, `${d.run.snapshots_bunched_pct ?? "—"} % del tiempo con apelotonamiento`),
+    tile("Espera media", sec(n.computable ? n.mean_wait_s : null), `programada ${sec(n.scheduled_wait_s)} · promedio corrida ${sec(d.run.avg_wait_s)}`),
+    tile("EWT", n.computable ? signed(n.ewt_s) : "—", `promedio corrida ${signed(d.run.avg_ewt_s)}`),
+    tile("P(abordar ≤ 10 min)", b.p10 == null ? "—" : `${b.p10} %`, `≤5: ${b.p5 ?? "—"} % · ≤15: ${b.p15 ?? "—"} % · ${b.riders} pasajeros`),
+    tile("Decisiones", `${dec.applied} / ${dec.proposed}`, `aplicadas / propuestas · ${dec.discarded} descartadas · ${dec.expired} expiradas`),
+  ].join(""));
+  const rows = d.series.map((p) => ({t: p.as_of_ts, wait: p.computable ? p.mean_wait_s : null, sched: p.computable ? p.scheduled_wait_s : null, inserv: p.in_service, bunched: p.bunched}));
+  const markers = d.effects.map((e) => ({t: e.close_ts, outcome: e.outcome, label: `${OUT[e.outcome]} · ${es(e.action)} ${e.bus_id || ""}`}));
+  lineChart($("res-wait"), rows, [{name: "Espera media (s)", color: "var(--accent)", key: "wait"}, {name: "Programada (s)", color: "var(--gray)", dash: "5 4", key: "sched"}], {markers, label: "Espera media y programada", fmt: (v) => `${Math.round(v)} s`});
+  lineChart($("res-fleet"), rows, [{name: "Buses en servicio", color: "var(--accent)", key: "inserv"}, {name: "Apelotonados", color: "var(--bad)", key: "bunched"}], {markers, min: 0, h: 160, label: "Flota"});
+  patch($("res-groups"), table(d.groups, ["grupo", "cerradas", "medidas", "mejoró", "igual", "empeoró", "cambio mediano"], {
+    grupo: (_, g) => `<b>${GROUP[g.group]}</b>`, cerradas: (_, g) => g.n, medidas: (_, g) => g.measured,
+    mejoró: (_, g) => g.better, igual: (_, g) => g.same, empeoró: (_, g) => g.worse,
+    "cambio mediano": (_, g) => g.median_delta_wait_s == null ? "—" : `<span class="${g.median_delta_wait_s < 0 ? "pos" : g.median_delta_wait_s > 0 ? "neg" : ""}">${signed(g.median_delta_wait_s)}</span> de espera`}));
+  patch($("res-effects"), table(d.effects.slice().reverse(), ["cerrada", "decisión", "acción", "ahorro previsto", "espera antes", "espera después", "cambio", "resultado"], {
+    cerrada: (_, e) => hhmmss(e.close_ts), decisión: (_, e) => `<span class="pill ${e.outcome}">${OUT[e.outcome]}${e.reason ? " · " + WHY[e.reason] : ""}</span>`,
+    acción: (_, e) => esc(`${es(e.action)} · ${e.bus_id || ""}${e.stop_id ? " en " + e.stop_id : ""}`),
+    "ahorro previsto": (_, e) => e.predicted_saving_s == null ? "—" : `${e.predicted_saving_s.toFixed(1)} s por pasajero`,
+    "espera antes": (_, e) => sec(e.wait_before_s), "espera después": (_, e) => e.verdict === "measuring" ? `<span class="muted">a las ${hhmmss(e.after_ts)}</span>` : sec(e.wait_after_s),
+    cambio: (_, e) => e.delta_wait_s == null ? "—" : `<span class="${e.delta_wait_s < 0 ? "pos" : e.delta_wait_s > 0 ? "neg" : ""}">${signed(e.delta_wait_s)}</span>`,
+    resultado: (_, e) => `<span class="pill ${e.verdict}">${VERDICT[e.verdict]}</span>`}));
+  patch($("res-acc"), table(d.accuracy || [], ["anticipación", "comparadas", "error medio", "mediana", "peor", "sesgo"], {
+    anticipación: (_, a) => esc(a.lead_bucket), comparadas: (_, a) => a.n_compared,
+    "error medio": (_, a) => sec(a.mae_s), mediana: (_, a) => sec(a.median_s), peor: (_, a) => sec(a.worst_s),
+    sesgo: (_, a) => a.mean_error_s == null ? "—" : signed(a.mean_error_s)}));
+  patch($("res-board"), table(b.per_stop, ["parada", "pasajeros", "≤ 5 min", "≤ 10 min", "≤ 15 min"], {
+    parada: (_, r) => esc(r.stop_id), pasajeros: (_, r) => r.riders,
+    "≤ 5 min": (_, r) => r.p5 == null ? "—" : `${r.p5} %`, "≤ 10 min": (_, r) => r.p10 == null ? "—" : `${r.p10} %`, "≤ 15 min": (_, r) => r.p15 == null ? "—" : `${r.p15} %`}));
+}
+
+async function resRuns() {
+  const all = await (await fetch("api/runs")).json();
+  const runs = all.filter((r) => r.outcome);
+  const opts = runs.map((r) => `<option value="${r.run_key}">${esc(r.run_key)} · ${r.total?.applied ?? 0} aplicadas</option>`).join("");
+  const keep = [$("ab-a").value, $("ab-b").value];
+  $("ab-a").innerHTML = opts; $("ab-b").innerHTML = opts;
+  // Default: A = most decisions applied, B = fewest (ideally the same demo with none).
+  const byApplied = runs.slice().sort((x, y) => (y.total?.applied ?? 0) - (x.total?.applied ?? 0));
+  const has = (k) => k && runs.some((r) => r.run_key === k);
+  $("ab-a").value = has(keep[0]) ? keep[0] : byApplied[0]?.run_key || "";
+  $("ab-b").value = has(keep[1]) ? keep[1] : byApplied[byApplied.length - 1]?.run_key || "";
+  abRender();
+  patch($("res-runs"), all.length ? table(all.slice(0, 12), ["corrida", "aplicadas", "espera media", "EWT medio", "P(≤10 min)", "% tiempo apelotonado", "guardada", "archivos"], {
+    corrida: (_, r) => `<code>${esc(r.run_key)}</code>`, aplicadas: (_, r) => `${r.total?.applied ?? "—"} / ${r.total?.proposed ?? "—"}`,
+    "espera media": (_, r) => sec(r.outcome?.avg_wait_s), "EWT medio": (_, r) => signed(r.outcome?.avg_ewt_s),
+    "P(≤10 min)": (_, r) => r.outcome?.p_board_10 == null ? "—" : `${r.outcome.p_board_10} %`,
+    "% tiempo apelotonado": (_, r) => r.outcome?.snapshots_bunched_pct == null ? "—" : `${r.outcome.snapshots_bunched_pct} %`,
+    guardada: (_, r) => `${r.archived_at ? new Date(r.archived_at).toLocaleString("es-CO") : "—"} <small class="muted">${esc(TRIGGER[r.trigger] || r.trigger || "")}</small>`,
+    archivos: (_, r) => `<a href="api/runs/${r.run_key}/recommendations.csv">CSV</a> · <a href="api/runs/${r.run_key}/report.json">JSON</a>`})
+    : `<p class="muted">Aún no hay corridas guardadas.</p>`);
+}
+// A/B: overlay the mean wait of two saved runs, minute by minute (simulated clock).
+async function abRender() {
+  const a = $("ab-a").value, b = $("ab-b").value;
+  if (!a || !b || a === b) { $("ab-chart").innerHTML = `<p class="muted">Elige dos corridas distintas.</p>`; $("ab-sum").innerHTML = ""; return; }
+  const [A, B] = await Promise.all([a, b].map(async (k) => (await fetch(`api/runs/${k}/series`)).json()));
+  const rows = new Map();
+  for (const m of A.minutes) rows.set(m.t, {t: m.t, a: m.wait});
+  for (const m of B.minutes) rows.set(m.t, {...(rows.get(m.t) || {t: m.t}), b: m.wait});
+  const merged = [...rows.values()].sort((x, y) => x.t.localeCompare(y.t));
+  const diff = (x, y) => x == null || y == null ? "—" : `<span class="${x - y < 0 ? "pos" : x - y > 0 ? "neg" : ""}">${signed(x - y)}</span>`;
+  const ra = A.run || {}, rb = B.run || {};
+  const pp = (x, y) => x == null || y == null ? "—" : `${x - y > 0 ? "+" : ""}${(x - y).toFixed(1)} pts`;
+  $("ab-sum").innerHTML = table([
+    {m: "Decisiones aplicadas", a: A.total?.applied, b: B.total?.applied, d: ""},
+    {m: "Espera media de la corrida", a: sec(ra.avg_wait_s), b: sec(rb.avg_wait_s), d: diff(ra.avg_wait_s, rb.avg_wait_s)},
+    {m: "EWT medio", a: signed(ra.avg_ewt_s), b: signed(rb.avg_ewt_s), d: diff(ra.avg_ewt_s, rb.avg_ewt_s)},
+    {m: "P(abordar ≤ 10 min)", a: ra.p_board_10 == null ? "—" : `${ra.p_board_10} %`, b: rb.p_board_10 == null ? "—" : `${rb.p_board_10} %`, d: pp(ra.p_board_10, rb.p_board_10)},
+    {m: "% del tiempo apelotonado", a: `${ra.snapshots_bunched_pct ?? "—"} %`, b: `${rb.snapshots_bunched_pct ?? "—"} %`, d: pp(ra.snapshots_bunched_pct, rb.snapshots_bunched_pct)},
+  ], ["m", "a", "b", "d"], {m: (v) => v, a: (v) => v ?? "—", b: (v) => v ?? "—", d: (v) => v}).replace("<th>m</th><th>a</th><th>b</th><th>d</th>",
+    `<th></th><th>A · ${A.total?.applied ?? 0} aplicadas</th><th>B · ${B.total?.applied ?? 0} aplicadas</th><th>Diferencia A − B</th>`)
+    + ((B.total?.applied ?? 0) > 0 ? `<p class="muted" style="font-size:12px">Ojo: B también tiene decisiones aplicadas, así que esta comparación no es un A/B limpio.</p>` : "");
+  delete $("ab-chart").dataset.sig;
+  lineChart($("ab-chart"), merged, [{name: `Espera A (s)`, color: "var(--accent)", key: "a"}, {name: `Espera B (s)`, color: "var(--gray)", dash: "5 4", key: "b"}],
+    {markers: A.marks.map((m) => ({...m, label: OUT[m.outcome]})), label: "Espera media de las corridas A y B", fmt: (v) => `${Math.round(v)} s`});
+}
+$("ab-a").onchange = abRender; $("ab-b").onchange = abRender;
+setInterval(() => { if ($("auto").checked && !$("view-res").hidden) resLoad(); }, 5000);
 
 // ------------------------------------------------------------------ what-if
 const CASES = {C1: "C1 · apelotonamiento", C2: "C2 · hueco o cola alta", C5: "C5 · bus varado"};
@@ -246,7 +658,7 @@ let WI = null;
 
 async function wiLoad() {
   $("wi-err").textContent = ""; $("wi-info").textContent = "cargando…";
-  const r = await fetch(`/api/whatif/${encodeURIComponent($("target").value)}/base`);
+  const r = await fetch(`api/whatif/${encodeURIComponent($("target").value)}/base`);
   const d = await r.json();
   if (!r.ok) { $("wi-err").textContent = d.detail; $("wi-info").textContent = ""; return; }
   WI = d.inputs;
@@ -262,7 +674,7 @@ async function wiLoad() {
       : b.kind === "reserve" ? `<label><input type="checkbox" data-b="${b.bus_id}" data-f="available" checked> disponible</label>` : "—",
   });
   $("wi-ctrl").innerHTML = `
-    <label>Demanda × <input type="number" id="wi-demand" value="1" min="0" max="10" step="0.25"></label>
+    <label>Demanda × (sobre la foto actual) <input type="number" id="wi-demand" value="1" min="0" max="10" step="0.25"></label>
     <label>Conductores libres <input type="number" id="wi-drivers" value="${WI.drivers_free}" min="0" max="20"></label>
     <label>Retenciones posibles (s) <input id="wi-holds" value="${WI.hold_options_s.join(", ")}" style="width:110px;font:inherit;padding:3px 6px;border:1px solid var(--line);border-radius:5px"></label>
     ${Object.entries(PARAMS).map(([k, l]) => `<label>${l} <input type="number" data-p="${k}" value="${WI.params[k]}"></label>`).join("")}`;
@@ -312,7 +724,7 @@ function wiCorridor() {
 async function wiRun() {
   $("wi-err").textContent = ""; $("wi-run").disabled = true;
   try {
-    const r = await fetch(`/api/whatif/${encodeURIComponent($("target").value)}/run`, {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(wiScenario())});
+    const r = await fetch(`api/whatif/${encodeURIComponent($("target").value)}/run`, {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(wiScenario())});
     const d = await r.json();
     if (!r.ok) throw new Error(typeof d.detail === "string" ? d.detail : JSON.stringify(d.detail));
     wiRender(d, false);
@@ -338,25 +750,40 @@ function wiRender(d, initial) {
 }
 
 function showTab(t) {
-  $("view-flow").hidden = t !== "flow"; $("view-whatif").hidden = t !== "whatif";
-  $("tab-flow").classList.toggle("on", t === "flow"); $("tab-whatif").classList.toggle("on", t === "whatif");
+  for (const v of ["flow", "whatif", "dec", "res"]) { $(`view-${v}`).hidden = t !== v; $(`tab-${v}`).classList.toggle("on", t === v); }
   try { localStorage.setItem("tab", t); } catch {}
+  if (location.hash.slice(1) !== t) history.replaceState(null, "", `#${t}`);
   if (t === "whatif" && !WI) wiLoad();
+  if (t === "dec") decLoad();
+  if (t === "res") { resLoad(); resRuns(); }
 }
 $("tab-flow").onclick = () => showTab("flow");
 $("tab-whatif").onclick = () => showTab("whatif");
+$("tab-dec").onclick = () => showTab("dec");
+$("tab-res").onclick = () => showTab("res");
 $("wi-run").onclick = wiRun;
 $("wi-reset").onclick = () => { WI = null; wiLoad(); };
 
 (async () => {
-  const targets = await (await fetch("/api/targets")).json();
+  const targets = await (await fetch("api/targets")).json();
   $("target").innerHTML = targets.map((t) => `<option>${esc(t)}</option>`).join("");
-  $("target").onchange = () => { $("rec").value = ""; $("trace").innerHTML = ""; WI = null; if (!$("view-whatif").hidden) wiLoad(); refresh(); };
+  $("target").onchange = () => { $("rec").value = ""; $("trace").innerHTML = ""; WI = null; if (!$("view-whatif").hidden) wiLoad(); if (!$("view-dec").hidden) decLoad(); if (!$("view-res").hidden) resLoad(); refresh(); };
+  // Inside the sim console (8090, mounted at /lab/) the first tab "Simulación" goes back to the run controls.
+  if (location.pathname.startsWith("/lab")) $("nav-sim").hidden = false;
+  const fromHash = location.hash.slice(1);
   let tab = "flow"; try { tab = localStorage.getItem("tab") || "flow"; } catch {}
+  if (["flow", "whatif", "dec", "res"].includes(fromHash)) tab = fromHash;
   showTab(tab);
+  window.addEventListener("hashchange", () => { const h = location.hash.slice(1); if (["flow", "whatif", "dec", "res"].includes(h)) showTab(h); });
   $("rec").onchange = loadTrace;
   refresh();
   setInterval(() => { if ($("auto").checked) refresh(); }, 5000);
+  // Background tabs get their timers throttled: catch up as soon as the tab is visible again.
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden || !$("auto").checked) return;
+    refresh(); if (!$("view-dec").hidden) decLoad(); if (!$("view-res").hidden) resLoad();
+  });
+  $("auto").onchange = () => { if ($("auto").checked) { refresh(); if (!$("view-dec").hidden) decLoad(); } };
 })();
 </script>
 </body>

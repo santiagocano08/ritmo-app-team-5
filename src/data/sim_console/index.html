@@ -5,22 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Consola de simulación</title>
 <style>
-:root {
+:root { color-scheme: light;
   --bg: #f6f7f9; --panel: #ffffff; --text: #1b1f24; --muted: #5d6673; --line: #dde1e6;
   --accent: #2457c5; --accent-text: #ffffff; --ok: #1f7a46; --warn: #a15c00; --bad: #b42318;
   --chip: #eef1f5; --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #111418; --panel: #191d23; --text: #e6e9ee; --muted: #9aa4b2; --line: #2b313a;
-    --accent: #6f9cff; --accent-text: #0b1020; --ok: #4cc38a; --warn: #f0a640; --bad: #ff7b72; --chip: #232932;
-  }
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
 header { padding: 16px; border-bottom: 1px solid var(--line); background: var(--panel); display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; }
 header h1 { font-size: 18px; margin: 0; }
 header .sub { color: var(--muted); }
+nav.tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
+nav.tabs a { text-decoration: none; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; background: var(--chip); }
+nav.tabs a.on { background: var(--text); color: var(--panel); border-color: var(--text); }
+.go { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.go .big { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
 main { padding: 16px; display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); max-width: 1400px; margin: 0 auto; }
 section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
 section.wide { grid-column: 1 / -1; }
@@ -71,6 +70,10 @@ a { color: var(--accent); }
 <header>
   <h1>Consola de simulación · PulsoFlota</h1>
   <span class="sub">Banco de pruebas de datos (proyecto <span class="mono">pfsim</span>). No es la consola del despachador.</span>
+  <nav class="tabs">
+    <a href="./" class="on">Simulación</a><a href="lab/#flow">Flujo</a><a href="lab/#whatif">Modelo (¿qué pasa si…?)</a>
+    <a href="lab/#dec">Decisiones</a><a href="lab/#res">Resultados</a>
+  </nav>
 </header>
 <main>
   <section class="wide">
@@ -92,7 +95,7 @@ a { color: var(--accent); }
       <label>Semilla <input name="seed" type="number" min="0"></label>
       <label>Duración (s simulados) <input name="duration_s" type="number" step="300" min="300" max="14400"></label>
       <label>Ritmo (s reales por paso de 5 s) <input name="pace_s" type="number" step="0.5" min="0" max="5"></label>
-      <div></div>
+      <label>Calentamiento (s simulados sin pausa) <input name="warmup_s" type="number" step="300" min="0" max="7200"></label>
       <label class="check"><input name="holds" type="checkbox"> Ejecutar retenciones</label>
       <label class="check"><input name="mpc" type="checkbox"> Modelo de decisión</label>
       <div class="buttons">
@@ -106,7 +109,7 @@ a { color: var(--accent); }
     </div>
     <p id="msg" class="note"></p>
     <p id="last" class="note"></p>
-    <p class="note">Con ritmo 1 la simulación va 5× más rápido: una recomendación vigente 2 min simulados dura ~24 s reales. Para decidir con calma en vivo, usa ritmo 5 (tiempo real).</p>
+    <p class="note">Ritmo = segundos reales por paso de 5 s simulados. Ritmo 1 va 5× más rápido (una recomendación de 2 min simulados dura ~24 s reales); ritmo 2.5 va 2× (la <i>Demo completa</i>, 30 min, ~1 min para decidir); ritmo 5 es tiempo real.</p>
   </section>
 
   <section>
@@ -116,27 +119,6 @@ a { color: var(--accent); }
     <p class="note" id="cfg"></p>
   </section>
 
-  <section class="wide">
-    <h2>Recomendaciones (gold.recommendation)</h2>
-    <div class="table-wrap"><table id="recs"></table></div>
-    <p class="note">Aprobar o descartar inserta un evento <span class="mono">decision</span> en <span class="mono">bronze.events</span> (contrato §4.2), validado contra el esquema. El siguiente ciclo (≤ 5 s) lo refleja.</p>
-  </section>
-
-  <section class="wide">
-    <h2>Corredor ahora (gold.corridor_now)</h2>
-    <div class="table-wrap"><table id="buses"></table></div>
-  </section>
-
-  <section>
-    <h2>Retenciones ejecutadas (gold.instruction_status)</h2>
-    <div class="table-wrap"><table id="holds"></table></div>
-  </section>
-
-  <section>
-    <h2>Error de la proyección (gold.v_projection_accuracy)</h2>
-    <div class="table-wrap"><table id="acc"></table></div>
-    <p class="note">Error = salida real − proyectada. Excluye filas afectadas por una decisión aplicada.</p>
-  </section>
 </main>
 <script>
 const $ = (id) => document.getElementById(id);
@@ -154,52 +136,63 @@ function table(el, head, rows, empty) {
 
 // Demo presets: parameters rehearsed on 2026-11-22. Pace 1 = 5x faster than real time.
 const PRESETS = [
-  { id: "full", title: "Demo completa (una sola corrida, 12 min)",
-    what: "Incidentes en los primeros 7 min, luego operación normal: ~1 min B-101 deja de reportar («Estimated»); ~3:30 recomendaciones para aprobar, ~4:50 apelotonamiento B-102/B-103; ~6:40 B-104 se vara 4 min simulados.",
-    cfg: { scenario: "demo_full", demand_scale: 3, seed: 42, duration_s: 3600, pace_s: 1, holds: true, mpc: true } },
+  { id: "full", title: "Demo completa (una sola corrida, 30 min)",
+    what: "Arranca con el corredor lleno (25 min simulados de calentamiento en segundos): B-103 ya viene retrasado y B-104 se le pega, así que hay recomendaciones para decidir desde el primer minuto. Luego 60 min simulados a 2× (30 min reales, ~1 min para cada decisión): ~0:30 B-101 deja de reportar; ~5 min B-104 se vara 4 min simulados; después operación normal. 7 buses en servicio y 4 de reserva.",
+    cfg: { scenario: "demo_live", demand_scale: 5, seed: 42, duration_s: 5100, warmup_s: 1500, pace_s: 2.5, holds: true, mpc: true } },
   { id: "bunching", title: "Apelotonamiento y recomendación",
-    what: "B-102 se retrasa 400 s. A los ~4 min reales la consola marca B-102 «Gap» y B-103 «Bunched»; aquí aparece una recomendación para aprobar (dura ~24 s, vuelven a salir).",
-    cfg: { scenario: "c1_bunching", demand_scale: 3, seed: 42, duration_s: 2700, pace_s: 1, holds: true, mpc: true } },
+    what: "B-102 se retrasa 310 s. A los ~3:30 min reales la consola marca B-102 «Gap» y B-103 «Bunched»; aparece una recomendación para aprobar en Decisiones (dura ~24 s, vuelven a salir).",
+    cfg: { scenario: "c1_bunching", demand_scale: 5, seed: 42, duration_s: 2700, pace_s: 1, holds: true, mpc: true } },
   { id: "breakdown", title: "Bus varado",
-    what: "B-102 se vara 4 min hacia las 17:20 simuladas (~4 min reales). La consola lo marca como varado y los de atrás se acercan.",
-    cfg: { scenario: "c5_breakdown", demand_scale: 3, seed: 42, duration_s: 2700, pace_s: 1, holds: true, mpc: true } },
+    what: "B-102 se vara 4 min hacia las 17:18 simuladas (~3:30 min reales). La consola lo marca como varado y los de atrás se acercan.",
+    cfg: { scenario: "c5_breakdown", demand_scale: 5, seed: 42, duration_s: 2700, pace_s: 1, holds: true, mpc: true } },
   { id: "normal", title: "Operación normal",
-    what: "Sin incidentes: los buses salen cada 10 min simulados y se ve la flota sana. Útil para empezar la demo.",
-    cfg: { scenario: "none", demand_scale: 3, seed: 42, duration_s: 2700, pace_s: 1, holds: true, mpc: true } },
+    what: "Sin incidentes: los buses salen cada 7 min simulados y se ve la flota sana. Útil para empezar la demo.",
+    cfg: { scenario: "none", demand_scale: 5, seed: 42, duration_s: 2700, pace_s: 1, holds: true, mpc: true } },
 ];
 
 // Event calendar per scenario, in simulated seconds after the run start (any start hour). `at` is when the
 // incident is injected (scenario file); the "visible" entries are when the dispatcher console
-// shows it, measured in the 2026-11-22 rehearsals. Countdown in real time = Δsim × pace / 5.
+// shows it. Measured in the 2026-11-22 rehearsals with 5 buses every 600 s and shifted to the 7 + 4 fleet every
+// 420 s (issue #42: bus N starts (N-1) x 180 s earlier); re-check them in a rehearsal. Real time = Δsim × pace / 5.
 const SCHEDULES = {
+  // demo_live: 25 simulated minutes of warm-up are written at once; the paced demo starts at 1500 s.
+  demo_live: [
+    { at: 1340, label: "B-103 se retrasa 310 s en P-887 (durante el calentamiento)" },
+    { at: 1500, label: "Empieza la demo: corredor lleno, B-104 pegado a B-103; recomendaciones para decidir" },
+    { at: 1560, label: "B-101 deja de reportar" },
+    { at: 1680, label: "B-101 aparece «Estimated»" },
+    { at: 1860, label: "B-101 vuelve a reportar (Live)" },
+    { at: 2100, label: "B-104 se vara (4 min simulados)" },
+    { at: 2340, label: "B-104 vuelve a circular; operación normal" },
+  ],
   demo_full: [
     { at: 250, label: "B-101 deja de reportar" },
     { at: 370, label: "B-101 aparece «Estimated» en la consola" },
+    { at: 535, label: "B-102 se retrasa 310 s en P-884" },
     { at: 550, label: "B-101 vuelve a reportar (Live)" },
-    { at: 700, label: "B-102 se retrasa 400 s en P-884" },
-    { at: 1065, label: "Primeras recomendaciones para aprobar" },
-    { at: 1200, label: "B-102 aparece con hueco («Gap»)" },
-    { at: 1435, label: "Apelotonamiento: B-103 «Bunched»" },
-    { at: 1980, label: "B-104 se vara (4 min simulados)" },
-    { at: 2220, label: "B-104 vuelve a circular; operación normal" },
+    { at: 885, label: "Primeras recomendaciones para aprobar" },
+    { at: 1020, label: "B-102 aparece con hueco («Gap»)" },
+    { at: 1255, label: "Apelotonamiento: B-103 «Bunched»" },
+    { at: 1440, label: "B-104 se vara (4 min simulados)" },
+    { at: 1680, label: "B-104 vuelve a circular; operación normal" },
   ],
   phase1_live: [
     { at: 250, label: "B-101 deja de reportar" },
-    { at: 700, label: "B-102 se retrasa 400 s en P-884" },
-    { at: 1065, label: "Primeras recomendaciones para aprobar" },
-    { at: 1200, label: "B-102 aparece con hueco («Gap»)" },
-    { at: 1435, label: "Apelotonamiento: B-103 «Bunched»" },
-    { at: 2400, label: "B-104 se vara (4 min simulados)" },
+    { at: 535, label: "B-102 se retrasa 310 s en P-884" },
+    { at: 885, label: "Primeras recomendaciones para aprobar" },
+    { at: 1020, label: "B-102 aparece con hueco («Gap»)" },
+    { at: 1255, label: "Apelotonamiento: B-103 «Bunched»" },
+    { at: 1860, label: "B-104 se vara (4 min simulados)" },
   ],
   c1_bunching: [
-    { at: 700, label: "B-102 se retrasa 400 s en P-884" },
-    { at: 1065, label: "Primeras recomendaciones para aprobar" },
-    { at: 1200, label: "B-102 aparece con hueco («Gap»)" },
-    { at: 1435, label: "Apelotonamiento: B-103 «Bunched»" },
+    { at: 535, label: "B-102 se retrasa 310 s en P-884" },
+    { at: 885, label: "Primeras recomendaciones para aprobar" },
+    { at: 1020, label: "B-102 aparece con hueco («Gap»)" },
+    { at: 1255, label: "Apelotonamiento: B-103 «Bunched»" },
   ],
   c5_breakdown: [
-    { at: 1240, label: "B-102 se vara (4 min simulados)" },
-    { at: 1480, label: "B-102 vuelve a circular" },
+    { at: 1070, label: "B-102 se vara (4 min simulados)" },
+    { at: 1310, label: "B-102 vuelve a circular" },
   ],
 };
 // The "visible" times were measured with the 17:00 start (evening peak). The incidents keep their offsets at
@@ -301,40 +294,15 @@ async function refresh() {
   $("kpis").innerHTML = !db ? kpi("Base de datos", "sin conexión", "muted") : [
     kpi("Hora simulada", snap ? t(snap.as_of_ts) : "—"),
     kpi("Edad del dato (s)", fmt(age), age === null ? "" : age > 15 ? "bad" : "ok"),
-    kpi("Fuente", src ? esc(src.status) : "—", src && src.status === "live" ? "ok" : "warn"),
-    kpi("Buses en servicio", sum ? sum.buses_in_service : "—"),
-    kpi("Apelotonados", sum ? sum.n_bunched : "—", sum && sum.n_bunched ? "warn" : ""),
-    kpi("Huecos", sum ? sum.n_gaps : "—", sum && sum.n_gaps ? "warn" : ""),
-    kpi("EWT (s)", svc && svc.computable ? fmt(svc.ewt_s) : "—"),
-    kpi("Eventos bronze", db.bronze_events),
+    kpi("Fuente", src ? esc({ live: "en vivo", stale: "desactualizada", down: "caída" }[src.status] || src.status) : "—", src && src.status === "live" ? "ok" : "warn"),
+    kpi("Eventos en bronce", db.bronze_events),
   ].join("");
-
-  const recs = (db && db.recommendations) || [];
-  table($("recs"), ["Decidir", "#", "Estado", "Acción", "Bus", "Parada", "Ahorro (s/pasajero)", "Propuesta", "Vence", "Motivo"], recs.map((r) => {
-    const live = r.status === "proposed" && !r.stale;
-    const st = r.stale ? `${r.status} · desactualizada` : r.status;
-    const cls = { proposed: "warn", applied: "ok", discarded: "muted", expired: "muted" }[r.status] || "";
-    const btns = live ? `<button class="primary" data-rec="${r.rec_id}" data-act="apply">Aprobar</button> <button data-rec="${r.rec_id}" data-act="discard">Descartar</button>` : "";
-    return `<tr><td>${btns || '<span class="muted">—</span>'}</td><td>${r.rank}</td><td><span class="pill ${cls}">${esc(st)}</span></td><td>${esc(r.action)}</td><td>${esc(r.bus_id)}</td><td>${esc(r.stop_id || "—")}</td><td>${fmt(r.saving_s, 1)}</td><td>${t(r.proposed_ts)}</td><td>${t(r.expires_ts)}</td><td class="reason">${esc(r.reason)}</td></tr>`;
-  }), "Sin recomendaciones todavía.");
-
-  const buses = (db && db.corridor && db.corridor.buses) || [];
-  table($("buses"), ["Bus", "Estado", "Intervalo adelante (s)", "Plan (s)", "Distancia (m)", "Próxima parada", "Dato"], buses.map((b) => {
-    const cls = { bunched: "warn", gap: "warn", broken_down: "bad" }[b.bus_state] || "";
-    return `<tr><td>${esc(b.bus_id)}</td><td class="${cls}">${esc(b.bus_state)}</td><td>${fmt(b.headway_ahead_s)}</td><td>${fmt(b.headway_planned_s)}</td><td>${fmt(b.distance_along_m)}</td><td>${esc(b.next_stop_id || "—")}</td><td class="${b.data_quality === "live" ? "" : "warn"}">${esc(b.data_quality)}</td></tr>`;
-  }), "Sin buses en el último snapshot.");
-
-  table($("holds"), ["Bus", "Parada", "Retención (s)", "Parada observada (s)", "Estado"], ((db && db.holds) || []).map((h) =>
-    `<tr><td>${esc(h.bus_id)}</td><td>${esc(h.stop_id)}</td><td>${fmt(h.hold_s)}</td><td>${fmt(h.observed_dwell_s)}</td><td class="${h.status === "executed" ? "ok" : "warn"}">${esc(h.status)}</td></tr>`), "Ninguna retención aprobada todavía.");
-
-  table($("acc"), ["Anticipación", "Comparadas", "Error medio (s)", "Mediana (s)", "Peor (s)", "Sesgo (s)"], ((db && db.accuracy) || []).map((a) =>
-    `<tr><td>${esc(a.lead_bucket)}</td><td>${a.n_compared}</td><td>${fmt(a.mae_s, 1)}</td><td>${fmt(a.median_s, 1)}</td><td>${fmt(a.worst_s)}</td><td>${fmt(a.mean_error_s, 1)}</td></tr>`), "Sin datos.");
 }
 
 $("run").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const f = ev.target;
-  const body = { scenario: f.scenario.value, demand_scale: +f.demand_scale.value, seed: +f.seed.value, duration_s: +f.duration_s.value, pace_s: +f.pace_s.value, start_hour: +$("start-hour").value, holds: f.holds.checked, mpc: f.mpc.checked };
+  const body = { scenario: f.scenario.value, demand_scale: +f.demand_scale.value, seed: +f.seed.value, duration_s: +f.duration_s.value, warmup_s: +f.warmup_s.value, pace_s: +f.pace_s.value, start_hour: +$("start-hour").value, holds: f.holds.checked, mpc: f.mpc.checked };
   await startRun(body, "Corrida personalizada");
 });
 $("presets").addEventListener("click", async (ev) => {
@@ -349,13 +317,6 @@ $("btn-stop").addEventListener("click", async () => { busy = true; try { await a
 $("btn-down").addEventListener("click", async () => {
   if (!confirm("Borra el stack pfsim y sus datos. ¿Seguir?")) return;
   busy = true; try { await api("/api/teardown", {}); } catch (e) { $("last").textContent = e.message; } busy = false; refresh();
-});
-$("recs").addEventListener("click", async (ev) => {
-  const b = ev.target.closest("button[data-rec]"); if (!b) return;
-  b.disabled = true;
-  try { const r = await api("/api/decision", { rec_id: b.dataset.rec, action: b.dataset.act }); $("last").innerHTML = `<span class="ok">Decisión ${esc(b.dataset.act)} registrada</span> · bronze id ${r.bronze_id} · hora simulada ${t(r.sim_ts)}`; }
-  catch (e) { $("last").innerHTML = `<span class="bad">Decisión rechazada:</span> ${esc(e.message)}`; }
-  refresh();
 });
 init();
 </script>
