@@ -1,9 +1,15 @@
 # src/data/test_lab — data flow viewer
 
-A **read-only console that shows the data and the decisions flowing through the platform**, from
+A **console that shows the data and the decisions flowing through the platform**, from
 the simulator's raw events to the dispatcher's answer. It runs in its own container on port
-**8085**. It is a data-team harness, not product code: it starts nothing and never writes (every
-query is a `SELECT` in a read-only transaction).
+**8085**. It is a data-team harness, not product code: it starts nothing, and every query is a
+`SELECT` in a read-only transaction. The one write is approving or discarding a recommendation in
+the *Decisiones* tab, and only on the isolated `pfsim` stack (see below); the principal stack is
+never written.
+
+**Where it runs.** Normally inside the sim console, at http://127.0.0.1:8090/lab/ (one app, `pfsim` only; the
+console's *Simulación* tab sits next to these tabs). The container on 8085 below is optional, for the principal
+stack. All the page's URLs are relative, so the same `index.html` serves both.
 
 ## The seven stages (live, every 5 s)
 
@@ -20,6 +26,45 @@ query is a `SELECT` in a read-only transaction).
 Click a stage to see its rows. **Trazar una recomendación** follows one `rec_id` end to end: the
 bronze cut it was computed from, the silver visits, the snapshot and inputs it used (the "why"),
 the document the front shows, and the answer that came back.
+
+## Decisiones tab: was a decision taken? (`decisions.py`)
+
+A pre-MVP to show users the decision loop working. For the selected stack:
+
+- **Open now**: each open recommendation with a countdown to `expires_ts` in **simulated time** (and the
+  approximate real seconds, from the observed pace), with *Aprobar* / *Descartar* on `pfsim`. The click writes
+  the same command-door `decision` event as the backend (`docs/data-contract.md` §4.2), checked against
+  `contracts/read/command_event.schema.json` (mounted read-only). It refuses when the simulated time is past
+  `expires_ts`, when the run is over, or when the recommendation already has a decision: the pipeline lets the
+  first decision win, so a late click must not overturn an expiry.
+- **Counts in a window** (last 5/10/15/30/60 simulated minutes or the whole run): proposed, applied, discarded,
+  expired (by time, bus passed the stop, run ended), open now, % decided and median time to decide; and a
+  table per 5 simulated minutes.
+- **Every recommendation of the run** with its outcome, who decided and how long it took.
+- **Saved runs**: the archive in `src/data/sim_console/runs/archive/` (mounted; git-ignored), with CSV/JSON
+  downloads and a *Guardar esta corrida* button. The sim console saves a run on its own before every reset.
+
+**Expiry.** `gold.recommendation` keeps every recommendation; the pipeline marks it `expired` (with `close_ts`)
+when its time-to-live runs out or the bus passes the stop. When a run ends, the simulated clock stops, so an open
+proposal would stay `proposed` forever: the report counts it as **expired · run ended** at the last simulated
+time (run over = no simulator event for `LAB_RUN_SILENT_S`, 30 s). This is derived in the report
+(`src/data/sim_console/report.py`, shared with the sim console); nothing is written to gold.
+
+## Resultados tab: does the corridor work better? (`src/data/sim_console/outcomes.py`)
+
+To show users the model is valid. From gold only:
+
+- **Now**: buses in service (and the run's maximum), free reserves (ids), free drivers, bunched and gaps, mean
+  wait vs scheduled wait, EWT, P(board within 5/10/15 min) (`gold.stop_boarding_band`), decisions applied/proposed.
+- **Charts over the run** (simulated time): mean and scheduled wait; buses in service and bunched. Decisions are
+  vertical marks (applied, discarded, expired) with a hover tooltip.
+- **Did the decisions help?** For every closed recommendation: the mean wait at the close and 15 simulated minutes
+  later. EWT uses a trailing 15-minute window, so those are two windows that do not overlap. Better = at least
+  5 s lower, worse = at least 5 s higher. A run that stops first gives "not measured". Applied vs not applied
+  (discarded + expired) are compared as groups. This is **descriptive, not causal**. The official verdict is the
+  ADR-0007 effect rule (`rules/effect.py`, #27), which this tab does not implement.
+- **Compare runs**: saved runs with average wait, EWT, P(board ≤ 10 min) and % of time bunched. The simulator is
+  deterministic, so the strong test is the same seed/scenario/hour run once without deciding and once applying.
 
 ## What-if tab: the decision model with your variables (`whatif.py`)
 
@@ -54,5 +99,7 @@ recommendation there or in the dispatcher console: it shows up in stage 7 within
 
 ## Data contract
 
-No contract change: it reads `bronze`, `silver`, `gold` and `config` and writes nothing.
+No contract change: it reads `bronze`, `silver`, `gold` and `config`. The only write is the existing
+command-door `decision` event (§4.2, `command_event` 1.0.0) on `pfsim`, the same message the backend
+and the sim console write. The "expired · run ended" outcome lives in the report, not in gold.
 Excluded from coverage (`pyproject.toml`), like `sim_console`.

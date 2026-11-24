@@ -22,9 +22,16 @@ services:
       LAB_MAIN_API: http://api:${API_PORT:-8000}
       LAB_PFSIM_DSN: ${PFSIM_DSN:-}
       LAB_PFSIM_API: http://host.docker.internal:58100
+      LAB_COMMAND_SCHEMA: /contracts/command_event.schema.json
+      LAB_ARCHIVE_DIR: /archive
       INGESTION_HEALTH_MAX_AGE_S: ${INGESTION_HEALTH_MAX_AGE_S:-15}
       REFRESH_HEALTH_MAX_AGE_S: ${REFRESH_HEALTH_MAX_AGE_S:-30}
       PYTHONPATH: /app
+    # Decisions tab: the command contract (to validate the decision event) and the run archive the sim console
+    # also writes (src/data/sim_console/runs/archive, git-ignored).
+    volumes:
+      - ./contracts/read:/contracts:ro
+      - ./src/data/sim_console/runs/archive:/archive
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:

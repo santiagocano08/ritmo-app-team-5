@@ -23,7 +23,7 @@ def _env_example() -> dict[str, str]:
 
 def test_new_settings_documented_with_safe_defaults() -> None:
     env = _env_example()
-    assert env["SIM_PLANNED_HEADWAY_S"] == "600"
+    assert env["SIM_PLANNED_HEADWAY_S"] == "420"
     assert env["REFRESH_INTERVAL_S"] == "5"
     assert env["REFRESH_CLOCK"] == "data"
 
@@ -37,7 +37,7 @@ def test_no_new_setting_holds_a_secret() -> None:
 
 def test_planned_headway_default_and_override(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SIM_PLANNED_HEADWAY_S", raising=False)
-    assert get_sim_planned_headway_s() == 600
+    assert get_sim_planned_headway_s() == 420
     monkeypatch.setenv("SIM_PLANNED_HEADWAY_S", "450")
     assert get_sim_planned_headway_s() == 450
 
@@ -54,7 +54,7 @@ def test_planned_headway_rejects_invalid_value(monkeypatch: pytest.MonkeyPatch) 
 def test_compose_passes_planned_headway_to_ingestion() -> None:
     compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
     env = compose["services"]["ingestion"]["environment"]
-    assert env["SIM_PLANNED_HEADWAY_S"] == "${SIM_PLANNED_HEADWAY_S:-600}"
+    assert env["SIM_PLANNED_HEADWAY_S"] == "${SIM_PLANNED_HEADWAY_S:-420}"
 
 
 def test_ingestion_retry_settings_documented_without_secrets() -> None:

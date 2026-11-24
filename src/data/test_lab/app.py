@@ -17,6 +17,10 @@ It can also trace one recommendation end to end (GET /api/trace/{target}/{rec_id
 up to the bronze id it was computed from, the snapshot and inputs it used, the document, and the
 answer that came back. Every query is a SELECT in a read-only transaction.
 
+One exception, on the `pfsim` target only (the isolated sim-console stack): the Decisions tab can approve or
+discard an open recommendation, which writes the command-door `decision` event (see decisions.py). The principal
+stack is never written.
+
 Targets come from the environment (see compose.lab.yml):
     LAB_MAIN_DSN / LAB_MAIN_API     the default stack
     LAB_PFSIM_DSN / LAB_PFSIM_API   the sim-console stack `pfsim` (optional)
@@ -33,10 +37,11 @@ from typing import Any
 
 import psycopg
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from psycopg.rows import dict_row
 
-from src.data.test_lab import whatif
+from src.data.sim_console import outcomes, report
+from src.data.test_lab import decisions, whatif
 
 HERE = Path(__file__).resolve().parent
 PORT = int(os.environ.get("LAB_PORT", "8085"))
@@ -55,7 +60,10 @@ def _connect(target: str) -> psycopg.Connection:
     try:
         conn = psycopg.connect(TARGETS[target]["dsn"], connect_timeout=3, row_factory=dict_row)
     except psycopg.Error as exc:
-        raise HTTPException(503, f"database unreachable: {str(exc).splitlines()[0]}") from exc
+        # On pfsim the usual cause is a new run: starting one deletes and recreates the database (~30-60 s).
+        hint = (" La simulación se está reiniciando (al arrancar una corrida se borra y se crea de nuevo la base);"
+                " espera unos segundos y vuelve a intentar.") if target == "pfsim" else ""
+        raise HTTPException(503, f"No hay conexión con la base de datos.{hint} Detalle: {str(exc).splitlines()[0]}") from exc
     conn.read_only = True
     return conn
 
@@ -229,7 +237,8 @@ app = FastAPI(title="PulsoFlota data flow viewer", docs_url=None, redoc_url=None
 
 @app.get("/")
 def index() -> FileResponse:
-    return FileResponse(HERE / "index.html")
+    # no-store: after a container rebuild the browser must load the new page, not a cached one
+    return FileResponse(HERE / "index.html", headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/targets")
@@ -262,6 +271,59 @@ def whatif_run(target: str, scenario: whatif.Scenario) -> dict[str, Any]:
         sid, inp, facts = whatif.load_base(conn, target)
     new_inp, new_facts = whatif.apply(inp, facts, scenario)
     return {"snapshot_id": sid, "original": whatif.run(inp, facts), "scenario": whatif.run(new_inp, new_facts)}
+
+
+@app.get("/api/decisions/{target}")
+def decisions_report(target: str, window_min: int = 15) -> dict[str, Any]:
+    """Was each recommendation decided; counts in the last `window_min` simulated minutes (0 = whole run)."""
+    with _connect(target) as conn:
+        rep = decisions.build(conn, window_min * 60 if window_min > 0 else None)
+    rep["can_decide"] = target == decisions.WRITABLE_TARGET
+    return rep
+
+
+@app.post("/api/decisions/{target}/decide")
+def decisions_decide(target: str, d: decisions.Decision) -> dict[str, Any]:
+    if target != decisions.WRITABLE_TARGET or target not in TARGETS:
+        raise HTTPException(403, "solo se decide en el stack pfsim (el principal es de solo lectura)")
+    return decisions.decide(TARGETS[target]["dsn"], d)
+
+
+@app.post("/api/decisions/{target}/save")
+def decisions_save(target: str) -> dict[str, Any]:
+    with _connect(target) as conn:
+        return decisions.save(conn, target)
+
+
+@app.get("/api/outcomes/{target}")
+def outcomes_view(target: str) -> dict[str, Any]:
+    """Is the corridor working better: fleet, waits, P(board) over the run, and before/after of each decision."""
+    with _connect(target) as conn:
+        rep = decisions.build(conn, None)
+        out = outcomes.build(outcomes.collect(conn), rep["rows"], rep["as_of_ts"], rep["run_over"],
+                             rep["start_ts"])
+    return {"run_key": rep["run_key"], "start_ts": rep["start_ts"], "as_of_ts": rep["as_of_ts"],
+            "run_over": rep["run_over"], "decisions": rep["total"], **out}
+
+
+@app.get("/api/runs")
+def runs() -> list[dict[str, Any]]:
+    return decisions.saved_runs()
+
+
+@app.get("/api/runs/{run_key}/series")
+def run_series(run_key: str) -> dict[str, Any]:
+    s = report.archived_series(decisions.ARCHIVE_DIR, run_key)
+    if s is None:
+        raise HTTPException(404, "corrida desconocida")
+    return s
+
+
+@app.get("/api/runs/{run_key}/{name}")
+def run_file(run_key: str, name: str) -> Response:
+    body, media = decisions.saved_file(run_key, name)
+    return Response(body, media_type=media,
+                    headers={"Content-Disposition": f'attachment; filename="pfsim-{run_key}-{name}"'})
 
 
 if __name__ == "__main__":

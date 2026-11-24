@@ -114,3 +114,11 @@ Decided by the data owner at the contract and data architecture gate, 2026-11-17
 ## Amendment 2026-11-22 (story 005, data owner)
 
 The rejection reason `value_out_of_range` is now also used for a `bus_position` whose `distance_along_m` is beyond the route end, 5,119.4 m. That bound comes from reference data (`config.ref_stops`), not from the JSON Schema, so the schema is unchanged. A bus that cannot be placed is `estimated` and the cycle keeps running. See `specs/005-data-fixes-metrics/contracts/guards.md` and `docs/data-contract.md` v0.3 §5.
+
+## Amendment 2026-11-23 (issue #42, data owner)
+
+The turn-1 fleet grows to **7 buses in service (`B-101`..`B-107`) and 4 in reserve (`B-108`..`B-111`)**, and the
+planned headway drops from 600 s to 420 s. Every `bus_id` enum now lists `B-101`..`B-111`; the reserve-only enum of
+`decision_inputs.resources.reserve_free` lists `B-108`..`B-111`. The change is additive (old ids stay valid, no field
+or meaning changes), so `schema_version` stays `1.0.0`; the data contract moves to v0.5. Where the text above says
+`B-101`..`B-107`, five active buses or B-106/B-107 as reserve, read the fleet of this amendment.

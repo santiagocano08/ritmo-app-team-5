@@ -13,9 +13,11 @@ import pytest
 
 from src.data.simulator.main import main
 
+# Re-pinned 2026-11-23 for the 7 + 4 fleet and the 420 s planned headway (issue #42, contract v0.5). The values of
+# the 5 + 2 fleet at 600 s were 8bae0e52… (seed 42) and 27a8206e… (seed 7).
 GOLDEN = {
-    42: "8bae0e5229b2e547fac181f0f87176809d71be7a80600a4b066832b6274690bc",
-    7: "27a8206e4bcf896b54f847521ae80d65db9db260c2ba1431422e04b244d4df7e",
+    42: "a65846b0aa5c0dbf4699ae55661dd09479550f2fcf14d148fdd6d7d8760327f4",
+    7: "925ca659b5217a9cb3d898fe4b4fc8fd24562a9d4efa09677349e59fbc7223df",
 }
 
 
@@ -38,8 +40,8 @@ def test_base_stream_matches_golden_hash(seed: int) -> None:
 
 def test_seed_42_shape() -> None:
     data = _stream(42)
-    assert data.count(b"\n") == 3831
-    assert len(data) == 1_433_630
+    assert data.count(b"\n") == 5358
+    assert len(data) == 2_004_758
 
 
 EMPTY = Path(__file__).resolve().parents[1] / "fixtures" / "scenarios" / "empty.json"

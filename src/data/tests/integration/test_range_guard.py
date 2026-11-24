@@ -109,7 +109,7 @@ def test_a_99999_position_in_bronze_does_not_break_the_cycle(c1_run) -> None:
     others = {k: v for k, v in base.items() if k != "B-105"}
     assert others  # the C1 stream has at most 3 buses on the corridor at once, so "the other in-service buses"
     silver_before = _silver_others(conn)
-    assert len(silver_before) == 4  # the 4 other buses of the fleet that have reported
+    assert len(silver_before) == 6  # the 6 other in-service buses of the 7 + 4 fleet that have reported (issue #42)
 
     bad = bb.Builder("bad").position("B-105", bb.trip_id("B-105"), AS_OF, BAD_M)
     _raw_insert(conn, bad)
@@ -124,7 +124,8 @@ def test_a_99999_position_in_bronze_does_not_break_the_cycle(c1_run) -> None:
     buses = _by_bus(conn, result.snapshot_id)
     assert buses["B-105"]["data_quality"] == "estimated"
     assert buses["B-105"]["distance_along_m"] == base["B-105"]["distance_along_m"]  # last valid position kept
-    assert buses["B-105"]["bus_state"] == "regular"
+    # its state is kept from the last valid position (leader in the 7 + 4 C1 stream; regular with 5 buses)
+    assert buses["B-105"]["bus_state"] == base["B-105"]["bus_state"] == "leader"
     for bus, row in others.items():  # SC-012: the four other in-service buses keep their state
         assert buses[bus]["bus_state"] == row["bus_state"]
         assert buses[bus]["data_quality"] == "live"
@@ -189,8 +190,13 @@ def test_no_contract_or_adr_changed() -> None:
     # 006 FR-029 authorises exactly these contract files (recommendation 1.1.0, its README, two new fixtures);
     # every other contract file and every ADR must still be identical to main (the 004 branch it used to
     # compare with predates contract v0.3 and the team ADRs 0004/0005 that main now carries).
+    # Issue #42 (contract v0.5) authorises the bus_id enums of every schema and the ADR-0002/0003 amendments.
+    fleet = ("contracts/turn1-events", "contracts/read/corridor_now.schema.json", "contracts/read/source_status.schema.json",
+             "contracts/read/decision_inputs.schema.json", "contracts/read/instruction.schema.json",
+             "docs/adr/0002-turn1-event-contract.md", "docs/adr/0003-turn1-read-contract.md")
     allowed = [f":(exclude){p}" for p in ("contracts/read/recommendation.schema.json", "contracts/read/README.md",
-                                          "contracts/read/fixtures/c1_slow_down", "contracts/read/fixtures/c2_skip_stop")]
+                                          "contracts/read/fixtures/c1_slow_down", "contracts/read/fixtures/c2_skip_stop",
+                                          *fleet)]
     diff = subprocess.run(["git", "diff", "main", "--", "contracts", "docs/adr", *allowed],
                           cwd=ROOT, capture_output=True, text=True)
     assert diff.stdout == ""

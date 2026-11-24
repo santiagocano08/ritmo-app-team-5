@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS config.corridor_settings (
 INSERT INTO config.corridor_settings
     (corridor_id, direction, headway_planned_s, drivers_free, hold_penalty_s,
      early_departure_penalty_s, min_sample_count, m2_stop_id)
-VALUES ('C6-008', 1, 600, 2, 0, 0, 5, 'P-883')
+VALUES ('C6-008', 1, 420, 4, 0, 0, 5, 'P-883')
 ON CONFLICT (corridor_id) DO NOTHING;
 
 -- C2
@@ -30,11 +30,15 @@ CREATE TABLE IF NOT EXISTS config.fleet_roster (
     role   TEXT NOT NULL CHECK (role IN ('in_service', 'reserve'))
 );
 
+-- Issue #42 (contract v0.5): 7 in service, 4 in reserve. Planned headway 420 s and 4 free drivers above keep the
+-- terminal cycle near the old 5 x 600 s while more buses run at once.
 INSERT INTO config.fleet_roster (bus_id, role) VALUES
     ('B-101', 'in_service'), ('B-102', 'in_service'), ('B-103', 'in_service'),
-    ('B-104', 'in_service'), ('B-105', 'in_service'),
-    ('B-106', 'reserve'),    ('B-107', 'reserve')
-ON CONFLICT (bus_id) DO NOTHING;
+    ('B-104', 'in_service'), ('B-105', 'in_service'), ('B-106', 'in_service'),
+    ('B-107', 'in_service'),
+    ('B-108', 'reserve'),    ('B-109', 'reserve'),    ('B-110', 'reserve'),
+    ('B-111', 'reserve')
+ON CONFLICT (bus_id) DO UPDATE SET role = EXCLUDED.role;
 
 -- C3: stops where regulation actions are permitted (all 18 in turn 1).
 CREATE TABLE IF NOT EXISTS config.enabled_stops (

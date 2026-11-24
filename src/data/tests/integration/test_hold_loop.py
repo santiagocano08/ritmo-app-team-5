@@ -82,12 +82,12 @@ def departure_after(events: list[dict], bus="B-103", stop="P-887") -> tuple[str,
 def test_forced_compliance_gives_executed(conn, simulate) -> None:
     write_decision(conn, decision(REC1))
     events = simulate(0.0)
-    assert departure_after(events) == ("2026-11-24T22:27:45Z", "2026-11-24T22:29:15Z")
+    assert departure_after(events) == ("2026-11-24T22:21:35Z", "2026-11-24T22:23:05Z")
     feed(conn, events)
     cycle(conn, DURATION - 5)
     row = status_rows(conn)[REC1]
     assert row[1] == "executed" and abs(row[2] - 90) <= 15
-    assert row[3] == {"executed": "2026-11-24T22:29:15Z"}
+    assert row[3] == {"executed": "2026-11-24T22:23:05Z"}
 
 
 def test_forced_non_compliance_gives_not_executed(conn, simulate) -> None:
@@ -138,7 +138,7 @@ def test_same_decision_delivered_twice_runs_once(conn, simulate) -> None:
     write_decision(conn, other)
     assert conn.execute("SELECT count(*) FROM bronze.events WHERE event_type = 'decision'").fetchone()[0] == 2
     events = simulate(0.0)
-    assert departure_after(events)[1] == "2026-11-24T22:29:15Z"
+    assert departure_after(events)[1] == "2026-11-24T22:23:05Z"
     feed(conn, events)
     cycle(conn, DURATION - 5)
     assert len(status_rows(conn)) == 1
@@ -158,7 +158,7 @@ def test_two_orders_for_the_same_visit_run_the_first_only(conn, simulate) -> Non
     write_decision(conn, decision(REC1))
     write_decision(conn, decision(REC5))
     events = simulate(0.0)
-    assert departure_after(events)[1] == "2026-11-24T22:29:15Z"  # 90 s from the first order, not 45 s
+    assert departure_after(events)[1] == "2026-11-24T22:23:05Z"  # 90 s from the first order, not 45 s
     feed(conn, events)
     cycle(conn, DURATION - 5)
     out = status_rows(conn)

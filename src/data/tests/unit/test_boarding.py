@@ -110,10 +110,11 @@ def test_oracle_matches_the_quickstart_table(c1_events) -> None:
     as_of = oracle.epoch("2026-11-24T22:45:00Z")
     by_band = oracle.riders_by_band(c1_events, as_of)
     got = {b: tuple(v.values()) for (_, b), v in by_band.items()}
-    assert got == {68: (9, 3, 9, 9), 69: (16, 10, 16, 16), 70: (21, 9, 14, 15)}
+    # re-pinned for the 7 + 4 fleet at 420 s and the retimed c1_bunching (issue #42)
+    assert got == {68: (15, 9, 14, 14), 69: (16, 10, 16, 16), 70: (18, 9, 14, 14)}
     per_stop = oracle.riders(c1_events, as_of)
-    assert sum(v["n_riders"] for v in per_stop.values()) == 46
-    assert sum(v["n_riders"] for (_, _, s), v in per_stop.items() if s == "P-883") == 37
+    assert sum(v["n_riders"] for v in per_stop.values()) == 49
+    assert sum(v["n_riders"] for (_, _, s), v in per_stop.items() if s == "P-883") == 38
 
 
 def test_pure_rule_equals_the_oracle_on_the_c1_stream(c1_events) -> None:

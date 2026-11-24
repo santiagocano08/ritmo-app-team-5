@@ -10,8 +10,10 @@ import pytest
 from src.data.tests.fixtures.gold_support import cycle, docs
 from src.data.tests.integration.test_scenarios_gold import load_run
 
-# as_of seconds after 22:00:00Z and the headway of the bus that has just left the terminal.
-EXPECTED = [(1240, 615.0), (1835, 595.0), (2440, 605.0)]
+# as_of seconds after 22:00:00Z and the headway of the bus that has just left the terminal. Re-pinned for the 7 + 4
+# fleet leaving every 420 s (issue #42): B-104, B-105 and B-107 about 40 s after their starts (1,240 / 1,835 / 2,440 s
+# and ~600 s with the 5 + 2 fleet at 600 s).
+EXPECTED = [(1300, 424.2), (1720, 422.7), (2560, 411.5)]
 
 
 @pytest.mark.parametrize(("as_of_s", "expected"), EXPECTED)

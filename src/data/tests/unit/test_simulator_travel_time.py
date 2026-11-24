@@ -29,5 +29,5 @@ def test_peak_trip_is_about_25_minutes() -> None:
 
 def test_reserve_buses_emit_nothing() -> None:
     ids = {e["payload"].get("bus_id") for e in run(42, 600)}
-    assert not ({"B-106", "B-107"} & ids)
+    assert not ({"B-108", "B-109", "B-110", "B-111"} & ids)
     assert {"B-101", "B-102", "B-103", "B-104", "B-105"} <= ids

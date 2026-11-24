@@ -30,7 +30,7 @@ def _gaps(seed: int, duration: int = 7200) -> list[float]:
 def test_median_gap_is_planned_headway(seed: int) -> None:
     gaps = _gaps(seed)
     assert len(gaps) >= 10
-    assert statistics.median(gaps) == pytest.approx(600, abs=60)
+    assert statistics.median(gaps) == pytest.approx(420, abs=42)
 
 
 @pytest.mark.parametrize("seed", [42, 7])
@@ -38,9 +38,9 @@ def test_no_gap_below_300s(seed: int) -> None:
     assert min(_gaps(seed)) >= 300
 
 
-def test_default_planned_headway_is_600(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_default_planned_headway_is_420(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SIM_PLANNED_HEADWAY_S", raising=False)
-    assert get_sim_planned_headway_s() == 600
+    assert get_sim_planned_headway_s() == 420
 
 
 def test_planned_headway_setting_changes_start_spacing(monkeypatch: pytest.MonkeyPatch) -> None:

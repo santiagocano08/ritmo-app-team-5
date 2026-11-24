@@ -34,7 +34,7 @@ export interface CorridorNowV100 {
     /**
      * Vehicle identifier.
      */
-    bus_id: "B-101" | "B-102" | "B-103" | "B-104" | "B-105" | "B-106" | "B-107";
+    bus_id: "B-101" | "B-102" | "B-103" | "B-104" | "B-105" | "B-106" | "B-107" | "B-108" | "B-109" | "B-110" | "B-111";
     /**
      * Direction of travel.
      */

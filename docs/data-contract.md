@@ -1,4 +1,4 @@
-# PulsoFlota — Data Contract for the Backend (v0.4, draft)
+# PulsoFlota — Data Contract for the Backend (v0.5, draft)
 
 - **Owner:** data owner (see `.github/CODEOWNERS`). **Consumer:** backend (BE).
 - **Status:** Proposed, 2026-11-21. Decisions recorded in ADR-0006 (backend data consumption; Proposed until the backend owner accepts items 1–5) and ADR-0007 (recommendation effect rule; Accepted by the data owner).
@@ -13,7 +13,9 @@
     - an approved **hold** is executed and checked in `gold.instruction_status` (Q6), as before;
     - an approved **reserve dispatch** now makes the reserve bus (B-106 or B-107) enter service at P-883 120 s after the decision. It appears in `corridor_now` (Q1) once it leaves P-883, like any bus and the free reserves in `decision_inputs` go down by one. It makes one trip and stops reporting after P-900;
     - `adjust_departure`, `skip_stop` and `slow_down` are recorded as `applied` but **not executed** in turn 1 (the slow-down executor is backlog, issue #30).
-- **Scope:** Turn 1. Corridor C6-008, direction 1, buses B-101..B-105 in service and B-106/B-107 in reserve, stops P-883..P-900.
+  - **v0.4.1 (2026-11-23, data owner)** the simulated start hour is a run setting: `SIM_START_HOUR` (local hour 0–23, default 17, chosen in the data simulation console). No schema change and no query change: every reader already takes time from `as_of_ts` / `event_ts`. With the default, every timestamp and example below is unchanged (§1.4, §3B).
+  - **v0.5 (2026-11-23, data owner, issue #42)** the fleet grows to **7 buses in service (B-101..B-107) and 4 in reserve (B-108..B-111)**, and the planned headway drops from 600 s to **420 s** (`config.corridor_settings.headway_planned_s`, `SIM_PLANNED_HEADWAY_S`), with 4 free drivers. Schema change, additive: every `bus_id` enum in `contracts/turn1-events/` and `contracts/read/` now lists B-101..B-111, and `decision_inputs.resources.reserve_free` lists B-108..B-111. `schema_version` stays `1.0.0` (no field or meaning changes; the old ids stay valid). The generated models (`src/pulsoflota/models/`) and frontend types (`src/frontend/src/api/generated/`) were updated to the same enums. Readers that hard-code 5 buses, 600 s or B-106 as the reserve must use the values here instead. The scenario fixtures were retimed for the new spacing (C1 at 520 s with 310 s, C5 B-104 at 1,440 s in `demo_full`). The approved reserve that enters service is now B-108..B-111. The 600 s examples below are from v0.4 runs; the shape is unchanged.
+- **Scope:** Turn 1. Corridor C6-008, direction 1, buses B-101..B-107 in service and B-108..B-111 in reserve (v0.5; B-101..B-105 and B-106/B-107 before), stops P-883..P-900.
 - **Source of truth:** the JSON Schemas in `contracts/read/` and `contracts/turn1-events/`, plus ADR-0001, ADR-0002 and ADR-0003. This document says **how the BE reads and writes**. It adds no field to any schema. If this document and a schema disagree, the schema wins.
 
 **Change rule (data owner, 2026-11-21):** every data change reviews this contract. Specs and plans list the affected sections, or "no contract impact" with the reason. Verification checks that the queries, examples and versions here still hold. When there is an impact, this document is updated in the same PR or the very next one. See `.kiro/steering/data-contracts.md`.
@@ -90,7 +92,7 @@ Not per snapshot:
 
 ### 1.4 Clock: simulated time, not wall time
 
-Gold time (`as_of_ts`, and every timestamp inside `doc`) is the **simulated clock**: the simulated day starts at `2026-11-24T22:00:00Z` and moves at the simulator's pace (`REFRESH_CLOCK=data`).
+Gold time (`as_of_ts`, and every timestamp inside `doc`) is the **simulated clock**: the simulated day starts at `2026-11-24T22:00:00Z` by default (17:00 local; `SIM_START_HOUR` moves it to another local hour of 2026-11-24, see v0.4.1) and moves at the simulator's pace (`REFRESH_CLOCK=data`).
 
 **Consequence for the BE:**
 - To know "now" in the system, read `as_of_ts` of the latest snapshot. Do not use `now()`.
@@ -212,7 +214,7 @@ SELECT doc FROM gold.decision_inputs WHERE snapshot_id = %(snapshot_id)s;
 {"...": "same fields as corridor_now, plus:",
  "travel_time_forecast": [{"segment_id": 1, "forecast_travel_s": 99.86}, {"segment_id": 2, "forecast_travel_s": 55.75}, "… 17 segments"],
  "demand_15min": {"window_start_ts": "2026-11-24T22:30:00Z", "window_end_ts": "2026-11-24T22:45:00Z", "arrivals_forecast": 17},
- "resources": {"reserve_free": ["B-106", "B-107"], "drivers_free": 2},
+ "resources": {"reserve_free": ["B-108", "B-109", "B-110", "B-111"], "drivers_free": 4},
  "active_incidents": ["11111111-1111-4111-8111-111111111111"],
  "action_cost": {"hold_penalty_s": 0.0, "early_departure_penalty_s": 0.0},
  "enabled_stops": ["P-883", "…", "P-900"]}
@@ -308,7 +310,7 @@ last_insert_age_s=11.3  events_60s=1259  rejections_60s=0  duplicates_60s=0  rej
 ```sql
 SELECT stop_seq, stop_id, distance_along_m, segment_id FROM config.ref_stops ORDER BY stop_seq;   -- 18 rows, P-883..P-900
 SELECT bus_id, role FROM config.fleet_roster ORDER BY bus_id;                                    -- in_service | reserve
-SELECT corridor_id, headway_planned_s FROM config.corridor_settings;                              -- C6-008, 600
+SELECT corridor_id, headway_planned_s FROM config.corridor_settings;                              -- C6-008, 420 (600 before v0.5)
 SELECT min_stop_headways FROM config.corridor_settings;                                           -- 5   [005]
 ```
 `config.ref_stops` has no stop names. If the console needs names, raise it with data: it would be a new reference column.
@@ -324,7 +326,7 @@ The live objects (§3) answer "what is happening now", with one JSON document ev
 Data owns these metrics (ADR-0003: the BE never computes headways or EWT). So data keeps a **history layer** in gold: append-only facts written in the cycle transaction, plus additive aggregates per 15-minute band. The BE only filters and sums.
 
 **Design rules:**
-- **15-minute bands** of simulated **local** time (`band` 0–95), the same bands as M2. Local time is America/Bogota, a fixed UTC−5 offset (`src/data/rules/timebands.py`). The simulated day starts at 22:00Z, which is 17:00 local, the evening peak. Named bands ("evening peak", "off-peak", "whole day") are rows in `config.report_bands`, so changing them never needs a recompute.
+- **15-minute bands** of simulated **local** time (`band` 0–95), the same bands as M2. Local time is America/Bogota, a fixed UTC−5 offset (`src/data/rules/timebands.py`). The simulated day starts at 22:00Z, which is 17:00 local, the evening peak, unless the run sets another `SIM_START_HOUR` (v0.4.1); bands always follow the local hour of the data. Named bands ("evening peak", "off-peak", "whole day") are rows in `config.report_bands`, so changing them never needs a recompute.
 - **Additive counts, not ratios.** Band rows store counts and sums, and the query divides. Summing several bands or days then stays exact.
 - **Determinism.** A band row is rebuilt from bronze up to `max_bronze_id` (DELETE + INSERT for that band) and carries `rules_version`, `contract_version` and `computed_at`. Same bronze and rules give the same row.
 
@@ -363,7 +365,7 @@ Reference: C1 seed 42, bands 68 / 69 / 70: 9 / 16 / 21 riders; ≤ 10 min: 9 / 1
 - **One dominant stop.** In that run 37 of 46 riders arrive at P-883, where departures are regular, so the corridor P(board ≤ 10 min) can read 100 % while a gap exists downstream. Show the per-stop value too.
 - **Simple method.** The wait runs to the next departure of any bus; full buses are ignored. The FIFO method with capacity is an improvement (see "MVP vs improvements").
 - **Lost departures.** A departure that was never reported during a silence leaves no row. The silence shows as the bus `estimated`, and the headways around a late report are in `n_excluded`.
-- **Planned headway** is the single 600 s for every stop and hour.
+- **Planned headway** is a single value for every stop and hour: 420 s since v0.5 (600 s before).
 
 The full contract of these tables (guarantees and test matrix) is `specs/005-data-fixes-metrics/contracts/gold-stop-metrics.md`.
 
@@ -718,6 +720,7 @@ Until 006 is merged, send `schema_version = '1.0.0'` without `reason`.
 | 12 | **Expiry window:** 2 minutes or when the bus has passed the stop, whichever comes first; set by data (§4.5) | data | Decided (spec 006) |
 | 13 | **Effect rule with the stop-based EWT:** ADR-0007's "EWT before and after" is now stop-based and trailing-window, and can be not computable early in a run (`no_data`). The clamp and windows of 004 phase 3 are reviewed before it is built | data | Recorded in ADR-0007 (amendment 2026-11-22) |
 | 14 | **4-hour stress run:** cycle median ~1.55 s vs 1.5 s budget after the 005 guards; demo length ~0.1 s. Does not change any read object | data | Backlog, issue #21 |
+| 15 | **End of a simulated run:** expiry runs on simulated time (§1.4), and the simulated clock stops when the simulator stops, so a proposal still open then stays `proposed` in `gold.recommendation` (and in Q-reads) until the next run resets `pfsim`. Live operation is not affected (time never stops). The data harnesses report it as "expired · run ended" without writing gold (`src/data/sim_console/report.py`); a pipeline rule with a close reason would be a contract change (status reason, version bump) | data | Recorded 2026-11-23; harness-only for now |
 
 ---
 

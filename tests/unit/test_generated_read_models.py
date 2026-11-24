@@ -41,7 +41,7 @@ def test_decision_inputs_sample_round_trips() -> None:
         "travel_time_forecast": [{"segment_id": k, "forecast_travel_s": 60.0 + k} for k in range(1, 18)],
         "demand_15min": {"window_start_ts": "2026-11-24T22:15:00Z", "window_end_ts": "2026-11-24T22:30:00Z",
                          "arrivals_forecast": 12},
-        "resources": {"reserve_free": ["B-106", "B-107"], "drivers_free": 2},
+        "resources": {"reserve_free": ["B-108", "B-109", "B-110", "B-111"], "drivers_free": 4},
         "action_cost": {"hold_penalty_s": 0, "early_departure_penalty_s": 0},
         "active_incidents": ["11111111-1111-4111-8111-111111111111"],
         "enabled_stops": ["P-883", "P-884"],

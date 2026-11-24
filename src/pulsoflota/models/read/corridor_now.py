@@ -18,6 +18,10 @@ class BusId(StrEnum):
     B_105 = "B-105"
     B_106 = "B-106"
     B_107 = "B-107"
+    B_108 = "B-108"
+    B_109 = "B-109"
+    B_110 = "B-110"
+    B_111 = "B-111"
 
 
 class BusState(StrEnum):

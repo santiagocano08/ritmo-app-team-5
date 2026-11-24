@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime, timezone
 
-PLANNED_S = 600
+PLANNED_S = 420  # config.corridor_settings.headway_planned_s since issue #42 (600 before)
 ESTIMATED_AFTER_S = 120
 LOCAL_OFFSET_S = -5 * 3600
 BAND_S = 900

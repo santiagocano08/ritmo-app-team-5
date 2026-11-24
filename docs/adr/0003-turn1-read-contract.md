@@ -248,3 +248,11 @@ them.
 ## Amendment 2026-11-22 (story 005, data owner)
 
 No field of any read schema changes. Only the meaning of EWT changes: `gold.service_metric` (and the EWT inside `decision_inputs`) is now computed from the headways between consecutive reported departures **at each stop** over a trailing 15-minute window, and it is computable from 5 headways (`config.corridor_settings.min_stop_headways`). The spatial snapshot EWT is withdrawn because it jumped when a bus left the terminal. `corridor_now.distance_along_m` already had `maximum: 5119.4`; story 005 enforces it at ingestion. See `docs/data-contract.md` v0.3 Q4 and §5.
+
+## Amendment 2026-11-23 (issue #42, data owner)
+
+The turn-1 fleet grows to **7 buses in service (`B-101`..`B-107`) and 4 in reserve (`B-108`..`B-111`)**, and the
+planned headway drops from 600 s to 420 s. Every `bus_id` enum now lists `B-101`..`B-111`; the reserve-only enum of
+`decision_inputs.resources.reserve_free` lists `B-108`..`B-111`. The change is additive (old ids stay valid, no field
+or meaning changes), so `schema_version` stays `1.0.0`; the data contract moves to v0.5. Where the text above says
+`B-101`..`B-107`, five active buses or B-106/B-107 as reserve, read the fleet of this amendment.
