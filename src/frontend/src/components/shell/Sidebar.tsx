@@ -1,19 +1,12 @@
-export type ActiveSection = "live_central" | "alerts" | "day_plan";
+import type { MouseEvent } from "react";
+import { SECTIONS, type SectionId } from "./sections";
 
-interface NavItem {
-  section: ActiveSection;
-  label: string;
-  icon: string;
-  href: string;
+interface SidebarProps {
+  activeSection: SectionId;
+  onSelect: (section: SectionId) => void;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { section: "live_central", label: "Central en vivo", icon: "◉", href: "#live" },
-  { section: "alerts", label: "Alertas", icon: "✚", href: "#alerts" },
-  { section: "day_plan", label: "Plan del día", icon: "▦", href: "#plan" },
-];
-
-export function Sidebar({ activeSection }: { activeSection: ActiveSection }) {
+export function Sidebar({ activeSection, onSelect }: SidebarProps) {
   return (
     <nav
       aria-label="Secciones"
@@ -27,12 +20,18 @@ export function Sidebar({ activeSection }: { activeSection: ActiveSection }) {
       </div>
 
       <ul className="flex flex-col gap-1.5">
-        {NAV_ITEMS.map((item) => {
-          const isActive = item.section === activeSection;
+        {SECTIONS.map((item) => {
+          const isActive = item.id === activeSection;
+          // Section state is in-memory only, so the hash must not change: a reload would ignore it.
+          const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
+            event.preventDefault();
+            onSelect(item.id);
+          };
           return (
-            <li key={item.section}>
+            <li key={item.id}>
               <a
                 href={item.href}
+                onClick={handleClick}
                 aria-current={isActive ? "page" : undefined}
                 className={`flex h-11 items-center gap-3 rounded-token px-3 text-[15px] font-semibold no-underline ${
                   isActive ? "bg-surface text-sidebar" : "text-sidebar-inactive"
