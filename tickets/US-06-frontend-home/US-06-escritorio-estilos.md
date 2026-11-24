@@ -1,4 +1,4 @@
-# PulsoFlota · US-03 Navegación principal por rol y estado del dato
+# PulsoFlota · UXUI-03 Navegación principal por rol y estado del dato
 ## Especificación de estilos · Vista de escritorio (1280 × 800 px)
 
 Imagen de referencia: `mockup-base-escritorio.png` (rol Despachador, estado «En vivo»; exportada a 2x, 2560 × 1600 px).
@@ -98,7 +98,7 @@ Fuentes cargadas desde Google Fonts: Inter (400, 500, 600, 700) y Space Grotesk 
 ### 4.3 Pie de la barra (anclado abajo con `margin-top: auto`)
 - Padding 12 px, borde superior `1px solid #2B3A5C`, columna con `gap: 10px`.
 - **Usuario:** avatar circular de 36 × 36 px (fondo `#2B3A5C`, iniciales «UD» en 13 px / 700) + nombre «Usuario demo» (14 px / 600) y rol (13 px, `#CBD5E1`).
-- **Cerrar sesión:** enlace de 40 px de alto, padding horizontal 4 px, `gap: 10px`, ícono de salida de 18 × 18 px, texto 14 px / 600, color `#E2E8F0`. Enlaza a US-01 (escritorio).
+- **Cerrar sesión:** enlace de 40 px de alto, padding horizontal 4 px, `gap: 10px`, ícono de salida de 18 × 18 px, texto 14 px / 600, color `#E2E8F0`. Enlaza a UXUI-01 (escritorio).
 
 ---
 
