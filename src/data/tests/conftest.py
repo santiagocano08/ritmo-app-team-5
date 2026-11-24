@@ -11,6 +11,16 @@ import os
 import pytest
 
 
+def pytest_collection_modifyitems(config, items):
+    # Mark every test collected under src/data/tests with `data` so the slow
+    # bronze/gold ETL suite can be deselected with -m "not data" when a change
+    # does not touch src/data/. Applied by path to avoid per-file decorators.
+    here = os.path.dirname(__file__)
+    for item in items:
+        if str(item.fspath).startswith(here):
+            item.add_marker(pytest.mark.data)
+
+
 @pytest.fixture(scope="session")
 def db_dsn() -> str:
     """Return the DATABASE_URL for integration tests.
