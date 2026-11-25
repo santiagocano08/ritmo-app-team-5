@@ -1,76 +1,78 @@
 # OMD — Object Model, Architecture Definition & Engineering Constitution: RITMO / PulsoFlota
 
-## Control de Constitución y Arquitectura
-* **PROJECT_NAME**: RITMO (Riesgo, Incrementos y Trazabilidad para la Movilidad Operativa)
+## Constitution and Architecture Control
+* **PROJECT_NAME**: RITMO (Riesgo, Incrementos y Trazabilidad para la Movilidad Operativa — Risk, Increments and Traceability for Operational Mobility)
 * **CONSTITUTION_VERSION**: 1.0.0
 * **RATIFICATION_DATE**: 2026-11-06
 * **LAST_AMENDED_DATE**: 2026-11-14
-* **APLICACIÓN OBJETIVO**: Central Web de Despacho Supervisorio y Movilidad Operativa (PulsoFlota)
+* **TARGET APPLICATION**: Web Control Center for Supervisory Dispatch and Operational Mobility (PulsoFlota)
 
 ---
 
-## 1. Principios Core de Ingeniería (Core Principles)
+## 1. Core Engineering Principles
 
-### Principio 1: Orden Guiado por Riesgo (Risk-First Order) — [NON-NEGOTIABLE]
-* **Regla**: El backlog de desarrollo y la secuencia de vueltas en la espiral **DEBEN** ser ordenados estrictamente por el nivel de riesgo técnico y arquitectónico (ASRs), y no por prioridad comercial estática. Ninguna nueva funcionalidad del carril adaptativo **DEBE** iniciarse si existe un riesgo de nivel 1 (seguridad o integridad del dato) no mitigado en la vuelta activa.
-* **Justificación**: En sistemas de tiempo real firme con control supervisorio, ignorar los riesgos de concurrencia o corrupción de datos al inicio conduce al colapso catastrófico de la operación durante picos de demanda.
+### Principle 1: Risk-First Order — [NON-NEGOTIABLE]
+* **Rule**: The development backlog and the sequence of spiral turns **MUST** be ordered strictly by technical and architectural risk level (ASRs), not by static business priority. No new feature in the adaptive lane **MUST** start while a level-1 risk (security or data integrity) remains unmitigated in the active turn.
+* **Rationale**: In firm real-time systems with supervisory control, ignoring concurrency or data-corruption risks at the start leads to a catastrophic collapse of operations during demand peaks.
 
-### Principio 2: El Dato Tiene Dueño y Contrato Primero (Contract-First & Data Ownership) — [NON-NEGOTIABLE]
-* **Regla**: Todo intercambio de datos entre módulos o servicios **DEBE** definir y validar un contrato explícito de mensaje (Pydantic / OpenAPI) antes de escribir código de implementación. Ningún modelo de datos **DEBE** ser persistido o procesado en el pipeline si carece de un propietario de módulo asignado y un esquema validado en frontera.
-* **Justificación**: Elimina el acoplamiento implícito y previene que datos malformados o no estandarizados procedentes de múltiples operadores contaminen los indicadores del cálculo de pago por calidad.
+### Principle 2: Data Has an Owner and Contract First (Contract-First & Data Ownership) — [NON-NEGOTIABLE]
+* **Rule**: Every data exchange between modules or services **MUST** define and validate an explicit message contract (Pydantic / OpenAPI) before any implementation code is written. No data model **MUST** be persisted or processed in the pipeline if it lacks an assigned module owner and a schema validated at the boundary.
+* **Rationale**: It removes implicit coupling and prevents malformed or non-standardized data from multiple operators from contaminating the indicators used to compute pay-for-quality.
 
-### Principio 3: Ingesta Aislada y Tiempo Real Determinista — [NON-NEGOTIABLE]
-* **Regla**: El pipeline de ingesta de telemetría e infraestructura vial **DEBE** ejecutarse en un contenedor de proceso aislado de la interfaz web. El camino crítico de ejecución de tiempo real ($\le 10\text{ s}$) **DEBE** ser determinista y **NUNCA DEBE** depender de llamadas síncronas a agentes de IA Generativa o servicios externos de terceros.
-* **Justificación**: Garantiza la supervivencia de la ingesta y la observabilidad de flota en la central incluso si el frontend supervisorio o los servicios auxiliares sufren degradación o caídas.
+### Principle 3: Isolated Ingestion and Deterministic Real Time — [NON-NEGOTIABLE]
+* **Rule**: The telemetry and road-infrastructure ingestion pipeline **MUST** run in a process container isolated from the web interface. The critical real-time execution path ($\le 10\text{ s}$) **MUST** be deterministic and **MUST NEVER** depend on synchronous calls to Generative AI agents or external third-party services.
+* **Rationale**: It guarantees that ingestion and fleet observability survive in the control center even if the supervisory frontend or auxiliary services degrade or go down.
 
-### Principio 4: Compuerta Humana Inquebrantable (Human-in-the-Loop Supervision) — [NON-NEGOTIABLE]
-* **Regla**: Todo agente de IA, algoritmo de optimización o regla automática **DEBE** operar exclusivamente en modo sugerido. Ninguna acción de regulación en vía (modificación de frecuencias, envío de mensajes a conductores o redireccionamientos de ruta) **DEBE** ejecutarse de forma autónoma sin la autorización explícita de un despachador humano mediante la interfaz web.
-* **Justificación**: La responsabilidad operativa y contractual frente a la ciudad y los usuarios recae en la central supervisora; la tecnología asiste la decisión, pero el humano mantiene el control supervisorio.
+### Principle 4: Unbreakable Human Gate (Human-in-the-Loop Supervision) — [NON-NEGOTIABLE]
+* **Rule**: Every AI agent, optimization algorithm or automatic rule **MUST** operate exclusively in suggestion mode. No on-road regulation action (changing frequencies, sending messages to drivers or rerouting) **MUST** run autonomously without the explicit authorization of a human dispatcher through the web interface.
+* **Rationale**: Operational and contractual responsibility toward the city and its riders lies with the supervisory control center; technology assists the decision, but the human keeps supervisory control.
 
-### Principio 5: Pruebas Obligatorias y Compuertas Automatizadas (Test-First & Automated Gates) — [NON-NEGOTIABLE]
-* **Regla**: Todo Pull Request (PR) **DEBE** incluir pruebas unitarias y de integración que garanticen una cobertura superior al $80\%$, además de superar automáticamente las compuertas de contrato (DataOps) y de integración continua (CI) antes de su fusión en la rama principal. Ningún desarrollador o agente **DEBE** omitir el paso por compuertas.
-* **Justificación**: Previene regresiones en los cálculos de la métrica $P(\text{abordar} \le t)$ y asegura la estabilidad de los servicios backend y frontend separados en producción.
+### Principle 5: Mandatory Tests and Automated Gates (Test-First & Automated Gates) — [NON-NEGOTIABLE]
+* **Rule**: Every Pull Request (PR) **MUST** include unit and integration tests that guarantee coverage above $80\%$, and must automatically pass the contract gates (DataOps) and continuous integration (CI) before it is merged into the main branch. No developer or agent **MUST** skip the gates.
+* **Rationale**: It prevents regressions in the computation of the $P(\text{abordar} \le t)$ (boarding within $t$) metric and keeps the separate backend and frontend services stable in production.
 
 ---
 
-## 2. Definición de Arquitectura, Modelo de Objetos y Stack Tecnológico
+## 2. Architecture Definition, Object Model and Technology Stack
 
-### 2.1 Stack Tecnológico y Contenedores
+### 2.1 Technology Stack and Containers
 
-El sistema separa **frontend** y **backend** en servicios y carpetas independientes
-dentro de `src/`. El backend concentra toda la lógica de negocio, la ingesta y la
-evaluación de autorización (Principio IV y A01); el frontend es un cliente web que
-consume la API REST/WebSocket y nunca decide control de acceso por sí mismo.
+The system separates **frontend** and **backend** into independent services and folders
+inside `src/`. The backend holds all business logic, ingestion and authorization
+evaluation (Principle IV and A01); the frontend is a web client that consumes the
+REST/WebSocket API and never makes access-control decisions on its own.
 
-* **Lenguaje de Programación (backend)**: Python 3.12+
-* **Framework Web & API (backend)**: FastAPI con Pydantic V2 para servicios API REST y
-  WebSocket. El acceso a base de datos usa psycopg 3 con SQL parametrizado únicamente (sin
-  ORM, sin SQLAlchemy, sin Alembic).
-* **Frontend (central del despachador)**: React 19 + TypeScript + Vite + Tailwind CSS,
-  compilado a estáticos y servido tras el proxy inverso (Nginx/Traefik). Consume la API
-  del backend por REST/WebSocket.
-* **Base de Datos Persistente**: PostgreSQL (con extensión PostGIS para datos geoespaciales)
-  o SQLite para entornos de desarrollo/testing empaquetados.
-* **Capa de Tiempo Real & Caching**: Redis (Pub/Sub para eventos de telemetría en vivo y
-  gestión de estado en memoria).
-* **Contenerización**: Docker Engine y `docker-compose`. Estructura de repositorio:
+* **Programming language (backend)**: Python 3.12+
+* **Web & API framework (backend)**: FastAPI with Pydantic V2 for REST and WebSocket API
+  services. Database access uses psycopg 3 with parameterized SQL only (no ORM, no
+  SQLAlchemy, no Alembic).
+* **Frontend (dispatcher control center)**: React 19 + TypeScript + Vite + Tailwind CSS,
+  compiled to static files and served behind the reverse proxy (Nginx/Traefik). It consumes
+  the backend API over REST/WebSocket.
+* **Persistent database**: PostgreSQL (with the PostGIS extension for geospatial data) or
+  SQLite for packaged development/testing environments.
+* **Real-time & caching layer**: Redis (Pub/Sub for live telemetry events and in-memory
+  state management).
+* **Containerization**: Docker Engine and `docker-compose`. Repository structure:
 
   ```
   src/
-  ├── backend/          # FastAPI + Pydantic V2, psycopg 3 / SQL parametrizado (API, ingesta, métricas)
+  ├── backend/          # FastAPI + Pydantic V2, psycopg 3 / parameterized SQL (API, ingestion, metrics)
   ├── frontend/         # Vite + React 19 + TypeScript + Tailwind CSS
   └── docker-compose.yml
   ```
 
-  Servicios mínimos definidos en `docker-compose`:
-  1. `ingestion-service`: Contenedor de ingesta síncrona de telemetría IoT y fuentes de
-     tráfico mockeadas (Python). Aislado del resto (Principio III).
-  2. `pulsoflota-backend`: API FastAPI, cálculo de métricas y lógica supervisoria.
-  3. `pulsoflota-frontend`: Build estático de React servido por Nginx (en desarrollo, el dev
-     server de Vite con proxy hacia el backend).
-  4. `database-redis`: Infraestructura de persistencia (PostgreSQL) y caché/pub-sub (Redis).
+  Minimum services defined in `docker-compose`:
+  1. `ingestion-service`: Container for synchronous ingestion of IoT telemetry and mocked
+     traffic sources (Python). Isolated from everything else (Principle III).
+  2. `pulsoflota-backend`: FastAPI API, metric computation and supervisory logic.
+  3. `pulsoflota-frontend`: Static React build served by Nginx (in development, the Vite dev
+     server with a proxy to the backend).
+  4. `database-redis`: Persistence infrastructure (PostgreSQL) and cache/pub-sub (Redis).
 
-### 2.2 Modelo de Objetos de Dominio (Domain Object Model)
+### 2.2 Domain Object Model
+
+Domain identifiers are kept as originally defined (see `AGENTS.md`, "Universal conventions").
 
 ```
 +-------------------------------------------------------------------+
@@ -119,7 +121,7 @@ consume la API REST/WebSocket y nunca decide control de acceso por sí mismo.
 +-------------------------------------------------------------------+
 | - ventana_tiempo: TimeWindow                                      |
 | - id_estacion: str                                                |
-| - p_abordar_t: float (Probabilidad <= t min)                      |
+| - p_abordar_t: float (Probability <= t min)                       |
 | - ewt_segundos: float (Excess Wait Time)                          |
 | - percentil_evaluado: int (85, 95)                                |
 +-------------------------------------------------------------------+
@@ -137,165 +139,164 @@ consume la API REST/WebSocket y nunca decide control de acceso por sí mismo.
 +-------------------------------------------------------------------+
 ```
 
-### 2.3 Dos Carriles Operativos de Desarrollo
-1. **Carril Disciplinado (Ingesta, Contratos de Mensaje, Pago por Calidad)**:
-   - *Rigor*: Especificación estricta en primera instancia (Contract-First / SDD).
-   - *Autonomía de Agentes*: Baja (el agente solo genera propuestas que deben ser validadas en código y compuertas).
-   - *Criticidad*: Máxima. Se aplica integración continua estricta y pruebas de contrato DataOps.
-2. **Carril Adaptativo (Frontend React, Visualización, Reglas de Alerta y Desvío)**:
-   - *Rigor*: Iteraciones guiadas por hipótesis de valor validadas con el despachador.
-   - *Autonomía de Agentes*: Media (desarrollo automatizado en ramas aisladas con revisión obligatoria por el dueño del módulo).
-   - *Alcance*: El frontend React 19 + TypeScript + Vite + Tailwind vive en `src/frontend/`
-     y es el cliente de la central del despachador; consume la API del backend y no toma
-     decisiones de autorización (A01).
+### 2.3 Two Operational Development Lanes
+1. **Disciplined Lane (Ingestion, Message Contracts, Pay-for-Quality)**:
+   - *Rigor*: Strict specification first (Contract-First / SDD).
+   - *Agent autonomy*: Low (the agent only produces proposals that must be validated in code and gates).
+   - *Criticality*: Maximum. Strict continuous integration and DataOps contract tests apply.
+2. **Adaptive Lane (React Frontend, Visualization, Alert and Rerouting Rules)**:
+   - *Rigor*: Iterations driven by value hypotheses validated with the dispatcher.
+   - *Agent autonomy*: Medium (automated development on isolated branches with mandatory review by the module owner).
+   - *Scope*: The React 19 + TypeScript + Vite + Tailwind frontend lives in `src/frontend/`
+     and is the dispatcher control-center client; it consumes the backend API and makes no
+     authorization decisions (A01).
 
-**Carril de baja autonomía para agentes de IA Generativa**: Con independencia del carril,
-ningún agente de IA Generativa opera en modo autónomo de alta autonomía. Los agentes solo
-**proponen** (texto, código o recomendaciones de regulación) y **nunca** emiten comandos
-directos a los vehículos sin la **firma/autorización explícita del controlador humano**
-(Principio IV). Esto incluye el redireccionamiento dinámico de rutas de **US-03**: la IA
-propone el desvío y el **despachador humano lo autoriza** antes de que llegue a las unidades
-a bordo. El camino de tiempo real determinista ($\le 10\text{ s}$) nunca depende de una
-llamada síncrona a un agente generativo (Principio III).
+**Low-autonomy lane for Generative AI agents**: Regardless of the lane, no Generative AI
+agent operates in a high-autonomy mode. Agents only **propose** (text, code or regulation
+recommendations) and **never** send direct commands to vehicles without the **explicit
+signature/authorization of the human controller** (Principle IV). This includes the dynamic
+rerouting of **US-03**: the AI proposes the detour and the **human dispatcher authorizes it**
+before it reaches the on-board units. The deterministic real-time path ($\le 10\text{ s}$)
+never depends on a synchronous call to a generative agent (Principle III).
 
-**Criterios de asignación de carril (con evidencia)**: La asignación de una historia a un
-carril (Disciplinado vs. Adaptativo) se justifica con **evidencia ejecutada del repositorio**
-(pruebas, pipelines y resultados reproducibles), no con una estimación subjetiva: el carril
-Disciplinado exige contrato validado y pruebas de DataOps verdes antes de construir; el carril
-Adaptativo exige una hipótesis de valor medible contra $P(\text{abordar} \le t)$ validada con
-el despachador.
+**Lane assignment criteria (with evidence)**: Assigning a story to a lane (Disciplined vs.
+Adaptive) is justified with **executed evidence from the repository** (tests, pipelines and
+reproducible results), not with a subjective estimate: the Disciplined lane requires a
+validated contract and green DataOps tests before building; the Adaptive lane requires a
+measurable value hypothesis against $P(\text{abordar} \le t)$ validated with the dispatcher.
 
 ---
 
-## 3. Flujo de Desarrollo, Proceso de Revisión y Compuertas de Calidad
+## 3. Development Flow, Review Process and Quality Gates
 
-### 3.1 Ciclo de Vida RITMO (Las 5 Etapas por Vuelta de Espiral)
-Todas las vueltas de la espiral recorren secuencialmente cinco etapas estructuradas:
-1. **Etapa 1 — Planear**: Selección del riesgo prioritario a mitigar, fecha de cierre de la vuelta e hipótesis operativas. (Responsable: Dueño de Vuelta).
-2. **Etapa 2 — Especificar**: Redacción de la historia de usuario como especificación SDD (*Specification-Driven Development*) medible y compuerta de contrato si existen cambios en esquemas.
-3. **Etapa 3 — Construir**: Desarrollo de una historia a la vez en rama aislada (`feature/US-XX`), incluyendo código de producción, pruebas y reglas del dato.
-4. **Etapa 4 — Verificar**: Ejecución del pipeline de CI (linting, tests unitarios, cobertura $>80\%$), pruebas de contrato DataOps e inspección del revisor humano.
-5. **Etapa 5 — Revisar (Compuerta de Valor)**: Validación final de la hipótesis de valor midiendo impacto en $P(\text{abordar} \le t)$ con el despachador en el entorno de pruebas/simulación.
+### 3.1 RITMO Lifecycle (The 5 Stages per Spiral Turn)
+Every spiral turn goes through five structured stages in sequence:
+1. **Stage 1 — Plan**: Select the priority risk to mitigate, the turn's closing date and the operating hypotheses. (Owner: Turn Owner).
+2. **Stage 2 — Specify**: Write the user story as a measurable SDD (*Specification-Driven Development*) specification, plus a contract gate if schemas change.
+3. **Stage 3 — Build**: Develop one story at a time on an isolated branch (`feature/US-XX`), including production code, tests and data rules.
+4. **Stage 4 — Verify**: Run the CI pipeline (linting, unit tests, coverage $>80\%$), DataOps contract tests and human reviewer inspection.
+5. **Stage 5 — Review (Value Gate)**: Final validation of the value hypothesis by measuring the impact on $P(\text{abordar} \le t)$ with the dispatcher in the test/simulation environment.
 
-### 3.1.1 Ciclo de Vida Extremo a Extremo (E2E) — 10 Etapas
-Las 5 etapas RITMO describen la vuelta de ingeniería; el ciclo de vida extremo a
-extremo (E2E) las enmarca en un flujo operativo de 10 etapas que integra **Agile +
-DevOps + SRE** y conecta el desarrollo (*change*) con la operación (*run*):
+### 3.1.1 End-to-End (E2E) Lifecycle — 10 Stages
+The 5 RITMO stages describe the engineering turn; the end-to-end (E2E) lifecycle frames
+them in a 10-stage operating flow that combines **Agile + DevOps + SRE** and connects
+development (*change*) with operations (*run*):
 
-1. **Planear** — priorización por riesgo (ASRs) y selección de la historia de la vuelta.
-2. **Especificar** — historia SDD medible y compuerta de contrato (Contract-First).
-3. **Construir** — implementación en rama aislada `feature/US-XX` con pruebas y reglas.
-4. **Verificar** — CI (`backend-ci` / `frontend-ci`), pruebas de contrato DataOps y revisión humana.
-5. **Revisar** — compuerta de valor con el despachador sobre $P(\text{abordar} \le t)$.
-6. **Empaquetar y publicar** — construcción de imágenes versionadas; las compuertas DevSecOps
-   (SAST + SCA) bloquean imágenes vulnerables antes de publicarlas en el registro de contenedores (GHCR).
-7. **Desplegar** — despliegue en el entorno objetivo (MVP: `docker-compose`; evolución: K8s/GitOps).
-8. **Operar** — operación en tiempo real firme ($\le 10\text{ s}$) con la ingesta aislada activa.
-9. **Observar** — las tres señales de observabilidad (logs, métricas, trazas) y los SLIs/SLOs con presupuesto de error.
-10. **Aprender (Run → Change)** — los incidentes de producción y las alertas de degradación de
-    frescura del dato se convierten en **historias de fiabilidad** que reingresan en la Etapa 1.
+1. **Plan** — risk-based prioritization (ASRs) and selection of the turn's story.
+2. **Specify** — measurable SDD story and contract gate (Contract-First).
+3. **Build** — implementation on an isolated `feature/US-XX` branch with tests and rules.
+4. **Verify** — CI (`backend-ci` / `frontend-ci`), DataOps contract tests and human review.
+5. **Review** — value gate with the dispatcher on $P(\text{abordar} \le t)$.
+6. **Package and publish** — build versioned images; the DevSecOps gates (SAST + SCA) block
+   vulnerable images before they are published to the container registry (GHCR).
+7. **Deploy** — deploy to the target environment (MVP: `docker-compose`; evolution: K8s/GitOps).
+8. **Operate** — firm real-time operation ($\le 10\text{ s}$) with the isolated ingestion running.
+9. **Observe** — the three observability signals (logs, metrics, traces) and the SLIs/SLOs with an error budget.
+10. **Learn (Run → Change)** — production incidents and data-freshness degradation alerts
+    become **reliability stories** that re-enter Stage 1.
 
-**Bucle Run → Change (Agile-DevOps-SRE):** un incidente de producción o una alerta de
-degradación de frescura del dato entra en la **Etapa 1 — Planear** como una historia de
-fiabilidad, priorizada por riesgo (Principio I). Si el **presupuesto de error** del SLO
-está agotado, el desarrollo de nuevas *features* se **congela** hasta recuperar margen de
-fiabilidad (véase §3.4). El pipeline de CI/CD actúa como **Andon**: una compuerta roja
-detiene la línea y nadie avanza hasta corregir la causa raíz, bajo una cultura **Shift-Left**
-(calidad y seguridad desplazadas lo antes posible en el ciclo) y **post-mortems sin culpa**.
+**Run → Change loop (Agile-DevOps-SRE):** a production incident or a data-freshness
+degradation alert enters **Stage 1 — Plan** as a reliability story, prioritized by risk
+(Principle I). If the SLO **error budget** is exhausted, development of new *features* is
+**frozen** until reliability margin is recovered (see §3.4). The CI/CD pipeline acts as an
+**Andon**: a red gate stops the line and nobody moves forward until the root cause is fixed,
+under a **Shift-Left** culture (quality and security moved as early as possible in the
+cycle) and **blameless post-mortems**.
 
-### 3.2 Las Tres Compuertas de Calidad Automatizadas y Humanas
-* **Compuerta 1: Compuerta de Contrato (DataOps)**: Verifica que no existan rupturas en los esquemas JSON/Pydantic y que los simuladores de datos sigan la especificación del contrato.
-* **Compuerta 2: Compuerta del Dato y CI (DevOps/SRE)**: Valida que la latencia de ingesta sea $\le 500$ ms, sin huecos temporales y con cobertura de pruebas aprobada.
-* **Compuerta 3: Compuerta de Valor y Humana (Despachador)**: Cierre formal de cada vuelta del espiral mediante la aprobación del despachador y el gestor del sistema.
+### 3.2 The Three Automated and Human Quality Gates
+* **Gate 1: Contract Gate (DataOps)**: Checks that there are no breaks in the JSON/Pydantic schemas and that the data simulators follow the contract specification.
+* **Gate 2: Data and CI Gate (DevOps/SRE)**: Validates that ingestion latency is $\le 500$ ms, with no time gaps and with approved test coverage.
+* **Gate 3: Value and Human Gate (Dispatcher)**: Formal close of each spiral turn through the approval of the dispatcher and the system manager.
 
-### 3.3 Prácticas DevOps y SRE
+### 3.3 DevOps and SRE Practices
 
-Las compuertas de calidad definen *qué* se exige; esta sección define *cómo* se
-operan a través del ciclo de vida. Su adopción es incremental por vuelta según
+The quality gates define *what* is required; this section defines *how* they are
+operated across the lifecycle. They are adopted incrementally, turn by turn, according to
 `docs/turns-ritmo.md`.
 
-* **Pipeline CI/CD (GitHub Actions)**: El repositorio usa GitHub Actions
-  (`.github/workflows/`). Hay dos pipelines por la separación frontend/backend:
-  - `backend-ci`: lint (`ruff`), tipos (`mypy`), SAST (`Bandit`), pruebas y cobertura
-    (`pytest` > 80 %), SCA (`pip-audit`), build de imagen y escaneo de imagen (`Trivy`).
-  - `frontend-ci`: lint (`ESLint`), tipos (`tsc --noEmit`), pruebas (`Vitest`), build de
-    Vite y SCA de dependencias JS (`npm audit` / `Trivy`).
-  Ambos pipelines se disparan en cada *Pull Request* y bloquean la fusión si falla
-  cualquier compuerta (Principio V). El `docker-compose` se valida en CI. Las compuertas
-  **DevSecOps** (SAST + SCA) bloquean la publicación de imágenes vulnerables en el registro
-  de contenedores (GHCR) antes de su promoción (véase ADR-0005).
-* **Entornos y despliegue**: Tres entornos lógicos — `development` (local con
-  `docker-compose`), `staging` (homologación) y `production`. `DEBUG=False` forzado en
-  staging y producción. Releases por imágenes versionadas (tag inmutable + SHA); rollback
-  por redeploy de la imagen anterior. Cambios de esquema de base de datos aplicados con
-  scripts SQL idempotentes versionados (sin Alembic), de forma controlada y con respaldo previo.
-* **Despliegue objetivo del MVP y evolución**: El **despliegue del primer MVP** es
-  **Docker + `docker-compose`** con los 4 servicios (`ingestion-service`, `pulsoflota-backend`,
-  `pulsoflota-frontend`, `database-redis`); es la meta actual/cercana. La **publicación de
-  imágenes versionadas en GHCR** por el pipeline unificado de CI/CD es un **objetivo intermedio**
-  (puede preceder a un orquestador completo y no bloquea el MVP). **Kubernetes + Helm + GitOps/Argo CD**
-  se documenta como **evolución / objetivo futuro** de producción para una vuelta posterior del
-  espiral; no se construye ni se exige en el MVP (adopción vuelta por vuelta, `docs/turns-ritmo.md`).
-* **SLIs y SLOs**: Indicadores derivados de los RNF — latencia de ingesta P99 ≤ 500 ms,
-  latencia de refresco de mapa ≤ 2 s, latencia detección→recomendación ≤ 10 s, tasa de
-  rechazo de paquetes < 0.1 % y disponibilidad de la ingesta aislada. Cada SLO tiene un
-  presupuesto de error; su agotamiento congela despliegues de features hasta recuperar
-  margen.
-* **SLO de frescura del dato y presupuesto de error compartido**: El SLI principal de
-  fiabilidad es la **frescura del dato** (*data freshness*): la antigüedad del último evento
-  de telemetría ingerido por bus activo. El umbral del SLI es **< 15 s**; una muestra con
-  antigüedad ≥ 15 s se cuenta como fallo. El **SLO es 99 %** de frescura sobre una ventana
-  móvil de **28 días**, lo que fija un **presupuesto de error de 403 minutos** (1 % × 28 días)
-  compartido por todo el equipo. Agotar este presupuesto **congela el desarrollo de nuevas
-  features** y prioriza historias de fiabilidad hasta restaurar el margen (bucle Run → Change, §3.1.1).
-* **Conjunto tripartito de indicadores**: El tablero de seguimiento combina tres familias de métricas:
-  - **Técnicos (DORA)**: frecuencia de despliegue, *lead time* de cambios, tasa de fallo de cambios
-    y tiempo de restauración del servicio (MTTR).
-  - **Operativos**: frescura del dato, tasa de rechazo de paquetes, latencia de ingesta P99 y
-    cumplimiento del tiempo real firme ($\le 10\text{ s}$).
-  - **De negocio**: $P(\text{abordar} \le t)$ y *Excess Wait Time* (EWT) leídos en percentiles
-    $P_{85}$ / $P_{95}$, que alimentan el pago por calidad a los operadores.
-* **Observabilidad (tres señales)**:
-  - **Logs**: JSON estructurado compatible con OpenTelemetry, sin PII (ver SRD A09).
-  - **Métricas**: exportadas en formato Prometheus (contadores de eventos, latencias,
-    tasa de rechazo, estado de buses), visualizadas en Grafana.
-  - **Trazas**: trazado distribuido con OpenTelemetry por el camino ingesta → cálculo →
-    recomendación, correlacionado con `correlation_id`.
-* **Alertas e incidentes**: Alertas al equipo SRE/DevSecOps (PagerDuty/Slack) ante rechazo
-  de mensajes IoT > 5 % en 1 min, **degradación de frescura del dato** (SLI < 15 s incumplido)
-  o agotamiento del presupuesto de error. Toda incidencia de severidad alta requiere *runbook*
-  y **post-mortem sin culpa** (*blameless*). Un incidente de producción o una alerta de
-  degradación de frescura genera una **historia de fiabilidad** que reingresa en la Etapa 1 — Planear
-  (bucle Run → Change, §3.1.1). El pipeline de CI/CD opera como **Andon**: una compuerta roja
-  detiene la integración hasta resolver la causa raíz.
-* **Healthchecks y resiliencia**: Cada servicio de `docker-compose` define `healthcheck`
-  (liveness/readiness) y dependencias con `depends_on: condition: service_healthy`. La
-  ingesta aislada sobrevive a la caída del frontend/backend (Principio III) y mantiene el
-  buffer persistente (A10).
-* **Respaldo y recuperación (DR)**: Respaldo periódico de PostgreSQL con objetivos
-  explícitos de RPO y RTO; restauración probada. Bronze es inmutable; silver y gold se
-  recalculan desde bronze, lo que acota el impacto de una pérdida.
-* **Linaje inmutable y antifraude de recaudo (DataOps)**: El pipeline del dato mantiene un
-  linaje inmutable que protege el pago por calidad a los operadores. Cada agregado de la capa
-  *gold* registra su `rules_version` y su origen en *bronze*, de modo que toda métrica de
-  liquidación ($P(\text{abordar} \le t)$, EWT) es reproducible y trazable a la versión de reglas
-  que la generó. Las reglas de calidad viven como código determinista y probado (nunca una
-  decisión de un LLM), lo que impide alterar retroactivamente los indicadores de pago.
+* **CI/CD pipeline (GitHub Actions)**: The repository uses GitHub Actions
+  (`.github/workflows/`). There are two pipelines because of the frontend/backend split:
+  - `backend-ci`: lint (`ruff`), types (`mypy`), SAST (`Bandit`), tests and coverage
+    (`pytest` > 80 %), SCA (`pip-audit`), image build and image scan (`Trivy`).
+  - `frontend-ci`: lint (`ESLint`), types (`tsc --noEmit`), tests (`Vitest`), Vite build
+    and SCA of JS dependencies (`npm audit` / `Trivy`).
+  Both pipelines run on every *Pull Request* and block the merge if any gate fails
+  (Principle V). The `docker-compose` file is validated in CI. The **DevSecOps** gates
+  (SAST + SCA) block publishing vulnerable images to the container registry (GHCR) before
+  promotion (see ADR-0005).
+* **Environments and deployment**: Three logical environments — `development` (local with
+  `docker-compose`), `staging` (pre-production) and `production`. `DEBUG=False` is enforced
+  in staging and production. Releases ship as versioned images (immutable tag + SHA);
+  rollback redeploys the previous image. Database schema changes are applied with
+  versioned, idempotent SQL scripts (no Alembic), in a controlled way and with a prior
+  backup.
+* **MVP target deployment and evolution**: The **first MVP deployment** is
+  **Docker + `docker-compose`** with the 4 services (`ingestion-service`, `pulsoflota-backend`,
+  `pulsoflota-frontend`, `database-redis`); this is the current/near-term goal. **Publishing
+  versioned images to GHCR** through the unified CI/CD pipeline is an **intermediate goal**
+  (it may come before a full orchestrator and does not block the MVP). **Kubernetes + Helm +
+  GitOps/Argo CD** is documented as the **evolution / future goal** for production in a
+  later spiral turn; it is neither built nor required in the MVP (turn-by-turn adoption,
+  `docs/turns-ritmo.md`).
+* **SLIs and SLOs**: Indicators derived from the NFRs — ingestion latency P99 ≤ 500 ms, map
+  refresh latency ≤ 2 s, detection→recommendation latency ≤ 10 s, packet rejection rate
+  < 0.1 % and availability of the isolated ingestion. Each SLO has an error budget; once it
+  is exhausted, feature deployments are frozen until margin is recovered.
+* **Data freshness SLO and shared error budget**: The main reliability SLI is **data
+  freshness**: the age of the last telemetry event ingested per active bus. The SLI
+  threshold is **< 15 s**; a sample aged ≥ 15 s counts as a failure. The **SLO is 99 %**
+  freshness over a rolling **28-day** window, which sets an **error budget of 403 minutes**
+  (1 % × 28 days) shared by the whole team. Exhausting this budget **freezes development of
+  new features** and prioritizes reliability stories until the margin is restored (Run →
+  Change loop, §3.1.1).
+* **Three-part set of indicators**: The tracking dashboard combines three families of metrics:
+  - **Technical (DORA)**: deployment frequency, change *lead time*, change failure rate and
+    time to restore service (MTTR).
+  - **Operational**: data freshness, packet rejection rate, ingestion latency P99 and
+    compliance with firm real time ($\le 10\text{ s}$).
+  - **Business**: $P(\text{abordar} \le t)$ and *Excess Wait Time* (EWT), read at the
+    $P_{85}$ / $P_{95}$ percentiles, which feed the pay-for-quality scheme for operators.
+* **Observability (three signals)**:
+  - **Logs**: structured JSON compatible with OpenTelemetry, with no PII (see SRD A09).
+  - **Metrics**: exported in Prometheus format (event counters, latencies, rejection rate,
+    bus status), visualized in Grafana.
+  - **Traces**: distributed tracing with OpenTelemetry along the ingestion → computation →
+    recommendation path, correlated by `correlation_id`.
+* **Alerts and incidents**: Alerts to the SRE/DevSecOps team (PagerDuty/Slack) when IoT
+  message rejection is > 5 % in 1 min, on **data-freshness degradation** (SLI < 15 s not
+  met) or when the error budget is exhausted. Every high-severity incident requires a
+  *runbook* and a **blameless post-mortem**. A production incident or a freshness
+  degradation alert produces a **reliability story** that re-enters Stage 1 — Plan (Run →
+  Change loop, §3.1.1). The CI/CD pipeline works as an **Andon**: a red gate stops
+  integration until the root cause is resolved.
+* **Healthchecks and resilience**: Every `docker-compose` service defines a `healthcheck`
+  (liveness/readiness) and dependencies with `depends_on: condition: service_healthy`. The
+  isolated ingestion survives a frontend/backend outage (Principle III) and keeps the
+  persistent buffer (A10).
+* **Backup and recovery (DR)**: Periodic PostgreSQL backups with explicit RPO and RTO
+  targets; restore is tested. Bronze is immutable; silver and gold are recomputed from
+  bronze, which limits the impact of a loss.
+* **Immutable lineage and fare-collection anti-fraud (DataOps)**: The data pipeline keeps an
+  immutable lineage that protects the pay-for-quality scheme for operators. Every *gold*
+  aggregate records its `rules_version` and its origin in *bronze*, so every settlement
+  metric ($P(\text{abordar} \le t)$, EWT) is reproducible and traceable to the rules version
+  that produced it. Quality rules live as deterministic, tested code (never an LLM
+  decision), which prevents retroactive changes to the payment indicators.
 
 ---
 
-## 4. Gobernanza y Enmiendas del Documento
+## 4. Document Governance and Amendments
 
-### 4.1 Procedimiento de Enmienda
-* Cualquier modificación a este documento OMD o a sus principios core **DEBE** ser propuesta mediante un Pull Request etiquetado como `constitutional-amendment`.
-* El PR de enmienda **DEBE** incluir la justificación basada en evidencia de campo o nuevas restricciones del dominio de transporte en Medellín.
-* Requiere la aprobación unánime de los integrantes del equipo (Dueño de Vuelta, Arquitecto de Software y Representante del Despachador).
+### 4.1 Amendment Procedure
+* Any change to this OMD document or its core principles **MUST** be proposed through a Pull Request labeled `constitutional-amendment`.
+* The amendment PR **MUST** include a justification based on field evidence or new constraints of the Medellín transport domain.
+* It requires the unanimous approval of the team members (Turn Owner, Software Architect and Dispatcher Representative).
 
-### 4.2 Política de Versionado (SemVer)
-* **MAJOR (X.0.0)**: Cambios en los Principios Core NON-NEGOTIABLE o reestructuración de la arquitectura de contenedores/carriles.
-* **MINOR (1.X.0)**: Incorporación de nuevos objetos al modelo de dominio, nuevas historias de usuario en la matriz o modificaciones en el stack tecnológico compatible.
-* **PATCH (1.0.X)**: Correcciones menores de texto, clarificación de reglas o ajustes en métricas secundarias.
+### 4.2 Versioning Policy (SemVer)
+* **MAJOR (X.0.0)**: Changes to the NON-NEGOTIABLE Core Principles or a restructuring of the container/lane architecture.
+* **MINOR (1.X.0)**: New objects in the domain model, new user stories in the matrix or compatible changes to the technology stack.
+* **PATCH (1.0.X)**: Minor wording fixes, rule clarifications or adjustments to secondary metrics.
 
-### 4.3 Auditoría de Cumplimiento
-* Al final de cada vuelta del espiral, el equipo **DEBE** realizar una revisión de cumplimiento de los 5 Principios Core.
-* Si se detecta una violación a los principios (ej. código sin prueba fogueado en la rama principal o recomendaciones emitidas sin compuerta humana), el build en CI **DEBE** ser marcado como fallido inmediatamente.
+### 4.3 Compliance Audit
+* At the end of each spiral turn, the team **MUST** run a compliance review of the 5 Core Principles.
+* If a violation of the principles is detected (e.g. untested code pushed to the main branch, or recommendations issued without the human gate), the CI build **MUST** be marked as failed immediately.

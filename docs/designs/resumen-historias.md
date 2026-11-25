@@ -1,175 +1,177 @@
-# PulsoFlota · Resumen de historias y mock-ups (UXUI-01 a UXUI-12)
+# PulsoFlota · Summary of stories and mock-ups (UXUI-01 to UXUI-12)
 
-PulsoFlota es una central web para despachadores y gestores de un sistema integrado de transporte. El despachador ve el corredor en vivo, recibe recomendaciones para evitar agrupamientos y huecos de buses, y decide si las aplica. El gestor consulta indicadores de calidad del servicio por operador. El sistema recomienda y la persona decide.
+PulsoFlota is a web control center for dispatchers and managers of an integrated transport system. The dispatcher watches the corridor live, receives recommendations to avoid bus bunching and gaps, and decides whether to apply them. The manager reviews service quality indicators per operator. The system recommends and the person decides.
 
-Cada historia tiene tres pantallas en el lienzo: la ficha de la historia, la versión de escritorio (1280 px) y la de celular (390 px). Las capturas están en `historias/`, `escritorio/` y `celular/`, con el nombre `UXUIxx-historia`, `UXUIxx-escritorio` y `UXUIxx-celular`.
+Each story has three screens on the canvas: the story card, the desktop version (1280 px) and the mobile version (390 px). The screenshots are in `historias/`, `escritorio/` and `celular/`, named `UXUIxx-historia`, `UXUIxx-escritorio` and `UXUIxx-celular`.
+
+The app's user interface is in Spanish. Screen names, menu items and on-screen copy are kept in Spanish in this document (in *italics* or «quotes»), with the English meaning alongside where it helps.
 
 ---
 
-## Índice
+## Index
 
-| Historia | Tema | Rol | Vuelta | Carril |
+| Story | Topic | Role | Turn | Lane |
 |---|---|---|---|---|
-| UXUI-01 | Iniciar sesión | Despachador / gestor | 2 · Valor | Adaptativo + revisión de seguridad |
-| UXUI-02 | Recuperar contraseña | Cualquier usuario | 2 · Valor | Depende de UXUI-01 |
-| UXUI-03 | Navegación principal por rol y estado del dato | Despachador / gestor | 2 · Valor | Adaptativo · hipótesis |
-| UXUI-04 | Ver el corredor en vivo | Despachador | 2 · Valor | Adaptativo · consume el contrato |
-| UXUI-05 | Atender una recomendación de regularidad | Despachador | 2 · Valor | Mixto · tiempo real firme |
-| UXUI-06 | Indicadores de calidad del servicio | Gestor | 2 · Valor | Disciplinado · afecta el pago |
-| UXUI-07 | Bandeja de Alertas | Despachador | 2 · Valor | Adaptativo · depende de UXUI-05 |
-| UXUI-08 | Consultar el plan del día | Despachador | 2 · Valor | Adaptativo · sin tiempo real |
-| UXUI-09 | Calidad del dato por operador | Gestor | 1 · Dato y fábrica | Disciplinado · DataOps |
-| UXUI-10 | Hacer llegar la instrucción al conductor | Despachador | 2 · Valor | Mixto · depende de UXUI-05 |
-| UXUI-11 | Ver si la recomendación funcionó | Despachador | 2 · Valor | Adaptativo · depende de UXUI-10 |
-| UXUI-12 | Reportar una novedad operativa | Despachador | 2 · Valor | Mixto · afecta las recomendaciones |
+| UXUI-01 | Sign in (*Iniciar sesión*) | Dispatcher / manager | 2 · Value | Adaptive + security review |
+| UXUI-02 | Recover password (*Recuperar contraseña*) | Any user | 2 · Value | Depends on UXUI-01 |
+| UXUI-03 | Main navigation by role and data state (*Navegación principal por rol y estado del dato*) | Dispatcher / manager | 2 · Value | Adaptive · hypothesis |
+| UXUI-04 | View the corridor live (*Ver el corredor en vivo*) | Dispatcher | 2 · Value | Adaptive · consumes the contract |
+| UXUI-05 | Handle a regularity recommendation (*Atender una recomendación de regularidad*) | Dispatcher | 2 · Value | Mixed · firm real time |
+| UXUI-06 | Service quality indicators (*Indicadores de calidad del servicio*) | Manager | 2 · Value | Disciplined · affects payment |
+| UXUI-07 | Alerts inbox (*Bandeja de Alertas*) | Dispatcher | 2 · Value | Adaptive · depends on UXUI-05 |
+| UXUI-08 | View the plan of the day (*Consultar el plan del día*) | Dispatcher | 2 · Value | Adaptive · no real time |
+| UXUI-09 | Data quality per operator (*Calidad del dato por operador*) | Manager | 1 · Data and factory | Disciplined · DataOps |
+| UXUI-10 | Get the instruction to the driver (*Hacer llegar la instrucción al conductor*) | Dispatcher | 2 · Value | Mixed · depends on UXUI-05 |
+| UXUI-11 | See whether the recommendation worked (*Ver si la recomendación funcionó*) | Dispatcher | 2 · Value | Adaptive · depends on UXUI-10 |
+| UXUI-12 | Report an operational incident (*Reportar una novedad operativa*) | Dispatcher | 2 · Value | Mixed · affects recommendations |
 
 ---
 
-## UXUI-01 · Iniciar sesión
+## UXUI-01 · Sign in (*Iniciar sesión*)
 
-**Relacionada con:** acceso a la aplicación.
+**Related to:** access to the application.
 
-El usuario entra con su usuario institucional y contraseña y llega a la vista inicial de su rol.
+The user signs in with their institutional username and password and lands on their role's home view.
 
-- **Escritorio:** dos paneles. A la izquierda un panel azul marino con la marca y el mensaje «Central del despachador». A la derecha el formulario de 400 px con usuario, contraseña (con botón Mostrar/Ocultar) y el enlace «¿Olvidaste tu contraseña?».
-- **Celular:** una columna con campos y botón de 48 px, el botón a todo el ancho.
-- **Estados:** normal, error («Usuario o contraseña incorrectos», sin indicar cuál falló) y cuenta bloqueada tras 5 intentos fallidos en 15 min, con la hora de desbloqueo.
-- **Por definir con el cliente:** si el gestor entra con inicio de sesión único (SSO) institucional.
+- **Desktop:** two panels. On the left, a navy panel with the brand and the message «Central del despachador» (dispatcher control center). On the right, the 400 px form with username, password (with a Mostrar/Ocultar — show/hide — button) and the link «¿Olvidaste tu contraseña?» (forgot your password?).
+- **Mobile:** one column with fields and a 48 px button, the button full width.
+- **States:** normal, error («Usuario o contraseña incorrectos» — wrong username or password — without saying which one failed) and account locked after 5 failed attempts in 15 min, showing the unlock time.
+- **To be defined with the client:** whether the manager signs in through institutional single sign-on (SSO).
 
-## UXUI-02 · Recuperar contraseña
+## UXUI-02 · Recover password (*Recuperar contraseña*)
 
-**Relacionada con:** acceso, continuación de UXUI-01.
+**Related to:** access, follow-up to UXUI-01.
 
-Restablecer la contraseña con un enlace enviado al correo, sin depender de soporte en pleno turno.
+Reset the password with a link sent by email, without depending on support in the middle of a shift.
 
-- **Flujo en tres pasos:** pedir el enlace, ver la confirmación y definir la nueva contraseña.
-- **Reglas visibles:** el mensaje de confirmación es siempre el mismo exista o no la cuenta; el enlace es de un solo uso y vence a los 30 min; la nueva contraseña exige 12 caracteres o más, una letra y un número, con requisitos marcados en vivo.
-- **Al guardar:** se cierran todas las sesiones abiertas y se vuelve a Iniciar sesión con aviso de éxito.
-- **Escritorio:** tarjeta centrada de máximo 440 px. **Celular:** ancho completo con márgenes de 20 px.
-- **Por definir:** quién desbloquea una cuenta bloqueada antes de los 15 min.
+- **Three-step flow:** request the link, see the confirmation and set the new password.
+- **Visible rules:** the confirmation message is always the same whether or not the account exists; the link is single-use and expires after 30 min; the new password requires 12 or more characters, one letter and one number, with the requirements checked live.
+- **On save:** all open sessions are closed and the user returns to *Iniciar sesión* with a success notice.
+- **Desktop:** centered card, 440 px max. **Mobile:** full width with 20 px margins.
+- **To be defined:** who unlocks a locked account before the 15 min are up.
 
-## UXUI-03 · Navegación principal por rol y estado del dato
+## UXUI-03 · Main navigation by role and data state (*Navegación principal por rol y estado del dato*)
 
-**Relacionada con:** estructura de la aplicación y confianza en el dato.
+**Related to:** application structure and trust in the data.
 
-El marco fijo de la app: muestra las secciones del rol, el corredor activo, la hora y si los datos están al día.
+The app's fixed frame: it shows the role's sections, the active corridor, the time and whether the data is up to date.
 
-- **Menú por rol:** el despachador ve Central en vivo, Alertas y Plan del día; el gestor ve Indicadores de calidad y Plan del día. Una URL fuera del rol responde «Sin permiso» (403).
-- **Indicador del dato:** En vivo, Estimado (cayó una fuente) o Sin datos, siempre con texto y con la hora del último evento. En los dos últimos aparece un banner explicativo.
-- **Escritorio:** barra lateral de 248 px y barra superior. **Celular:** barra superior compacta y navegación inferior de máximo 4 ítems; el perfil y Cerrar sesión van en «Más».
-- **Sesión:** cerrar sesión la invalida, y hay aviso 2 min antes de que expire.
-- **Hipótesis:** «En vivo» si el último evento llegó hace menos de 30 s; «Sin datos» tras 2 min sin eventos.
+- **Menu by role:** the dispatcher sees *Central en vivo*, *Alertas* and *Plan del día*; the manager sees *Indicadores de calidad* and *Plan del día*. A URL outside the role returns «Sin permiso» (403).
+- **Data indicator:** *En vivo* (live), *Estimado* (estimated: a source dropped) or *Sin datos* (no data), always with text and the time of the last event. The last two show an explanatory banner.
+- **Desktop:** 248 px sidebar and top bar. **Mobile:** compact top bar and bottom navigation with at most 4 items; the profile and *Cerrar sesión* (sign out) go under «Más» (more).
+- **Session:** signing out invalidates the session, and there is a notice 2 min before it expires.
+- **Hypothesis:** «En vivo» if the last event arrived less than 30 s ago; «Sin datos» after 2 min without events.
 
-## UXUI-04 · Ver el corredor en vivo
+## UXUI-04 · View the corridor live (*Ver el corredor en vivo*)
 
-**Relacionada con:** monitoreo en tiempo real, pantalla principal del despachador.
+**Related to:** real-time monitoring, the dispatcher's main screen.
 
-Diagrama del corredor con la posición de cada bus y su intervalo con el bus de adelante, para detectar agrupamientos y huecos a tiempo.
+A corridor diagram with each bus's position and its headway to the bus ahead, to spot bunching and gaps in time.
 
-- **Escritorio:** cuatro indicadores arriba (buses en servicio, intervalo programado, agrupamientos, huecos), diagrama horizontal con estaciones y buses, y tabla de buses con estado y tipo de dato.
-- **Celular:** el corredor se lee de arriba abajo, con los buses entre sus paradas.
-- **Reglas:** la posición se actualiza con un retraso de 10 s o menos. Un bus es «Agrupado» si su intervalo es menos del 50 % del programado y «Hueco» si pasa del 150 %. Un bus cuya fuente no responde se dibuja con borde punteado y la etiqueta «Estimado».
-- **Hipótesis:** los umbrales de 50 % y 150 %. Los datos del mock-up son de ejemplo.
-- **Control de prototipo:** un botón punteado «Simular recomendación» lleva a UXUI-05.
+- **Desktop:** four indicators at the top (buses in service, scheduled headway, bunchings, gaps), a horizontal diagram with stations and buses, and a bus table with status and data type.
+- **Mobile:** the corridor reads top to bottom, with the buses between their stops.
+- **Rules:** the position updates with a delay of 10 s or less. A bus is «Agrupado» (bunched) if its headway is under 50 % of the scheduled one and «Hueco» (gap) if it is over 150 %. A bus whose source does not respond is drawn with a dotted border and the label «Estimado».
+- **Hypothesis:** the 50 % and 150 % thresholds. The mock-up data are examples.
+- **Prototype control:** a dotted «Simular recomendación» (simulate recommendation) button leads to UXUI-05.
 
-## UXUI-05 · Atender una recomendación de regularidad
+## UXUI-05 · Handle a regularity recommendation (*Atender una recomendación de regularidad*)
 
-**Relacionada con:** recomendaciones del sistema y decisión del despachador.
+**Related to:** system recommendations and the dispatcher's decision.
 
-Cuando se forma un agrupamiento o un hueco, el sistema propone una acción concreta con su efecto esperado, y el despachador la aplica o la descarta dejando registro.
+When bunching or a gap forms, the system proposes a concrete action with its expected effect, and the dispatcher applies or dismisses it, leaving a record.
 
-- **Contenido de cada recomendación:** acción, bus, parada, duración, motivo, efecto esperado en la espera excesiva (EWT) y confianza del dato.
-- **Reglas:** aparece en 10 s o menos; sin respuesta en 2 min vence; nunca hay más de 3 activas; la retención no supera 90 s; descartar exige un motivo; dos recomendaciones sobre el mismo tramo se marcan «en conflicto».
-- **Escritorio:** panel lateral de 400 px junto al corredor, con la zona afectada resaltada y un historial de decisiones del turno. **Celular:** aviso arriba y hoja inferior con la lista y los botones al alcance del pulgar.
-- **Riesgo que atiende:** fatiga de alertas. **Por definir:** el canal con el que el despachador avisa al conductor.
+- **Content of each recommendation:** action, bus, stop, duration, reason, expected effect on excess wait time (EWT) and data confidence.
+- **Rules:** it appears in 10 s or less; with no answer in 2 min it expires; there are never more than 3 active; holding never exceeds 90 s; dismissing requires a reason; two recommendations on the same segment are marked «en conflicto» (in conflict).
+- **Desktop:** 400 px side panel next to the corridor, with the affected area highlighted and a history of the shift's decisions. **Mobile:** a notice at the top and a bottom sheet with the list and the buttons within thumb reach.
+- **Risk it addresses:** alert fatigue. **To be defined:** the channel the dispatcher uses to tell the driver.
 
-## UXUI-06 · Indicadores de calidad del servicio
+## UXUI-06 · Service quality indicators (*Indicadores de calidad del servicio*)
 
-**Relacionada con:** pago a operadores por calidad (rol gestor).
+**Related to:** pay-for-quality to operators (manager role).
 
-El gestor consulta P(abordar ≤ t) y la espera excesiva (EWT) por operador y franja, junto con cuánto dato confiable las respalda.
+The manager reviews P(abordar ≤ t) and excess wait time (EWT) per operator and time band, together with how much reliable data backs them.
 
-- **Escritorio:** filtros (fecha, corredor, franja y t de 5, 10 o 15 min), tres indicadores y tabla por operador. **Celular:** resumen de filtros en una línea y una tarjeta por operador.
-- **Reglas:** cada valor muestra su cobertura (% de eventos válidos y % estimados); con menos de 90 % el operador se marca «No apto para pago». Solo se usan eventos que pasaron la compuerta del dato. La tabla se exporta a CSV.
-- **Por definir con el cliente:** el umbral de 90 % y la fórmula de pago.
+- **Desktop:** filters (date, corridor, time band and t of 5, 10 or 15 min), three indicators and a table per operator. **Mobile:** a one-line filter summary and one card per operator.
+- **Rules:** each value shows its coverage (% of valid events and % estimated); below 90 % the operator is marked «No apto para pago» (not eligible for payment). Only events that passed the data gate are used. The table exports to CSV.
+- **To be defined with the client:** the 90 % threshold and the payment formula.
 
-## UXUI-07 · Bandeja de Alertas
+## UXUI-07 · Alerts inbox (*Bandeja de Alertas*)
 
-**Relacionada con:** seguimiento de avisos y recomendaciones del turno.
+**Related to:** follow-up of the shift's notices and recommendations.
 
-Una bandeja con todo lo que el sistema avisó durante el turno, para retomar lo que se cerró sin decidir.
+An inbox with everything the system flagged during the shift, to pick up what was closed without a decision.
 
-- **Tres pestañas con contador:** Activas (las mismas recomendaciones de UXUI-05), Avisos del dato e Historial.
-- **Avisos del dato:** fuente caída, bus sin señal más de 2 min o eventos rechazados. Indican qué afecta y desde cuándo, y se marcan resueltos cuando el dato vuelve. No suenan.
-- **Historial:** filtra por resultado (aplicada, descartada, vencida) y muestra hora, acción, motivo y quién decidió.
-- **Escritorio:** pestañas y tablas. **Celular:** pestañas en segmento y tarjetas.
-- **Abrir una activa** lleva a la central con esa recomendación abierta.
+- **Three tabs with counters:** *Activas* (the same recommendations as UXUI-05), *Avisos del dato* (data notices) and *Historial* (history).
+- **Data notices:** source down, bus without signal for more than 2 min or rejected events. They say what is affected and since when, and are marked resolved when the data returns. They make no sound.
+- **History:** filters by outcome (applied, dismissed, expired) and shows time, action, reason and who decided.
+- **Desktop:** tabs and tables. **Mobile:** segmented tabs and cards.
+- **Opening an active one** takes the user to the control center with that recommendation open.
 
-## UXUI-08 · Consultar el plan del día
+## UXUI-08 · View the plan of the day (*Consultar el plan del día*)
 
-**Relacionada con:** programación, demanda y operación sin datos en vivo.
+**Related to:** scheduling, demand and operating without live data.
 
-Muestra las salidas programadas desde el transbordo junto a las reales, y la demanda esperada del Metro, como guía cuando no hay datos en vivo.
+It shows the scheduled departures from the transfer point next to the actual ones, and the expected Metro demand, as a guide when there is no live data.
 
-- **Salidas:** hora programada, bus, hora real y desviación; más de 2 min se marca «Atrasada» o «Adelantada».
-- **Demanda esperada:** por franjas de 30 min, calculada con la afluencia histórica del Metro, junto al intervalo planeado.
-- **Al abrir:** se ubica en la hora actual con una línea «Ahora» y la próxima salida resaltada. Sin datos en vivo, las salidas reales aparecen como «Sin dato».
-- **Escritorio:** barras de demanda y tabla. **Celular:** barras compactas y lista de salidas.
-- **Solo lectura:** muestra quién cargó el plan y cuándo. **Por definir:** quién lo carga y con qué frecuencia.
+- **Departures:** scheduled time, bus, actual time and deviation; more than 2 min is marked «Atrasada» (late) or «Adelantada» (early).
+- **Expected demand:** in 30-min bands, computed from historical Metro ridership, next to the planned headway.
+- **On open:** it scrolls to the current time with an «Ahora» (now) line and the next departure highlighted. Without live data, actual departures show as «Sin dato» (no data).
+- **Desktop:** demand bars and a table. **Mobile:** compact bars and a departures list.
+- **Read only:** it shows who loaded the plan and when. **To be defined:** who loads it and how often.
 
-## UXUI-09 · Calidad del dato por operador
+## UXUI-09 · Data quality per operator (*Calidad del dato por operador*)
 
-**Relacionada con:** confianza en los indicadores de pago (rol gestor, vuelta 1 · Dato y fábrica).
+**Related to:** trust in the payment indicators (manager role, turn 1 · Data and factory).
 
-El gestor ve cuántos eventos envía cada operador, cuántos se rechazan y por qué, la latencia y los huecos por bus.
+The manager sees how many events each operator sends, how many are rejected and why, the latency and the gaps per bus.
 
-- **Por operador y día:** eventos recibidos, % rechazados, latencia p95 y huecos.
-- **Detalle del operador:** causas de rechazo (duplicado, fuera del contrato, posición imposible, hora fuera de rango) y buses con más huecos.
-- **Marcas:** «Revisar» si el rechazo pasa de 5 % o la latencia p95 de 10 s; «Posible manipulación» para patrones sospechosos, siempre para revisión humana, nunca sanción automática.
-- **Escritorio:** tabla y detalle del operador elegido. **Celular:** tarjetas que se abren con el detalle.
-- **Impacto en UXUI-03:** el menú del gestor suma «Calidad del dato».
+- **Per operator and day:** events received, % rejected, p95 latency and gaps.
+- **Operator detail:** rejection causes (duplicate, outside the contract, impossible position, time out of range) and the buses with the most gaps.
+- **Flags:** «Revisar» (review) if rejection exceeds 5 % or p95 latency exceeds 10 s; «Posible manipulación» (possible tampering) for suspicious patterns, always for human review, never an automatic sanction.
+- **Desktop:** table and detail of the selected operator. **Mobile:** cards that expand to show the detail.
+- **Impact on UXUI-03:** the manager's menu adds «Calidad del dato».
 
-## UXUI-10 · Hacer llegar la instrucción al conductor
+## UXUI-10 · Get the instruction to the driver (*Hacer llegar la instrucción al conductor*)
 
-**Relacionada con:** ejecución de las recomendaciones aplicadas.
+**Related to:** carrying out the applied recommendations.
 
-Después de aplicar una recomendación, el despachador envía la instrucción al conductor y sigue su estado.
+After applying a recommendation, the dispatcher sends the instruction to the driver and follows its status.
 
-- **Estados:** Enviada, Recibida (el conductor confirma) y Ejecutada (los datos muestran que se cumplió). Sin confirmación en 30 s se marca «Sin confirmación» y se puede reenviar o avisar por radio.
-- **Reglas:** la instrucción llega a la consola del bus en 5 s o menos; sin consola o con la fuente caída solo se ofrece la radio; una retención se da por ejecutada si el bus permanece la duración indicada más o menos 15 s.
-- **Escritorio:** seguimiento en el panel lateral, con lo que ve el conductor. **Celular:** tarjeta de seguimiento a pantalla completa.
-- **Supuesto fuerte:** los buses tienen consola para recibir mensajes; hay que validarlo con los operadores. La app del conductor queda fuera.
+- **States:** *Enviada* (sent), *Recibida* (received: the driver confirms) and *Ejecutada* (executed: the data show it was carried out). With no confirmation in 30 s it is marked «Sin confirmación» (unconfirmed) and can be resent or communicated by radio.
+- **Rules:** the instruction reaches the bus console in 5 s or less; with no console or with the source down, only radio is offered; a hold counts as executed if the bus stays for the stated duration plus or minus 15 s.
+- **Desktop:** tracking in the side panel, including what the driver sees. **Mobile:** a full-screen tracking card.
+- **Strong assumption:** buses have a console to receive messages; this must be validated with the operators. The driver app is out of scope.
 
-## UXUI-11 · Ver si la recomendación funcionó
+## UXUI-11 · See whether the recommendation worked (*Ver si la recomendación funcionó*)
 
-**Relacionada con:** aprendizaje y evaluación de las recomendaciones.
+**Related to:** learning from and evaluating the recommendations.
 
-Minutos después de ejecutar una recomendación, muestra cómo cambiaron el intervalo y la espera excesiva.
+Minutes after a recommendation is executed, it shows how the headway and excess wait time changed.
 
-- **Gráfica:** intervalo entre los buses involucrados desde 6 min antes hasta 10 min después, junto al intervalo programado.
-- **Resultado:** «Funcionó» (logró al menos 50 % del efecto esperado), «Efecto parcial», «No funcionó» o «Sin dato suficiente» (cobertura menor a 90 %). Hay un resumen del turno.
-- **Se accede** desde el Historial de Alertas (UXUI-07).
-- **Nota en pantalla:** los resultados evalúan las recomendaciones, no al despachador, y el resultado es una señal, no una prueba.
-- **Escritorio:** lista del turno y detalle con gráfica. **Celular:** tarjetas con una gráfica pequeña.
+- **Chart:** headway between the buses involved from 6 min before to 10 min after, next to the scheduled headway.
+- **Outcome:** «Funcionó» (worked: achieved at least 50 % of the expected effect), «Efecto parcial» (partial effect), «No funcionó» (did not work) or «Sin dato suficiente» (not enough data: coverage below 90 %). There is a shift summary.
+- **Accessed** from the Alerts history (UXUI-07).
+- **On-screen note:** the outcomes evaluate the recommendations, not the dispatcher, and the outcome is a signal, not proof.
+- **Desktop:** the shift's list and a detail view with the chart. **Mobile:** cards with a small chart.
 
-## UXUI-12 · Reportar una novedad operativa
+## UXUI-12 · Report an operational incident (*Reportar una novedad operativa*)
 
-**Relacionada con:** contexto que los datos no ven, y su efecto en las recomendaciones.
+**Related to:** context the data cannot see, and its effect on the recommendations.
 
-El despachador reporta en segundos una novedad (bus varado, parada cerrada, desvío, conductor ausente) para que el sistema la tenga en cuenta.
+The dispatcher reports an incident in seconds (broken-down bus, closed stop, detour, absent driver) so the system takes it into account.
 
-- **Formulario:** tipo, bus o parada afectada y duración estimada (o «hasta nuevo aviso»); la nota es opcional. Se completa en menos de 15 s.
-- **Efecto:** un bus varado sale del cálculo de intervalos; una parada cerrada no se usa para retenciones. Las recomendaciones afectadas se recalculan y se marcan «Recalculada por novedad».
-- **Visibilidad:** la novedad se ve en el diagrama y en Alertas hasta cerrarse; queda registrado quién la reportó y cuándo. El gestor la ve como contexto en sus indicadores.
-- **Escritorio:** formulario en el panel lateral sin perder de vista el corredor. **Celular:** formulario a pantalla completa con el botón abajo.
-- **Por definir con el cliente:** si una novedad ajena al operador, como un cierre vial, excluye esas horas del cálculo de pago (UXUI-06).
+- **Form:** type, affected bus or stop and estimated duration (or «hasta nuevo aviso» — until further notice); the note is optional. It is completed in under 15 s.
+- **Effect:** a broken-down bus leaves the headway computation; a closed stop is not used for holds. The affected recommendations are recomputed and marked «Recalculada por novedad» (recomputed due to incident).
+- **Visibility:** the incident shows on the diagram and in *Alertas* until it is closed; who reported it and when is recorded. The manager sees it as context in their indicators.
+- **Desktop:** form in the side panel without losing sight of the corridor. **Mobile:** full-screen form with the button at the bottom.
+- **To be defined with the client:** whether an incident outside the operator's control, such as a road closure, excludes those hours from the payment computation (UXUI-06).
 
 ---
 
-## Relación entre historias
+## How the stories relate
 
-- **Acceso:** UXUI-01 → UXUI-02 → UXUI-03.
-- **Despachador, tiempo real:** UXUI-04 → UXUI-05 → UXUI-10 → UXUI-11, con UXUI-07 (bandeja) y UXUI-12 (novedades) alrededor.
-- **Despachador, sin tiempo real:** UXUI-08.
-- **Gestor:** UXUI-06 (indicadores) y UXUI-09 (calidad del dato). UXUI-06 depende de la cobertura que mide UXUI-09.
-- **Pantalla compartida:** UXUI-03 enmarca a todas; el menú cambia según el rol.
+- **Access:** UXUI-01 → UXUI-02 → UXUI-03.
+- **Dispatcher, real time:** UXUI-04 → UXUI-05 → UXUI-10 → UXUI-11, with UXUI-07 (inbox) and UXUI-12 (incidents) around them.
+- **Dispatcher, no real time:** UXUI-08.
+- **Manager:** UXUI-06 (indicators) and UXUI-09 (data quality). UXUI-06 depends on the coverage measured by UXUI-09.
+- **Shared screen:** UXUI-03 frames all of them; the menu changes by role.
