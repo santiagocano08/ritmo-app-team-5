@@ -1,11 +1,11 @@
 import type { BusState } from "../../api/types";
 
 const LABELS: Record<BusState, string> = {
-  leader: "Leader",
+  leader: "Líder",
   regular: "Regular",
-  bunched: "Bunched",
-  gap: "Gap",
-  broken_down: "Broken down",
+  bunched: "Agrupado",
+  gap: "Rezagado",
+  broken_down: "Varado",
 };
 
 const ICONS: Record<BusState, string> = {

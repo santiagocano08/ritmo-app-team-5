@@ -4,7 +4,7 @@ import { QualityTag } from "./QualityTag";
 import { HeadwayCompare } from "./HeadwayCompare";
 
 function positionLabel(bus: Bus): string {
-  return `Between ${bus.prev_stop_id} and ${bus.next_stop_id} · ${Math.round(bus.distance_along_m)} m`;
+  return `Entre ${bus.prev_stop_id} y ${bus.next_stop_id} · ${Math.round(bus.distance_along_m)} m`;
 }
 
 export function BusRow({ bus }: { bus: Bus }) {

@@ -42,4 +42,21 @@ describe("BusRow", () => {
 
     expect(screen.queryByTestId("headway-compare")).not.toBeInTheDocument();
   });
+
+  it("renders a bunched, estimated bus in Spanish", () => {
+    const bunched: Bus = {
+      ...follower,
+      bus_state: "bunched",
+      data_quality: "estimated",
+      headway_ahead_s: 660,
+      headway_planned_s: 600,
+    };
+    render(<BusRow bus={bunched} />);
+
+    expect(screen.getByTestId("state-tag")).toHaveTextContent("Agrupado");
+    expect(screen.getByTestId("quality-tag")).toHaveTextContent("Estimado");
+    expect(screen.getByTestId("bus-position")).toHaveTextContent(/^Entre .+ y .+ · \d+ m$/);
+    expect(screen.getByTestId("headway-compare")).toHaveTextContent("del plan");
+    expect(screen.getByTestId("headway-compare")).toHaveTextContent("(+60 s sobre el plan)");
+  });
 });
