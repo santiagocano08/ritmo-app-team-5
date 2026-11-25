@@ -17,7 +17,7 @@ describe("Breakdown scenario", () => {
     if (!brokenRow) return;
 
     const stateTag = within(brokenRow).getByTestId("state-tag");
-    expect(stateTag).toHaveTextContent(/broken down/i);
+    expect(stateTag).toHaveTextContent(/varado/i);
     expect(stateTag).toHaveAttribute("data-state", "broken_down");
     expect(within(brokenRow).queryByTestId("headway-compare")).not.toBeInTheDocument();
   });

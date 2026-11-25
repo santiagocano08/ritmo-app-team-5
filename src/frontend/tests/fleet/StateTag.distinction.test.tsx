@@ -12,13 +12,13 @@ describe("StateTag distinction", () => {
     const bunchedTag = screen.getByTestId("state-tag");
     const bunchedText = bunchedTag.textContent;
     const bunchedClass = bunchedTag.className;
-    expect(bunchedTag).toHaveTextContent(/bunched/i);
+    expect(bunchedTag).toHaveTextContent(/agrupado/i);
     expect(bunchedText).not.toBe(regularText);
     expect(bunchedClass).not.toBe(regularClass);
 
     rerender(<StateTag state="gap" />);
     const gapTag = screen.getByTestId("state-tag");
-    expect(gapTag).toHaveTextContent(/gap/i);
+    expect(gapTag).toHaveTextContent(/rezagado/i);
     expect(gapTag.textContent).not.toBe(regularText);
     expect(gapTag.className).not.toBe(regularClass);
     expect(gapTag.textContent).not.toBe(bunchedText);

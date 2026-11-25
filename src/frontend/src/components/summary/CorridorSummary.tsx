@@ -8,14 +8,14 @@ interface SummaryStat {
 
 export function CorridorSummary({ summary }: { summary: Summary }) {
   const stats: SummaryStat[] = [
-    { testId: "summary-in-service", label: "In service", value: summary.buses_in_service },
-    { testId: "summary-bunched", label: "Bunched", value: summary.n_bunched },
-    { testId: "summary-gaps", label: "Gaps", value: summary.n_gaps },
+    { testId: "summary-in-service", label: "En servicio", value: summary.buses_in_service },
+    { testId: "summary-bunched", label: "Agrupados", value: summary.n_bunched },
+    { testId: "summary-gaps", label: "Rezagados", value: summary.n_gaps },
   ];
 
   return (
     <section
-      aria-label="Corridor summary"
+      aria-label="Resumen del corredor"
       className="flex gap-3 rounded-card border border-border bg-surface p-4"
     >
       {stats.map((stat) => (

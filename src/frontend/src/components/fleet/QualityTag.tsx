@@ -1,8 +1,8 @@
 import type { DataQuality } from "../../api/types";
 
 const LABELS: Record<DataQuality, string> = {
-  live: "Live",
-  estimated: "Estimated",
+  live: "En vivo",
+  estimated: "Estimado",
 };
 
 const STYLES: Record<DataQuality, string> = {
