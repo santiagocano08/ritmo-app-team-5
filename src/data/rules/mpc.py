@@ -192,20 +192,20 @@ def make_rec_id(key: str, first_snapshot_id: str, model_version: str) -> str:
 
 
 def _reason(a: Action, doc: Mapping, saving_s: float) -> str:
-    s = f"saves {_g(saving_s)} s per rider"
+    s = f"ahorra {_g(saving_s)} s por pasajero"
     bus, stop = doc["bus_id"], doc["stop_id"]
     if a.type == "hold":
-        return f"hold {bus} {_g(doc['duration_s'])} s at {stop} {s}"
+        return f"retener {bus} {_g(doc['duration_s'])} s en {stop} {s}"
     if a.type == "slow_down":
         dur = doc["duration_s"]
         span = f"{dur // MIN_PER_S} min" if dur % MIN_PER_S == 0 else f"{dur} s"
-        return f"slow down {bus} by {_g(doc['speed_reduction_pct'])} % for {span} at {stop} {s}"
+        return f"reducir la velocidad de {bus} un {_g(doc['speed_reduction_pct'])} % durante {span} en {stop} {s}"
     if a.type == "reserve_dispatch":
-        return f"dispatch reserve {bus} {s}"
+        return f"despachar la reserva {bus} {s}"
     if a.type == "adjust_departure":
-        verb = "advance" if a.shift_s < 0 else "delay"
-        return f"{verb} the next departure from {stop} ({bus}) by {_g(abs(a.shift_s))} s {s}"
-    return f"skip stops with an empty queue for {bus} from {stop} {s}"
+        verb = "adelantar" if a.shift_s < 0 else "retrasar"
+        return f"{verb} {_g(abs(a.shift_s))} s la próxima salida desde {stop} ({bus}) {s}"
+    return f"saltar las paradas sin cola para {bus} desde {stop} {s}"
 
 
 @dataclass(frozen=True)

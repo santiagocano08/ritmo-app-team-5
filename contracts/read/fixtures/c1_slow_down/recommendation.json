@@ -9,7 +9,7 @@
     "duration_s": 300,
     "speed_reduction_pct": 20
   },
-  "reason": "slow down B-103 by 20 % for 5 min at P-888 saves 16.4 s per rider",
+  "reason": "reducir la velocidad de B-103 un 20 % durante 5 min en P-888 ahorra 16.4 s por pasajero",
   "ewt_saving_s": 16.4,
   "horizon_s": 600,
   "data_quality": "live",

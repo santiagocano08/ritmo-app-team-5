@@ -8,7 +8,7 @@
     "stop_id": "P-890",
     "duration_s": null
   },
-  "reason": "skip stops with an empty queue for B-101 from P-890 saves 18.2 s per rider",
+  "reason": "saltar las paradas sin cola para B-101 desde P-890 ahorra 18.2 s por pasajero",
   "ewt_saving_s": 18.2,
   "horizon_s": 600,
   "data_quality": "live",

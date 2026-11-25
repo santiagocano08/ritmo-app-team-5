@@ -109,13 +109,15 @@ def test_conflicts_are_rows_on_the_same_bus() -> None:
 def test_reason_names_action_bus_stop_and_saving() -> None:
     r = rank_candidates([hold(saving=22.0), slow(bus="B-103", saving=14.0 + 1.0), reserve(saving=33.0)], P, STOPS)
     reasons = {p.candidate.action.type: p.reason for p in r.picks}
-    assert reasons["hold"] == "hold B-103 60 s at P-888 saves 22 s per rider"
-    assert reasons["slow_down"] == "slow down B-103 by 20 % for 5 min at P-888 saves 15 s per rider"
-    assert reasons["reserve_dispatch"] == "dispatch reserve B-106 saves 33 s per rider"
+    assert reasons["hold"] == "retener B-103 60 s en P-888 ahorra 22 s por pasajero"
+    assert reasons["slow_down"] == "reducir la velocidad de B-103 un 20 % durante 5 min en P-888 ahorra 15 s por pasajero"
+    assert reasons["reserve_dispatch"] == "despachar la reserva B-106 ahorra 33 s por pasajero"
     adj = rank_candidates([adjust(shift=-60, saving=18.4), skip(saving=17.5)], P, STOPS).picks
     texts = {p.candidate.action.type: p.reason for p in adj}
-    assert texts["adjust_departure"] == "advance the next departure from P-883 (B-104) by 60 s saves 18.4 s per rider"
-    assert texts["skip_stop"] == "skip stops with an empty queue for B-102 from P-886 saves 17.5 s per rider"
+    assert texts["adjust_departure"] == "adelantar 60 s la próxima salida desde P-883 (B-104) ahorra 18.4 s por pasajero"
+    late = rank_candidates([adjust(shift=60, saving=18.4)], P, STOPS).picks[0]
+    assert late.reason == "retrasar 60 s la próxima salida desde P-883 (B-104) ahorra 18.4 s por pasajero"
+    assert texts["skip_stop"] == "saltar las paradas sin cola para B-102 desde P-886 ahorra 17.5 s por pasajero"
 
 
 def test_doc_has_horizon_600_and_lineage_and_validates() -> None:

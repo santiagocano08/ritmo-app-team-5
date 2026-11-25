@@ -289,7 +289,7 @@ SELECT doc FROM config.seed_recommendation ORDER BY doc->>'rank';
 ```json
 {"schema_version": "1.0.0", "rec_id": "a1b2c3d4-0001-4000-8000-000000000001", "case": "C1",
  "action": {"type": "hold", "bus_id": "B-103", "stop_id": "P-887", "duration_s": 90},
- "reason": "B-103 closes on B-102; holding it 90 s at P-887 restores the headway (seeded demo recommendation)",
+ "reason": "B-103 closes on B-102; holding it 90 s at P-887 restores the headway (seeded demo recommendation; legacy English seed text, Q7 is retired by story 006)",
  "ewt_saving_s": 55, "horizon_s": 300, "data_quality": "live", "expires_ts": "2026-11-24T22:35:00Z",
  "conflicts_with": [], "rank": 1, "status": "proposed",
  "lineage": {"model_version": "1.0.0", "rule_version": "1.1.0", "snapshot_id": "a1b2c3d4-0001-4000-9000-000000000001"}}
@@ -622,6 +622,8 @@ ON CONFLICT (source, event_id) DO NOTHING;
 | 5. The simulator executes an applied action and data checks it (see "What is executed in turn 1" below) | simulator, data | Hold: `gold.instruction_status` (Q6). Reserve dispatch: the reserve bus in `corridor_now` (Q1) |
 | 6. After the horizon, data measures the effect | data | `gold.recommendation_effect` (H3) |
 | 7. The shift log joins all of the above | data | `gold.decision_log` (H2) |
+
+The recommendation `reason` is plain Spanish text for the dispatcher, built from the same fields as the document (action, bus, stop, saving per rider).
 
 **What is executed in turn 1** (story 006 phases 3a and 3c; `applied` always means "the dispatcher approved it", never "it happened"):
 
