@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { StateTag } from "../../src/components/fleet/StateTag";
 import { QualityTag } from "../../src/components/fleet/QualityTag";
@@ -37,7 +37,7 @@ describe("Text, not color alone", () => {
   });
 
   it("the active nav section is marked with aria-current=page", () => {
-    render(<Sidebar activeSection="live_central" />);
+    render(<Sidebar activeSection="live_central" onSelect={vi.fn()} />);
     const active = screen.getByText("Central en vivo").closest("a");
     expect(active).toHaveAttribute("aria-current", "page");
   });
