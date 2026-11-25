@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "factory/schemas/verdicts.schema.json",
+  "title": "A reviewer's verdict on its own findings after the implementer replied (round 2)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "reviewer", "round", "verdicts"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "reviewer": {"enum": ["review-security", "review-contract", "review-acceptance"]},
+    "round": {"const": 2},
+    "verdicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["finding_id", "status", "detail"],
+        "properties": {
+          "finding_id": {"type": "string", "pattern": "^(SEC|CON|ACC)-[0-9]{1,2}$"},
+          "status": {"enum": ["resolved", "accepted", "still_open"], "description": "resolved = the fix works; accepted = the wont_fix reason is valid; still_open = not fixed or reason rejected."},
+          "detail": {"type": "string", "minLength": 5, "maxLength": 600}
+        }
+      }
+    }
+  }
+}

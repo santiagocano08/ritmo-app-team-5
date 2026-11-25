@@ -235,6 +235,8 @@ services:
       - ./docs/ops:/app/docs/ops:ro
       # Phase 3 (003): the feed-control helper test reads scripts/.
       - ./scripts:/app/scripts:ro
+      # Multi-agent factory: the coordinator rules test reads factory/board.py and its schemas.
+      - ./factory:/app/factory:ro
     depends_on:
       db:
         condition: service_healthy
