@@ -59,6 +59,15 @@ Spanish.
 - `frontend-ci` stays green: ESLint, `tsc --noEmit`, Vitest with coverage
   **> 80 %**, Vite build.
 
+## Design connection
+
+- **UXUI-04 — Ver el corredor en vivo:** reference for the live corridor
+  summary, fleet list, and bus-status labels this ticket translates. See the
+  [story summary](../../docs/designs/resumen-historias.md),
+  [desktop mockup](../../docs/designs/mockups/escritorio/UXUI04-escritorio.png),
+  [mobile mockup](../../docs/designs/mockups/celular/UXUI04-celular.png), and
+  [global design styles](../../docs/designs/global-desing-styles.md).
+
 ## Origin
 
 Gap found by comparing the shipped console (US-06, PR #35) with the style spec

@@ -53,6 +53,16 @@ source is down, since when, so I can judge how fresh the data is at a glance.
 - `frontend-ci` stays green: ESLint, `tsc --noEmit`, Vitest with coverage
   **> 80 %**, Vite build.
 
+## Design connection
+
+- **UXUI-03 — Navegación principal por rol y estado del dato:** the header's
+  data-status badge and its `live`, `estimated`, and `no_data` details are the
+  design reference for this ticket. See the [story summary](../../docs/designs/resumen-historias.md),
+  [desktop mockup](../../docs/designs/mockups/escritorio/UXUI03-escritorio.png),
+  and [global status-badge styles](../../docs/designs/global-desing-styles.md)
+  (§5.3). The detailed text variants are in §8 of
+  [`US-06-escritorio-estilos.md`](../US-06-frontend-home/US-06-escritorio-estilos.md).
+
 ## Origin
 
 Gap found by comparing the shipped console (US-06, PR #35) with the style spec

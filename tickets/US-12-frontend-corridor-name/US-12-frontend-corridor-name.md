@@ -48,6 +48,15 @@ from the live data, so I never read sample text as real information.
 - `frontend-ci` stays green: ESLint, `tsc --noEmit`, Vitest with coverage
   **> 80 %**, Vite build.
 
+## Design connection
+
+- **UXUI-03 — Navegación principal por rol y estado del dato:** reference for
+  the corridor selector in the shared header and its label/button/chevron
+  layout. See the [story summary](../../docs/designs/resumen-historias.md),
+  [desktop mockup](../../docs/designs/mockups/escritorio/UXUI03-escritorio.png),
+  and section 5 of
+  [`US-06-escritorio-estilos.md`](../US-06-frontend-home/US-06-escritorio-estilos.md).
+
 ## Origin
 
 Gap found by comparing the shipped console (US-06, PR #35) with the style spec
