@@ -1,49 +1,51 @@
-# PulsoFlota · UXUI-03 Navegación principal por rol y estado del dato
-## Especificación de estilos · Vista de escritorio (1280 × 800 px)
+# PulsoFlota · UXUI-03 Main navigation by role and data state (*Navegación principal por rol y estado del dato*)
+## Style specification · Desktop view (1280 × 800 px)
 
-Imagen de referencia: `mockup-base-escritorio.png` (rol Despachador, estado «En vivo»; exportada a 2x, 2560 × 1600 px).
+Reference image: `mockup-base-escritorio.png` (Despachador role, «En vivo» state; exported at 2x, 2560 × 1600 px).
+
+On-screen copy and accessible names (`aria-label`) are in Spanish, as the app shows them, and are kept verbatim in «quotes».
 
 ---
 
-## 1. Lienzo y estructura general
+## 1. Canvas and overall structure
 
-| Elemento | Valor |
+| Element | Value |
 |---|---|
-| Tamaño del artboard | 1280 × 800 px, ancho fijo |
-| Fondo general | `#F4F6F9` |
-| Color de texto base | `#12161C` |
-| Fuente base | Inter, sans-serif |
-| Distribución | `display: flex` horizontal: barra lateral (248 px) + columna de contenido (`flex: 1`) |
+| Artboard size | 1280 × 800 px, fixed width |
+| General background | `#F4F6F9` |
+| Base text color | `#12161C` |
+| Base font | Inter, sans-serif |
+| Layout | horizontal `display: flex`: sidebar (248 px) + content column (`flex: 1`) |
 
-La columna de contenido es vertical: encabezado (68 px) → banner de alerta (opcional) → área principal (`flex: 1`).
+The content column is vertical: header (68 px) → alert banner (optional) → main area (`flex: 1`).
 
 ---
 
-## 2. Paleta de colores
+## 2. Color palette
 
 ### Base
-| Uso | Hex |
+| Use | Hex |
 |---|---|
-| Fondo de la aplicación | `#F4F6F9` |
-| Superficie (encabezado) | `#FFFFFF` |
-| Texto principal | `#12161C` |
-| Texto secundario | `#4A5361` |
-| Borde / separador | `#DDE1E7` |
-| Borde del placeholder | `#A3ACB9` |
-| Enlace | `#1D4ED8` (hover `#1E3A8A`) |
+| Application background | `#F4F6F9` |
+| Surface (header) | `#FFFFFF` |
+| Primary text | `#12161C` |
+| Secondary text | `#4A5361` |
+| Border / divider | `#DDE1E7` |
+| Placeholder border | `#A3ACB9` |
+| Link | `#1D4ED8` (hover `#1E3A8A`) |
 
-### Barra lateral
-| Uso | Hex |
+### Sidebar
+| Use | Hex |
 |---|---|
-| Fondo | `#14213D` |
-| Texto de ítem inactivo | `#E2E8F0` |
-| Fondo / texto de ítem activo | `#FFFFFF` / `#14213D` |
-| Acento del logo (ícono) | `#FBBF24` |
-| Línea divisoria del pie y avatar | `#2B3A5C` |
-| Rol del usuario (texto) | `#CBD5E1` |
+| Background | `#14213D` |
+| Inactive item text | `#E2E8F0` |
+| Active item background / text | `#FFFFFF` / `#14213D` |
+| Logo accent (icon) | `#FBBF24` |
+| Footer divider and avatar | `#2B3A5C` |
+| User role (text) | `#CBD5E1` |
 
-### Estados del dato (insignia del encabezado y banner)
-| Estado | Fondo | Texto / punto |
+### Data states (header badge and banner)
+| State | Background | Text / dot |
 |---|---|---|
 | En vivo | `#DCFCE7` | `#166534` |
 | Estimado | `#FEF3C7` | `#78350F` |
@@ -51,122 +53,122 @@ La columna de contenido es vertical: encabezado (68 px) → banner de alerta (op
 
 ---
 
-## 3. Tipografía
+## 3. Typography
 
-| Rol | Fuente | Tamaño | Peso | Otros |
+| Role | Font | Size | Weight | Other |
 |---|---|---|---|---|
-| Nombre de marca «PulsoFlota» | Space Grotesk | 20 px | 700 | |
-| Título de sección (h1) | Space Grotesk | 26 px | 700 (por defecto del h1) | margen 0 |
-| Hora actual | Space Grotesk | 22 px | 700 | `aria-label="Hora actual"` |
-| Ítems del menú | Inter | 15 px | 600 | |
-| Etiqueta «Corredor» | Inter | 12 px | 600 | mayúsculas, `letter-spacing: .05em`, color `#4A5361` |
-| Nombre del corredor | Inter | 16 px | 700 | |
-| Etiqueta del estado | Inter | 14 px | 700 | |
-| Detalle del estado | Inter | 13 px | 400 | |
-| Nombre de usuario | Inter | 14 px | 600 | |
-| Rol de usuario | Inter | 13 px | 400 | color `#CBD5E1` |
+| Brand name «PulsoFlota» | Space Grotesk | 20 px | 700 | |
+| Section title (h1) | Space Grotesk | 26 px | 700 (h1 default) | margin 0 |
+| Current time | Space Grotesk | 22 px | 700 | `aria-label="Hora actual"` |
+| Menu items | Inter | 15 px | 600 | |
+| «Corredor» label | Inter | 12 px | 600 | uppercase, `letter-spacing: .05em`, color `#4A5361` |
+| Corridor name | Inter | 16 px | 700 | |
+| Status label | Inter | 14 px | 700 | |
+| Status detail | Inter | 13 px | 400 | |
+| User name | Inter | 14 px | 600 | |
+| User role | Inter | 13 px | 400 | color `#CBD5E1` |
 | «Cerrar sesión» | Inter | 14 px | 600 | |
-| Texto del banner | Inter | 14 px | 400 | `line-height: 1.4` |
-| Texto del placeholder | Inter | 15 px | 400 | centrado |
+| Banner text | Inter | 14 px | 400 | `line-height: 1.4` |
+| Placeholder text | Inter | 15 px | 400 | centered |
 
-Fuentes cargadas desde Google Fonts: Inter (400, 500, 600, 700) y Space Grotesk (500, 700).
+Fonts loaded from Google Fonts: Inter (400, 500, 600, 700) and Space Grotesk (500, 700).
 
-> Nota: la imagen PNG se generó sin acceso a Google Fonts, por lo que los títulos con Space Grotesk aparecen con Inter como respaldo. En el artefacto sí se usa Space Grotesk.
+> Note: the PNG image was generated without access to Google Fonts, so the Space Grotesk titles show in the Inter fallback. The artifact itself does use Space Grotesk.
 
 ---
 
-## 4. Barra lateral de navegación
+## 4. Navigation sidebar
 
-- Elemento `<nav aria-label="Secciones">`.
-- Ancho 248 px, alto completo, `box-sizing: border-box`, padding `20px 14px`.
-- Fondo `#14213D`, texto blanco.
-- Disposición en columna con `gap: 6px`.
+- Element `<nav aria-label="Secciones">`.
+- Width 248 px, full height, `box-sizing: border-box`, padding `20px 14px`.
+- Background `#14213D`, white text.
+- Column layout with `gap: 6px`.
 
 ### 4.1 Logo
-- Fila con `gap: 10px`, padding `4px 10px 22px`.
-- Ícono de pulso (trazo `M2 12h4l3-8 4 16 3-8h6`) de 26 × 26 px, color `#FBBF24`, trazo 2, extremos y uniones redondeados.
-- Texto «PulsoFlota» en Space Grotesk 20 px / 700.
+- Row with `gap: 10px`, padding `4px 10px 22px`.
+- Pulse icon (path `M2 12h4l3-8 4 16 3-8h6`), 26 × 26 px, color `#FBBF24`, stroke 2, rounded caps and joins.
+- Text «PulsoFlota» in Space Grotesk 20 px / 700.
 
-### 4.2 Ítems de menú
-- Alto 44 px, padding horizontal 12 px, `gap: 12px`, radio 8 px, sin subrayado.
-- Ícono de 20 × 20 px, trazo 2, `stroke: currentColor`.
-- Texto Inter 15 px / 600.
-- **Inactivo:** fondo transparente, texto `#E2E8F0`.
-- **Activo (primer ítem, `aria-current="page"`):** fondo `#FFFFFF`, texto `#14213D`.
-- Íconos: Central en vivo (pulso), Alertas (campana), Plan del día (calendario), Indicadores de calidad (barras).
+### 4.2 Menu items
+- 44 px tall, 12 px horizontal padding, `gap: 12px`, 8 px radius, no underline.
+- 20 × 20 px icon, stroke 2, `stroke: currentColor`.
+- Text Inter 15 px / 600.
+- **Inactive:** transparent background, text `#E2E8F0`.
+- **Active (first item, `aria-current="page"`):** background `#FFFFFF`, text `#14213D`.
+- Icons: «Central en vivo» (pulse), «Alertas» (bell), «Plan del día» (calendar), «Indicadores de calidad» (bars).
 
-### 4.3 Pie de la barra (anclado abajo con `margin-top: auto`)
-- Padding 12 px, borde superior `1px solid #2B3A5C`, columna con `gap: 10px`.
-- **Usuario:** avatar circular de 36 × 36 px (fondo `#2B3A5C`, iniciales «UD» en 13 px / 700) + nombre «Usuario demo» (14 px / 600) y rol (13 px, `#CBD5E1`).
-- **Cerrar sesión:** enlace de 40 px de alto, padding horizontal 4 px, `gap: 10px`, ícono de salida de 18 × 18 px, texto 14 px / 600, color `#E2E8F0`. Enlaza a UXUI-01 (escritorio).
-
----
-
-## 5. Encabezado superior
-
-- Elemento `<header>`: alto 68 px, padding horizontal 28 px, `gap: 20px`, fondo `#FFFFFF`, borde inferior `1px solid #DDE1E7`.
-- **Izquierda:** selector de corredor, en columna.
-  - Etiqueta «CORREDOR» (12 px / 600, mayúsculas, `#4A5361`).
-  - Botón sin fondo ni borde con el texto «[Corredor piloto] · Estación → casa» (16 px / 700) y un chevron hacia abajo de 16 × 16 px, `gap: 6px`.
-- **Derecha** (`margin-left: auto`, `gap: 16px`):
-  - **Insignia de estado** (`role="status"`): píldora (radio 999 px), padding `6px 12px`, `gap: 10px`. Contiene un punto de 10 × 10 px del color del texto, la etiqueta (14 px / 700) y el detalle (13 px). Colores según el estado (ver sección 2).
-  - **Hora:** «17:42» en Space Grotesk 22 px / 700.
+### 4.3 Sidebar footer (pinned to the bottom with `margin-top: auto`)
+- 12 px padding, top border `1px solid #2B3A5C`, column with `gap: 10px`.
+- **User:** 36 × 36 px round avatar (background `#2B3A5C`, initials «UD» at 13 px / 700) + name «Usuario demo» (14 px / 600) and role (13 px, `#CBD5E1`).
+- **Cerrar sesión (sign out):** 40 px tall link, 4 px horizontal padding, `gap: 10px`, 18 × 18 px exit icon, 14 px / 600 text, color `#E2E8F0`. Links to UXUI-01 (desktop).
 
 ---
 
-## 6. Banner de alerta (solo estados «Estimado» y «Sin datos»)
+## 5. Top header
 
-- `role="alert"`, ancho completo bajo el encabezado.
-- Padding `12px 28px`, `line-height: 1.4`, texto 14 px, borde inferior `1px solid #DDE1E7`.
-- Usa el mismo fondo y color de texto de la insignia del estado.
-- Textos:
+- Element `<header>`: 68 px tall, 28 px horizontal padding, `gap: 20px`, background `#FFFFFF`, bottom border `1px solid #DDE1E7`.
+- **Left:** corridor selector, in a column.
+  - Label «CORREDOR» (12 px / 600, uppercase, `#4A5361`).
+  - Button with no background or border, with the text «[Corredor piloto] · Estación → casa» (16 px / 700) and a 16 × 16 px down chevron, `gap: 6px`.
+- **Right** (`margin-left: auto`, `gap: 16px`):
+  - **Status badge** (`role="status"`): pill (999 px radius), padding `6px 12px`, `gap: 10px`. It holds a 10 × 10 px dot in the text color, the label (14 px / 700) and the detail (13 px). Colors by state (see section 2).
+  - **Time:** «17:42» in Space Grotesk 22 px / 700.
+
+---
+
+## 6. Alert banner («Estimado» and «Sin datos» states only)
+
+- `role="alert"`, full width below the header.
+- Padding `12px 28px`, `line-height: 1.4`, 14 px text, bottom border `1px solid #DDE1E7`.
+- Uses the same background and text color as the status badge.
+- Copy:
   - **Estimado:** «Parte de los datos son estimados porque la fuente de un operador no responde. Las recomendaciones basadas en ellos se marcan como estimadas.»
   - **Sin datos:** «No llegan eventos del corredor desde hace más de 2 min. No hay recomendaciones nuevas; decide con el plan del día.»
-- En el estado «En vivo» no se muestra.
+- It is not shown in the «En vivo» state.
 
 ---
 
-## 7. Área principal
+## 7. Main area
 
-- Elemento `<main>`: `flex: 1`, padding 28 px, columna con `gap: 16px`.
-- Título h1 con el nombre de la sección activa (Space Grotesk 26 px).
-- **Placeholder de contenido:** ocupa el resto del alto (`flex: 1`), borde `2px dashed #A3ACB9`, radio 12 px, padding 24 px, contenido centrado en ambos ejes, texto `#4A5361` 15 px: «Contenido de la sección: se define en las próximas historias.»
+- Element `<main>`: `flex: 1`, 28 px padding, column with `gap: 16px`.
+- h1 title with the name of the active section (Space Grotesk 26 px).
+- **Content placeholder:** fills the remaining height (`flex: 1`), border `2px dashed #A3ACB9`, 12 px radius, 24 px padding, content centered on both axes, text `#4A5361` 15 px: «Contenido de la sección: se define en las próximas historias.»
 
 ---
 
-## 8. Variantes por rol y estado del dato
+## 8. Variants by role and data state
 
-Propiedades editables del artboard: `rol` (despachador | gestor) y `dato` (vivo | estimado | sindatos).
+Editable artboard properties: `rol` (despachador | gestor) and `dato` (vivo | estimado | sindatos).
 
-### Por rol
-| Rol | Ítems del menú (el primero queda activo) | Rol en el pie | Título h1 |
+### By role
+| Role | Menu items (the first one is active) | Role in the footer | h1 title |
 |---|---|---|---|
-| Despachador | Central en vivo · Alertas · Plan del día | «Despachador» | «Central en vivo» |
-| Gestor | Indicadores de calidad · Plan del día | «Gestor del sistema» | «Indicadores de calidad» |
+| Dispatcher | Central en vivo · Alertas · Plan del día | «Despachador» | «Central en vivo» |
+| Manager | Indicadores de calidad · Plan del día | «Gestor del sistema» | «Indicadores de calidad» |
 
-### Por estado del dato
-| Estado | Insignia | Detalle | Banner |
+### By data state
+| State | Badge | Detail | Banner |
 |---|---|---|---|
 | En vivo | «En vivo» | «Último evento 17:42:08» | No |
-| Estimado | «Estimado» | «Una fuente no responde desde 17:39» | Sí |
-| Sin datos | «Sin datos» | «Sin eventos desde 17:39» | Sí |
+| Estimado | «Estimado» | «Una fuente no responde desde 17:39» | Yes |
+| Sin datos | «Sin datos» | «Sin eventos desde 17:39» | Yes |
 
 ---
 
-## 9. Radios, espaciados y tamaños clave
+## 9. Key radii, spacing and sizes
 
-- Radios: 8 px (ítems de menú), 12 px (placeholder), 999 px (insignia y avatar).
-- Espaciados frecuentes: 6, 10, 12, 16, 20, 28 px.
-- Alturas fijas: encabezado 68 px, ítem de menú 44 px, «Cerrar sesión» 40 px.
-- Ancho fijo de la barra lateral: 248 px.
+- Radii: 8 px (menu items), 12 px (placeholder), 999 px (badge and avatar).
+- Frequent spacing: 6, 10, 12, 16, 20, 28 px.
+- Fixed heights: header 68 px, menu item 44 px, «Cerrar sesión» 40 px.
+- Fixed sidebar width: 248 px.
 
 ---
 
-## 10. Accesibilidad aplicada
+## 10. Accessibility applied
 
-- `<nav aria-label="Secciones">`, `aria-current="page"` en el ítem activo.
-- Íconos decorativos con `aria-hidden="true"`.
-- La insignia usa `role="status"` y el banner `role="alert"`.
-- El estado se comunica con texto, no solo con color.
-- Contrastes de texto sobre fondos de estado: verde `#166534` sobre `#DCFCE7`, ámbar `#78350F` sobre `#FEF3C7`, rojo `#991B1B` sobre `#FEE2E2`.
-- Enlaces y botones reales (`<a>`, `<button>`), con alturas de 40–44 px.
+- `<nav aria-label="Secciones">`, `aria-current="page"` on the active item.
+- Decorative icons with `aria-hidden="true"`.
+- The badge uses `role="status"` and the banner `role="alert"`.
+- State is conveyed with text, not color alone.
+- Text contrast on status backgrounds: green `#166534` on `#DCFCE7`, amber `#78350F` on `#FEF3C7`, red `#991B1B` on `#FEE2E2`.
+- Real links and buttons (`<a>`, `<button>`), 40–44 px tall.

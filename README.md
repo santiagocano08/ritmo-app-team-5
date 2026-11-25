@@ -5,7 +5,7 @@ Movilidad Operativa) / **PulsoFlota**. The project is built with [GitHub Spec Ki
 driving the workflow and a set of custom [Kiro](https://kiro.dev) agents that run each Spec Kit
 phase for you.
 
-Project documentation lives in [`docs/`](docs/) (OMD, PRD, SRD — in Spanish).
+Project documentation lives in [`docs/`](docs/) (OMD, PRD, SRD).
 
 ---
 

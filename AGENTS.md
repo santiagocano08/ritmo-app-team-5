@@ -67,7 +67,7 @@ Build tooling (Node / Python) is already covered in `.gitignore`.
 | Path | What it is |
 |------|------------|
 | `src/` | Application code. Target: `src/backend/` + `src/frontend/`; current Turn-1 tree: `src/api/`, `src/data/`, `src/pulsoflota/` (backend) + `src/frontend/` (dispatcher console SPA). |
-| `docs/` | Source-of-truth documentation (OMD, PRD, SRD — in Spanish). |
+| `docs/` | Source-of-truth documentation (OMD, PRD, SRD). |
 | `docs/turns-ritmo.md` | **Turn map:** which norms are mandatory in the active turn and which are deferred. |
 | `docs/designs/` | UX/UI reference: `global-desing-styles.md` (design tokens, components, a11y), `resumen-historias.md` and mockups `mockups/{escritorio,celular,historias}/UXUI-NN-*.png`. |
 | `tickets/` | Per-story tickets wired to GitHub issues, one folder `US-NN-slug/` with its `.md`. |
@@ -82,10 +82,11 @@ Build tooling (Node / Python) is already covered in `.gitignore`.
 ## Universal conventions
 
 - **Language:** the repository is written in **English** (agents, steering,
-  constitution, specs, code, commits and PRs). The source documents in `docs/`
-  (OMD, PRD, SRD) are still in Spanish; domain identifiers defined there (e.g.
-  `id_vehiculo`, `p_abordar_t`) are kept as defined until the team decides
-  otherwise.
+  constitution, specs, docs, code comments, commits and PRs), including the source
+  documents in `docs/` (OMD, PRD, SRD), translated on 2026-11-25. Domain identifiers
+  defined there (e.g. `id_vehiculo`, `p_abordar_t`) are kept as defined until the
+  team decides otherwise. The app's user-facing text (UI copy, messages shown to
+  the dispatcher) stays in Spanish.
 - **RITMO workflow (spiral):** every turn goes Plan → Specify → Build → Verify →
   Review. One story at a time, on an isolated `feature/US-XX` branch.
 - **Contract-First:** every data exchange between modules defines and validates a

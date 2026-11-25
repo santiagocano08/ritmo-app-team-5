@@ -1,137 +1,137 @@
-# Documento de Requisitos de Seguridad (SRD) - RITMO / PulsoFlota
+# Security Requirements Document (SRD) - RITMO / PulsoFlota
 
-**Proyecto:** PulsoFlota — Central de Control y Despacho Operativo en Tiempo Real (Metodología RITMO)  
-**Versión del SRD:** 1.0.0  
-**Estándar de Referencia:** OWASP Top 10 (2025) & Modelo de Criticidad RITMO (SWEBOK v4 / ISO/IEC/IEEE 24765)  
-**Clasificación del Software:** Aplicación, Dominante en Datos y Control Supervisorio  
-**Fecha de Adopción:** 2026-11-14  
-
----
-
-## 1. Visión General y Alcance de Seguridad del Dominio
-
-El presente **Documento de Requisitos de Seguridad (SRD)** establece las directrices normativas, técnicas y arquitectónicas obligatorias para el desarrollo, despliegue y operación del sistema **PulsoFlota**, bajo la metodología híbrida **RITMO** (Riesgo, Incrementos y Trazabilidad para la Movilidad Operativa) en la ciudad de Medellín.
-
-### 1.1 Contexto de Operación y Riesgos de Dominio
-PulsoFlota gestiona la telemetría de flota de buses en tiempo real (GPS, validaciones de pasaje, estado del vehículo) e integra la lectura de la malla vial (velocidad de flujo, congestión y eventos accidentales). Dada su naturaleza de **tiempo real firme (latencia $\le 10\text{ s}$)** y su impacto directo en el cálculo de incentivos económicos ($P(\text{abordar} \le t)$ y *Excess Wait Time* - EWT), la seguridad del sistema abarca tres frentes críticos:
-1. **Integridad del Dato y Antifraude de Recaudo:** Evitar la inyección o alteración maliciosa de datos de GPS y tarifa orientados a inflar artificialmente los indicadores de pago por calidad.
-2. **Seguridad Operativa y Supervisión Humana:** Garantizar que las recomendaciones automáticas o generadas por IA Generativa (ajustes de frecuencia y redireccionamiento por cierres viales) no modifiquen la operación en vía sin la autorización explícita (*Human-in-the-Loop*) del despachador.
-3. **Disponibilidad y Resiliencia Sistémica:** Proteger la ingesta de telemetría IoT aislada para que continúe registrando eventos incluso ante fallos de la interfaz web central o ataques de denegación de servicio (DDoS).
-
-### 1.2 Dualidad de Carriles y Criticidad
-* **Carril Disciplinado (Criticidad Alta - Nivel 1):** Ingesta de datos IoT, motor de contratos, cálculo de $P(\text{abordar})$ e indicadores de liquidación contractual. Aplica verificación criptográfica estricta, contratos de mensaje y pruebas automatizadas en CI.
-* **Carril Adaptativo (Criticidad Media/Baja - Nivel 2 y 3):** Central web del despachador, paneles de visualización gráfica y reglas predictivas de alerta. Opera mediante iteraciones de hipótesis validadas sin acceso directo al camino de tiempo real determinista.
+**Project:** PulsoFlota — Real-Time Operational Control and Dispatch Center (RITMO Methodology)  
+**SRD Version:** 1.0.0  
+**Reference Standard:** OWASP Top 10 (2025) & RITMO Criticality Model (SWEBOK v4 / ISO/IEC/IEEE 24765)  
+**Software Classification:** Application, Data-Dominant and Supervisory Control  
+**Adoption Date:** 2026-11-14  
 
 ---
 
-## 2. Requisitos Técnicos de Seguridad (Matriz OWASP Top 10 - 2025 Adaptada)
+## 1. Overview and Domain Security Scope
 
-### 2.1 Control de Acceso (A01:2025 - Broken Access Control)
-* **Requisito Técnico:** Todo endpoint de API REST o WebSocket en el backend FastAPI MUST autenticar la identidad del emisor y verificar explícitamente los permisos asignados mediante Control de Acceso Basado en Roles (*Role-Based Access Control* - RBAC) en la capa de middleware antes de ejecutar cualquier lógica de negocio.
-* **Criterios de Aceptación:**
-  * **Prohibición de IDOR:** Quedan strictly prohibidas las Referencias Directas a Objetos Inseguros. Si un usuario intenta acceder o modificar un recurso de un operador distinto (ej. consultar `/api/v1/buses/{bus_id}` o alterar rutas de otra cuenca de transporte), el middleware MUST retornar un código `403 Forbidden` y registrar una alerta de seguridad.
-  * **Evaluación Centralizada en Backend:** Las autorizaciones MUST ser evaluadas exclusivamente en el backend FastAPI. El cliente web React (*frontend*, `src/frontend/`) no MUST tomar decisiones de acceso ni ocultar botones como único mecanismo de control.
-  * **Aislamiento Multi-Tenant:** Los datos de telemetría de consorcios privados MUST estar aislados lógicamente, impidiendo que un operador acceda a la telemetría cruda de sus competidores.
+This **Security Requirements Document (SRD)** sets the mandatory normative, technical and architectural guidelines for the development, deployment and operation of the **PulsoFlota** system, under the hybrid **RITMO** methodology (Riesgo, Incrementos y Trazabilidad para la Movilidad Operativa — Risk, Increments and Traceability for Operational Mobility) in the city of Medellín.
 
-### 2.2 Configuración de Seguridad e Infraestructura en Contenedores (A02:2025 - Security Misconfiguration)
-* **Requisito Técnico:** Las imágenes de contenedor Docker y los servidores proxy inversos (Nginx/Traefik) MUST estar configurados bajo el principio de mínimo privilegio y fortalecimiento de infraestructura (*hardening*).
-* **Criterios de Aceptación:**
-  * **Ejecución Non-Root en Docker:** Todos los contenedores de Python (Ingesta y Central) MUST ejecutarse bajo un usuario sin privilegios root (`USER appuser` con UID `10001`).
-  * **Cabeceras HTTP de Seguridad:** El servidor web MUST incluir obligatoriamente las siguientes cabeceras en todas las respuestas HTTP:
+### 1.1 Operating Context and Domain Risks
+PulsoFlota manages real-time bus fleet telemetry (GPS, fare validations, vehicle status) and integrates readings from the road network (flow speed, congestion and accident events). Given its **firm real-time nature (latency $\le 10\text{ s}$)** and its direct impact on the computation of economic incentives ($P(\text{abordar} \le t)$ and *Excess Wait Time* - EWT), system security covers three critical fronts:
+1. **Data integrity and fare-collection anti-fraud:** Prevent the malicious injection or alteration of GPS and fare data aimed at artificially inflating the pay-for-quality indicators.
+2. **Operational safety and human supervision:** Ensure that automatic or Generative-AI recommendations (frequency adjustments and rerouting for road closures) do not change on-road operations without the explicit authorization (*Human-in-the-Loop*) of the dispatcher.
+3. **Availability and system resilience:** Protect the isolated IoT telemetry ingestion so it keeps recording events even when the central web interface fails or under denial-of-service (DDoS) attacks.
+
+### 1.2 Dual Lanes and Criticality
+* **Disciplined Lane (High Criticality - Level 1):** IoT data ingestion, contract engine, computation of $P(\text{abordar})$ and contractual settlement indicators. Strict cryptographic verification, message contracts and automated CI tests apply.
+* **Adaptive Lane (Medium/Low Criticality - Levels 2 and 3):** Dispatcher web control center, graphical visualization panels and predictive alert rules. It works through validated hypothesis iterations with no direct access to the deterministic real-time path.
+
+---
+
+## 2. Technical Security Requirements (Adapted OWASP Top 10 - 2025 Matrix)
+
+### 2.1 Access Control (A01:2025 - Broken Access Control)
+* **Technical requirement:** Every REST or WebSocket API endpoint in the FastAPI backend MUST authenticate the caller's identity and explicitly verify the assigned permissions through Role-Based Access Control (RBAC) in the middleware layer before running any business logic.
+* **Acceptance criteria:**
+  * **No IDOR:** Insecure Direct Object References are strictly prohibited. If a user tries to access or modify a resource belonging to a different operator (e.g. querying `/api/v1/buses/{bus_id}` or changing routes of another transport basin), the middleware MUST return `403 Forbidden` and log a security alert.
+  * **Centralized evaluation in the backend:** Authorization MUST be evaluated exclusively in the FastAPI backend. The React web client (*frontend*, `src/frontend/`) MUST NOT make access decisions or hide buttons as its only control mechanism.
+  * **Multi-tenant isolation:** Telemetry data from private consortia MUST be logically isolated, so that no operator can access its competitors' raw telemetry.
+
+### 2.2 Security Configuration and Container Infrastructure (A02:2025 - Security Misconfiguration)
+* **Technical requirement:** Docker container images and reverse proxy servers (Nginx/Traefik) MUST be configured under the principle of least privilege and infrastructure *hardening*.
+* **Acceptance criteria:**
+  * **Non-root execution in Docker:** All Python containers (Ingestion and Control Center) MUST run as a non-root user (`USER appuser` with UID `10001`).
+  * **HTTP security headers:** The web server MUST include the following headers in every HTTP response:
     * `Content-Security-Policy: default-src 'self'; script-src 'self'; object-src 'none';`
     * `Strict-Transport-Security: max-age=31536000; includeSubDomains`
     * `X-Content-Type-Options: nosniff`
     * `X-Frame-Options: DENY`
-  * **Ocultación de Infraestructura:** El servidor MUST remover las cabeceras descriptivas de pila tecnológica como `Server`, `X-Powered-By` y versiones de Python/FastAPI.
-  * **Desactivación de Modos Debug:** El parámetro `DEBUG=False` MUST ser forzado en todos los entornos de homologación y producción. Queda prohibida la exposición de Swagger/ReDoc en producción sin autenticación previa.
+  * **Infrastructure concealment:** The server MUST remove headers that describe the technology stack, such as `Server`, `X-Powered-By` and Python/FastAPI versions.
+  * **Debug modes disabled:** `DEBUG=False` MUST be enforced in every staging and production environment. Exposing Swagger/ReDoc in production without prior authentication is prohibited.
 
-### 2.3 Cadena de Suministro de Software y Fábrica de Agentes (A03:2025 - Software Supply Chain Failures)
-* **Requisito Técnico:** Se MUST mantener un control estricto de dependencias de terceros (librerías Python, imágenes base de Docker y librerías JavaScript) en el repositorio y en el pipeline de CI/CD.
-* **Criterios de Aceptación:**
-  * **Escaneo Automatizado de Vulnerabilidades (SCA):** El pipeline de CI/CD MUST ejecutar herramientas de análisis de composición de software (`pip-audit`, `Safety` o `Snyk`) en cada *Pull Request*.
-  * **Bloqueo por Severidad CVE:** Si se detectan vulnerabilidades de severidad Alta o Crítica (CVSS $\ge 7.0$) en cualquier paquete Python o imagen Docker base, el pipeline de CI MUST fallar automáticamente e impedir la fusión de código.
-  * **Fijación de Versiones (*Pinning*):** Todas las dependencias MUST estar declaradas con su versión exacta y hash de integridad (`poetry.lock` o `requirements.txt` compilado con hashes SHA-256).
+### 2.3 Software Supply Chain and Agent Factory (A03:2025 - Software Supply Chain Failures)
+* **Technical requirement:** Third-party dependencies (Python libraries, Docker base images and JavaScript libraries) MUST be strictly controlled in the repository and the CI/CD pipeline.
+* **Acceptance criteria:**
+  * **Automated vulnerability scanning (SCA):** The CI/CD pipeline MUST run software composition analysis tools (`pip-audit`, `Safety` or `Snyk`) on every *Pull Request*.
+  * **Blocking by CVE severity:** If High or Critical vulnerabilities (CVSS $\ge 7.0$) are found in any Python package or Docker base image, the CI pipeline MUST fail automatically and prevent the merge.
+  * **Version pinning:** Every dependency MUST be declared with its exact version and integrity hash (`poetry.lock` or a `requirements.txt` compiled with SHA-256 hashes).
 
-### 2.4 Criptografía y Protección de Datos (A04:2025 - Cryptographic Failures)
-* **Requisito Técnico:** Todos los datos en tránsito entre las unidades a bordo de los buses, los sensores viales y la central de ingesta, así como los datos en reposo, MUST estar protegidos mediante cifrado robusto.
-* **Criterios de Aceptación:**
-  * **Cifrado en Tránsito:** Las comunicaciones externas MUST emplear exclusivamente TLS 1.3 (o TLS 1.2 como límite inferior con *ciphersuites* PFS). Las conexiones de la flota vehicular IoT MUST autenticarse mediante mTLS (*Mutual TLS*) con certificados x509 por unidad.
-  * **Almacenamiento de Credenciales:** Las contraseñas de despachadores y administradores MUST ser procesadas utilizando **Argon2id** (o `bcrypt` con factor de coste $\ge 12$).
-  * **Gestión de Secretos:** Queda estrictamente prohibido incluir contraseñas, tokens JWT, claves de base de datos o API Keys en el código fuente o archivos `.env` del repositorio. Se MUST utilizar un gestor de secretos externo (*Docker Secrets* o *HashiCorp Vault*) inyectado en tiempo de ejecución.
+### 2.4 Cryptography and Data Protection (A04:2025 - Cryptographic Failures)
+* **Technical requirement:** All data in transit between the buses' on-board units, the road sensors and the ingestion center, as well as data at rest, MUST be protected with strong encryption.
+* **Acceptance criteria:**
+  * **Encryption in transit:** External communications MUST use TLS 1.3 exclusively (or TLS 1.2 as the lower bound with PFS *ciphersuites*). IoT vehicle fleet connections MUST authenticate through mTLS (*Mutual TLS*) with per-unit x509 certificates.
+  * **Credential storage:** Dispatcher and administrator passwords MUST be hashed with **Argon2id** (or `bcrypt` with a cost factor $\ge 12$).
+  * **Secrets management:** Including passwords, JWT tokens, database keys or API keys in the source code or in `.env` files in the repository is strictly prohibited. An external secrets manager (*Docker Secrets* or *HashiCorp Vault*) injected at runtime MUST be used.
 
-### 2.5 Inyección y Validación de Esquemas IoT (A05:2025 - Injection)
-* **Requisito Técnico:** Todo flujo de datos entrante (peticiones REST, mensajes MQTT/WebSockets de telemetría IoT o parámetros de consulta) MUST ser sanitizado y validado formalmente antes de interactuar con la base de datos o el motor de reglas.
-* **Criterios de Aceptación:**
-  * **Consultas Parametrizadas:** Queda prohibida la concatenación directa de cadenas en sentencias SQL. El sistema MUST utilizar psycopg 3 con SQL parametrizado únicamente (sin ORM, sin SQLAlchemy, sin Alembic); Pydantic V2 valida los datos en frontera.
-  * **Validación Estricta de Esquemas con Pydantic:** Todo evento de ingesta de telemetría GPS o recaudo MUST ser validado contra un esquema estricto Pydantic V2 en la compuerta de ingesta. Si un paquete contiene tipos incorrectos, valores fuera de rango geográfico o campos adicionales no declarados, MUST ser rechazado en el acto con código HTTP `422 Unprocessable Entity`.
+### 2.5 Injection and IoT Schema Validation (A05:2025 - Injection)
+* **Technical requirement:** Every incoming data flow (REST requests, IoT telemetry MQTT/WebSocket messages or query parameters) MUST be sanitized and formally validated before it touches the database or the rules engine.
+* **Acceptance criteria:**
+  * **Parameterized queries:** Direct string concatenation in SQL statements is prohibited. The system MUST use psycopg 3 with parameterized SQL only (no ORM, no SQLAlchemy, no Alembic); Pydantic V2 validates data at the boundary.
+  * **Strict schema validation with Pydantic:** Every GPS telemetry or fare-collection ingestion event MUST be validated against a strict Pydantic V2 schema at the ingestion gate. If a packet contains wrong types, values outside the geographic range or undeclared extra fields, it MUST be rejected immediately with HTTP `422 Unprocessable Entity`.
 
-### 2.6 Diseño Seguro y Aislamiento de IA Generativa (A06:2025 - Insecure Design)
-* **Requisito Técnico:** La arquitectura del sistema MUST aislar completamente la ruta de cómputo en tiempo real determinista de los módulos de inteligencia artificial o algoritmos predictivos adaptativos.
-* **Criterios de Aceptación:**
-  * **Compuerta Humana (*Human-in-the-Loop*):** Las recomendaciones de regulación de frecuencia o desvíos viales generadas por modelos de IA Generativa MUST presentarse en la consola como sugerencias no vinculantes. La aplicación de cualquier cambio en la operación en vía MUST requerir la aprobación explícita y manual del despachador humano.
-  * **Aislamiento del Camino de Tiempo Real:** Ningún modelo de IA o agente autónomo MUST tener permisos de escritura directa sobre la base de datos de producción o las APIs de despacho de las unidades a bordo.
-  * **Análisis de Amenazas STRIDE:** Toda nueva funcionalidad o modificación arquitectónica en el carril disciplinado MUST contar con una revisión documentada de modelo de amenazas STRIDE priorizada por riesgo.
+### 2.6 Secure Design and Generative AI Isolation (A06:2025 - Insecure Design)
+* **Technical requirement:** The system architecture MUST fully isolate the deterministic real-time computation path from artificial intelligence modules or adaptive predictive algorithms.
+* **Acceptance criteria:**
+  * **Human gate (*Human-in-the-Loop*):** Frequency regulation or road detour recommendations produced by Generative AI models MUST be shown on the console as non-binding suggestions. Applying any change to on-road operations MUST require the explicit, manual approval of the human dispatcher.
+  * **Real-time path isolation:** No AI model or autonomous agent MUST have direct write permissions on the production database or on the dispatch APIs of the on-board units.
+  * **STRIDE threat analysis:** Every new feature or architectural change in the disciplined lane MUST have a documented, risk-prioritized STRIDE threat model review.
 
-### 2.7 Autenticación y Gestión de Sesiones (A07:2025 - Authentication Failures)
-* **Requisito Técnico:** La central de control y despacho MUST contar con mecanismos de autenticación robustos resistentes a ataques de fuerza bruta, suplantación de identidad y secuestro de sesión.
-* **Criterios de Aceptación:**
-  * **Tokens de Sesión JWT Seguros:** Los tokens de sesión JWT MUST ser firmados con el algoritmo `RS256` (clave pública/privada), poseer una expiración máxima de 15 minutos y transmitirse únicamente en cookies con atributos `HttpOnly`, `Secure` y `SameSite=Strict`.
-  * **Autenticación Multifactor (MFA):** El acceso de administradores de sistema y supervisores de cuenca MUST exigir obligatoriamente MFA (TOTP).
-  * **Protección Anti-Fuerza Bruta:** El sistema MUST bloquear temporalmente (durante 15 minutos) cualquier cuenta o dirección IP que registre 5 intentos fallidos consecutivos de inicio de sesión.
+### 2.7 Authentication and Session Management (A07:2025 - Authentication Failures)
+* **Technical requirement:** The control and dispatch center MUST have strong authentication mechanisms that resist brute-force attacks, impersonation and session hijacking.
+* **Acceptance criteria:**
+  * **Secure JWT session tokens:** JWT session tokens MUST be signed with the `RS256` algorithm (public/private key), expire after at most 15 minutes and be sent only in cookies with the `HttpOnly`, `Secure` and `SameSite=Strict` attributes.
+  * **Multi-factor authentication (MFA):** Access for system administrators and basin supervisors MUST require MFA (TOTP).
+  * **Brute-force protection:** The system MUST temporarily lock (for 15 minutes) any account or IP address that records 5 consecutive failed sign-in attempts.
 
-### 2.8 Integridad de Software, Datos y Antifraude de Recaudo (A08:2025 - Data & Software Integrity Failures)
-* **Requisito Técnico:** Se MUST garantizar la integridad no manipulable de los eventos de telemetría y recaudo que alimentan el cálculo de las métricas de servicio $P(\text{abordar} \le t)$ y la posterior liquidación de pagos por calidad a los operadores.
-* **Criterios de Aceptación:**
-  * **Auditoría de Linaje de Datos con DataOps:** Todo pipeline de datos de ingesta MUST registrar la procedencia, marca de tiempo inmutable y checksum del mensaje.
-  * **Detección de Anomalías y Datos Adulterados:** El sistema MUST contar con reglas automatizadas para detectar y descartar datos manipulados (ej. saltos de ubicación GPS con velocidades superiores a $120\text{ km/h}$, duplicación de secuencias de pasaje o incongruencia entre sensores viales y coordenadas del bus).
-  * **Firma Digital de Eventos:** Los paquetes de datos transmitidos por las validadoras de recaudo MUST incluir una firma HMAC basada en un token secreto almacenado en el módulo seguro del validador vehicular.
+### 2.8 Software and Data Integrity and Fare-Collection Anti-Fraud (A08:2025 - Data & Software Integrity Failures)
+* **Technical requirement:** The tamper-proof integrity of the telemetry and fare-collection events that feed the computation of the $P(\text{abordar} \le t)$ service metrics and the later settlement of pay-for-quality to operators MUST be guaranteed.
+* **Acceptance criteria:**
+  * **Data lineage audit with DataOps:** Every ingestion data pipeline MUST record the origin, an immutable timestamp and the message checksum.
+  * **Detection of anomalies and tampered data:** The system MUST have automated rules to detect and discard tampered data (e.g. GPS location jumps at speeds above $120\text{ km/h}$, duplicated fare sequences or inconsistencies between road sensors and bus coordinates).
+  * **Digital event signature:** Data packets sent by the fare validators MUST include an HMAC signature based on a secret token stored in the vehicle validator's secure module.
 
-### 2.9 Registro, Auditoría y Observabilidad SRE (A09:2025 - Security Logging and Alerting Failures)
-* **Requisito Técnico:** El sistema MUST generar un registro inmutable y estructurado de auditoría para todas las acciones sensibles de seguridad y decisiones operativas.
-* **Criterios de Aceptación:**
-  * **Logs Estructurados JSON:** Todos los eventos de registro MUST emitirse en formato JSON estructurado compatible con estándares OpenTelemetry.
-  * **Eventos Auditables Obligatorios:** Se MUST registrar con marca de tiempo UTC e identificador de usuario:
-    1. Intentos de autenticación (éxito/fallo).
-    2. Cambios de permisos o modificación de usuarios.
-    3. Desvíos viales o ajustes de despacho autorizados o rechazados por el despachador.
-    4. Alteraciones o caídas en las fuentes de datos de ingesta.
-  * **Protección de PII y Datos Sensibles:** Los registros de auditoría y los logs de aplicación no MUST incluir jamás contraseñas en texto plano, claves privadas, tokens JWT completos ni datos de identificación personal de conductores o pasajeros.
-  * **Alertas en Tiempo Real:** Las anomalías de seguridad o picos de rechazo de mensajes IoT (>5% de fallos en 1 minuto) MUST disparar alertas inmediatas al equipo SRE/DevSecOps via PagerDuty/Slack.
-  * **SLO de Frescura y Presupuesto de Error:** El sistema MUST medir la frescura del dato como SLI (umbral `< 15 s`) con un SLO del `99 %` sobre una ventana de `28 días` (presupuesto de error compartido de `403 minutos`). La degradación de frescura MUST disparar alerta al equipo SRE/DevSecOps, y el agotamiento del presupuesto de error MUST congelar el despliegue de nuevas *features* hasta recuperar margen de fiabilidad (bucle Run → Change).
+### 2.9 Logging, Auditing and SRE Observability (A09:2025 - Security Logging and Alerting Failures)
+* **Technical requirement:** The system MUST produce an immutable, structured audit log for every security-sensitive action and operational decision.
+* **Acceptance criteria:**
+  * **Structured JSON logs:** Every log event MUST be emitted in structured JSON compatible with OpenTelemetry standards.
+  * **Mandatory auditable events:** The following MUST be recorded with a UTC timestamp and user identifier:
+    1. Authentication attempts (success/failure).
+    2. Permission changes or user modifications.
+    3. Road detours or dispatch adjustments authorized or rejected by the dispatcher.
+    4. Changes or outages in the ingestion data sources.
+  * **Protection of PII and sensitive data:** Audit records and application logs MUST NEVER include plain-text passwords, private keys, full JWT tokens or personally identifiable data of drivers or passengers.
+  * **Real-time alerts:** Security anomalies or spikes in IoT message rejection (>5% failures in 1 minute) MUST trigger immediate alerts to the SRE/DevSecOps team via PagerDuty/Slack.
+  * **Freshness SLO and error budget:** The system MUST measure data freshness as an SLI (threshold `< 15 s`) with a `99 %` SLO over a `28-day` window (shared error budget of `403 minutes`). Freshness degradation MUST alert the SRE/DevSecOps team, and exhausting the error budget MUST freeze the deployment of new *features* until reliability margin is recovered (Run → Change loop).
 
-### 2.10 Gestión de Excepciones y Resiliencia en Tiempo Real (A10:2025 - Exceptional Conditions Handling)
-* **Requisito Técnico:** El backend en Python y la ingesta aislada MUST manejar las excepciones de manera defensiva, garantizando la continuidad de la operación y evitando la fuga de detalles de infraestructura.
-* **Criterios de Aceptación:**
-  * **Sanitización de Trazas de Error:** Ninguna respuesta de API HTTP o WebSocket hacia el cliente MUST exponer trazas de pila (*stack traces*), rutas de archivos locales `/workspace/...` ni estructuras internas de la base de datos PostgreSQL.
-  * **Correlation ID Unificado:** Ante un error no controlado (HTTP 500), la aplicación MUST retornar un mensaje genérico estandarizado acompañado de un identificador único de seguimiento (`correlation_id`) grabado internamente en los logs.
-  * **Fallback Operativo ante Fallo de la Central:** Si la central de control o la interfaz web colapsan, el servicio de ingesta IoT aislada MUST continuar registrando eventos en el buffer persistente, y la consola del despachador MUST conmutar automáticamente a un modo de contingencia local basado en planes de despacho estáticos prefijados.
+### 2.10 Exception Handling and Real-Time Resilience (A10:2025 - Exceptional Conditions Handling)
+* **Technical requirement:** The Python backend and the isolated ingestion MUST handle exceptions defensively, ensuring continuity of operations and avoiding leaks of infrastructure details.
+* **Acceptance criteria:**
+  * **Error trace sanitization:** No HTTP or WebSocket API response to the client MUST expose *stack traces*, local file paths such as `/workspace/...` or internal PostgreSQL database structures.
+  * **Unified correlation ID:** On an unhandled error (HTTP 500), the application MUST return a standard generic message together with a unique tracking identifier (`correlation_id`) recorded internally in the logs.
+  * **Operational fallback when the control center fails:** If the control center or the web interface collapses, the isolated IoT ingestion service MUST keep recording events in the persistent buffer, and the dispatcher console MUST switch automatically to a local contingency mode based on predefined static dispatch plans.
 
 ---
 
-## 3. Matriz de Compuertas de Calidad de Seguridad (Security Quality Gates)
+## 3. Security Quality Gates Matrix
 
-En alineación con las vueltas del espiral RITMO, ningún incremento de software puede ser promovido de etapa ni desplegado en producción sin superar las siguientes compuertas de seguridad:
+In line with the RITMO spiral turns, no software increment may move to the next stage or be deployed to production without passing the following security gates:
 
-| Compuerta de Calidad | Etapa RITMO | Frecuencia / Momento | Pruebas y Controles Exigidos | Criterio de Aprobación Obligatorio | Responsable |
+| Quality Gate | RITMO Stage | Frequency / Moment | Required Tests and Controls | Mandatory Approval Criterion | Owner |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Compuerta 1: Contrato y Análisis Estático** | 2. Especificar / 3. Construir | Cada *Pull Request* | Análisis SAST (`Bandit`, `ESLint`) y validación de esquemas Pydantic. | 0 hallazgos Críticos/Altos en SAST; esquema de contrato validado. | Agente de Desarrollo / Revisor |
-| **Compuerta 2: Integración y Supply Chain** | 4. Verificar | En integración continua (CI) | Escaneo SCA (`pip-audit`, `Trivy`) y suites de pruebas unitarias/integración. | Cobertura de pruebas $>80\%$; 0 vulnerabilidades conocidas en dependencias. | Agente de Pruebas / DevSecOps |
-| **Compuerta 3: Compuerta del Dato (DataOps)** | 4. Verificar | En tiempo de ejecución (Ingesta) | Pruebas de contrato de mensaje, validación HMAC y detección de anomalías. | Tasa de rechazo de paquetes $<0.1\%$; latencia de ingesta $\le 200\text{ ms}$. | DataOps Lead / Ingesta |
-| **Compuerta 4: Compuerta de Valor y Seguridad Operativa** | 5. Revisar | Cierre de Vuelta del Espiral | Validación *Human-in-the-Loop*, auditoría de desvíos y prueba de fallback. | Aprobación explícita del despachador; verificación de no interferencia de IA en tiempo real. | Despachador / Dueño de Vuelta |
+| **Gate 1: Contract and Static Analysis** | 2. Specify / 3. Build | Every *Pull Request* | SAST analysis (`Bandit`, `ESLint`) and Pydantic schema validation. | 0 Critical/High SAST findings; contract schema validated. | Development Agent / Reviewer |
+| **Gate 2: Integration and Supply Chain** | 4. Verify | In continuous integration (CI) | SCA scanning (`pip-audit`, `Trivy`) and unit/integration test suites. | Test coverage $>80\%$; 0 known vulnerabilities in dependencies. | Testing Agent / DevSecOps |
+| **Gate 3: Data Gate (DataOps)** | 4. Verify | At runtime (Ingestion) | Message contract tests, HMAC validation and anomaly detection. | Packet rejection rate $<0.1\%$; ingestion latency $\le 200\text{ ms}$. | DataOps Lead / Ingestion |
+| **Gate 4: Value and Operational Safety Gate** | 5. Review | Close of the Spiral Turn | *Human-in-the-Loop* validation, detour audit and fallback test. | Explicit dispatcher approval; verification that AI does not interfere with real time. | Dispatcher / Turn Owner |
 
-### 2.11 Orquestación CI/CD por Pipeline (Frontend y Backend)
+### 2.11 CI/CD Orchestration per Pipeline (Frontend and Backend)
 
-Dada la separación de frontend (`src/frontend/`, React 19 + TypeScript + Vite + Tailwind) y backend (`src/backend/`, FastAPI + Pydantic V2, con acceso a datos vía psycopg 3 y SQL parametrizado, sin ORM), las compuertas anteriores se ejecutan en dos pipelines de GitHub Actions independientes. Ambos MUST pasar antes de la fusión:
+Given the split between frontend (`src/frontend/`, React 19 + TypeScript + Vite + Tailwind) and backend (`src/backend/`, FastAPI + Pydantic V2, with data access through psycopg 3 and parameterized SQL, no ORM), the gates above run in two independent GitHub Actions pipelines. Both MUST pass before merging:
 
-* **`backend-ci`:** SAST con `Bandit`, validación de esquemas Pydantic V2, pruebas y cobertura `pytest` > 80 %, SCA con `pip-audit`/`Safety`, y escaneo de la imagen Docker con `Trivy` (bloqueo CVSS ≥ 7.0).
-* **`frontend-ci`:** SAST/lint con `ESLint`, verificación de tipos `tsc --noEmit`, pruebas `Vitest`, SCA de dependencias JS (`npm audit`/`Trivy`) y build de producción de Vite. El frontend no persiste secretos ni toma decisiones de autorización.
+* **`backend-ci`:** SAST with `Bandit`, Pydantic V2 schema validation, `pytest` tests and coverage > 80 %, SCA with `pip-audit`/`Safety`, and Docker image scanning with `Trivy` (blocking at CVSS ≥ 7.0).
+* **`frontend-ci`:** SAST/lint with `ESLint`, type checking with `tsc --noEmit`, `Vitest` tests, SCA of JS dependencies (`npm audit`/`Trivy`) and the Vite production build. The frontend does not store secrets or make authorization decisions.
 
-Las compuertas **DevSecOps (SAST + SCA)** MUST bloquear la **publicación de imágenes de contenedor vulnerables** en el registro (GHCR): ninguna imagen con un hallazgo de severidad Alta/Crítica (CVSS ≥ 7.0) MUST promoverse ni publicarse. El despliegue del primer MVP es Docker + `docker-compose` (4 servicios); **Kubernetes + Helm + GitOps/Argo CD** se adopta como **evolución / objetivo futuro** de producción, no en el MVP (adopción vuelta por vuelta). Esta orquestación se detalla en ADR-0005.
+The **DevSecOps (SAST + SCA)** gates MUST block the **publication of vulnerable container images** to the registry (GHCR): no image with a High/Critical finding (CVSS ≥ 7.0) MUST be promoted or published. The first MVP deployment is Docker + `docker-compose` (4 services); **Kubernetes + Helm + GitOps/Argo CD** is adopted as the **evolution / future goal** for production, not in the MVP (turn-by-turn adoption). This orchestration is detailed in ADR-0005.
 
 ---
 
-## 4. Gobernanza y Procedimiento de Enmiendas
+## 4. Governance and Amendment Procedure
 
-1. **Política de Versionado:** El presente SRD se rige por versionado semántico (`MAJOR.MINOR.PATCH`). Un incremento en `MAJOR` representa cambios en los requerimientos de seguridad por actualización de normativas o reestructuración arquitectónica; `MINOR` refleja la adición de nuevos criterios de aceptación; `PATCH` aplica para correcciones de redacción o aclaraciones técnicas.
-2. **Procedimiento de Enmienda:** Cualquier modificación a los requisitos normativos (normas MUST / SHOULD) requiere la presentación de un documento de decisión de arquitectura (ADR), la validación en la compuerta de riesgo del espiral y la firma unánime del Dueño de Vuelta, el Arquitecto de Seguridad y el Representante del Despachador.
-3. **Auditoría de Cumplimiento:** Se realizará una revisión automatizada de cumplimiento de este SRD al finalizar cada vuelta del espiral RITMO mediante la ejecución del pipeline de auditoría de seguridad y DataOps.
+1. **Versioning policy:** This SRD follows semantic versioning (`MAJOR.MINOR.PATCH`). A `MAJOR` increment represents changes to the security requirements due to regulatory updates or architectural restructuring; `MINOR` reflects new acceptance criteria; `PATCH` applies to wording fixes or technical clarifications.
+2. **Amendment procedure:** Any change to the normative requirements (MUST / SHOULD rules) requires an architecture decision record (ADR), validation at the spiral's risk gate and the unanimous signature of the Turn Owner, the Security Architect and the Dispatcher Representative.
+3. **Compliance audit:** An automated compliance review of this SRD will run at the end of each RITMO spiral turn by executing the security and DataOps audit pipeline.

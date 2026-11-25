@@ -79,7 +79,8 @@ Sync Impact Report (temporary draft — remove before merge)
 - Deferred TODOs: none. Ratified = 2026-11-17 (date provided by the operator);
   Last Amended = 2026-11-17.
 - Language: translated to English on 2026-11-17 so the whole repository uses one
-  language. Source documents in docs/ (OMD, PRD, SRD) remain in Spanish.
+  language. Source documents in docs/ (OMD, PRD, SRD) translated to English on
+  2026-11-25; the app's user-facing text stays in Spanish.
 -->
 
 # RITMO / PulsoFlota Constitution
