@@ -14,21 +14,28 @@ from typing import Annotated, Any, Literal
 
 import psycopg
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from src.api.deps import get_db_connection
 from src.api.reads.gold_reads import (
     corridor_now_doc,
     latest_snapshot_id,
+    latest_snapshot_with_age,
+    proposed_recommendation_docs,
     source_status_doc,
 )
 from src.pulsoflota.models.read.corridor_now import CorridorNowV100
+from src.pulsoflota.models.read.recommendation import RecommendationV110
 from src.pulsoflota.models.read.source_status import SourceStatusV100
 
 router = APIRouter(prefix="/api/v1")
 
 # Turn 1 serves only this corridor; any other id yields the no-data envelope (FR-011).
 SUPPORTED_CORRIDOR_ID = "C6-008"
+
+# Same freshness threshold as the data contract (§2.1), measured in wall time.
+STALE_AFTER_S = 15
+MAX_RECOMMENDATIONS = 3
 
 DbConnection = Annotated[psycopg.Connection[dict[str, Any]], Depends(get_db_connection)]
 
@@ -50,6 +57,22 @@ class NoDataSourceStatus(BaseModel):
     status: Literal["no_data"] = "no_data"
     corridor_id: Annotated[str, Field(min_length=1)]
     sources_down: list = Field(default_factory=list, max_length=0)
+
+
+class RecommendationsResponse(BaseModel):
+    """Recommendations envelope: only `ok` may carry items, at most three."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["ok", "stale", "no_data"]
+    corridor_id: Annotated[str, Field(min_length=1)]
+    recommendations: list[RecommendationV110] = Field(default_factory=list, max_length=MAX_RECOMMENDATIONS)
+
+    @model_validator(mode="after")
+    def _only_ok_carries_items(self) -> RecommendationsResponse:
+        if self.status != "ok" and self.recommendations:
+            raise ValueError("stale and no_data envelopes must have no recommendations")
+        return self
 
 
 @router.get(
@@ -82,3 +105,25 @@ def get_source_status(corridor_id: str, conn: DbConnection) -> SourceStatusV100 
     if doc is None:
         return NoDataSourceStatus(corridor_id=corridor_id)
     return SourceStatusV100.model_validate(doc)
+
+
+@router.get(
+    "/corridor/{corridor_id}/recommendations",
+    response_model=RecommendationsResponse,
+    summary="Active (proposed) recommendations",
+)
+def get_recommendations(corridor_id: str, conn: DbConnection) -> RecommendationsResponse:
+    snapshot = latest_snapshot_with_age(conn)
+    if corridor_id != SUPPORTED_CORRIDOR_ID or snapshot is None:
+        return RecommendationsResponse(status="no_data", corridor_id=corridor_id)
+
+    _, age_s = snapshot
+    if age_s > STALE_AFTER_S:
+        return RecommendationsResponse(status="stale", corridor_id=corridor_id)
+
+    docs = proposed_recommendation_docs(conn)
+    return RecommendationsResponse(
+        status="ok",
+        corridor_id=corridor_id,
+        recommendations=[RecommendationV110.model_validate(doc) for doc in docs],
+    )

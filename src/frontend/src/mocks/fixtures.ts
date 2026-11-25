@@ -1,5 +1,7 @@
 import type {
   CorridorNow,
+  Recommendation,
+  RecommendationsResponse,
   CorridorNowResponse,
   NoDataEnvelope,
   SourceStatus,
@@ -16,6 +18,7 @@ import breakdownCorridor from "../../../../contracts/read/fixtures/c5_breakdown/
 import breakdownStatus from "../../../../contracts/read/fixtures/c5_breakdown/source_status.json";
 import outageCorridor from "../../../../contracts/read/fixtures/d1_source_outage/corridor_now.json";
 import outageStatus from "../../../../contracts/read/fixtures/d1_source_outage/source_status.json";
+import bunchingRecommendation from "../../../../contracts/read/fixtures/c1_bunching/recommendation.json";
 
 export interface FixtureScenario {
   corridorNow: CorridorNowResponse;
@@ -65,3 +68,14 @@ export const scenarios = {
 export type ScenarioName = keyof typeof scenarios;
 
 export const corridorId = CORRIDOR_ID;
+
+export const recommendationFixture: Recommendation = {
+  ...(bunchingRecommendation as Recommendation),
+  status: "proposed",
+};
+
+export const recommendationsResponseFixture: RecommendationsResponse = {
+  status: "ok",
+  corridor_id: CORRIDOR_ID,
+  recommendations: [recommendationFixture],
+};

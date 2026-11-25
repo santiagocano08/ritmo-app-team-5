@@ -2,6 +2,7 @@ import type {
   CorridorNow,
   CorridorNowResponse,
   NoDataEnvelope,
+  RecommendationsResponse,
   SourceStatus,
   SourceStatusResponse,
 } from "./types";
@@ -89,4 +90,14 @@ export async function getSourceStatus(corridorId: string): Promise<SourceStatusR
   }
   assertSchemaVersion(body);
   return body as unknown as SourceStatus;
+}
+
+export async function getRecommendations(corridorId: string): Promise<RecommendationsResponse> {
+  const body = await fetchJson(
+    `/corridor/${encodeURIComponent(corridorId)}/recommendations`,
+  );
+  if (!isRecord(body) || !Array.isArray(body.recommendations)) {
+    throw new RefreshFailedError("Recommendations body is malformed");
+  }
+  return body as unknown as RecommendationsResponse;
 }

@@ -11,6 +11,7 @@ const outDir = resolve(here, "../src/api/generated");
 const targets = [
   { schema: "corridor_now.schema.json", name: "CorridorNow", out: "corridor-now.ts" },
   { schema: "source_status.schema.json", name: "SourceStatus", out: "source-status.ts" },
+  { schema: "recommendation.schema.json", name: "Recommendation", out: "recommendation.ts" },
 ];
 
 const BANNER = `// AUTO-GENERATED from contracts/read/*.schema.json v1.0.0 — do not hand-edit.\n// Regenerate with: npm run gen:types\n`;

@@ -1,5 +1,10 @@
 import { http, HttpResponse } from "msw";
-import { corridorId, scenarios, type ScenarioName } from "./fixtures";
+import {
+  corridorId,
+  recommendationsResponseFixture,
+  scenarios,
+  type ScenarioName,
+} from "./fixtures";
 
 interface MockControl {
   scenario: ScenarioName;
@@ -39,6 +44,15 @@ export const handlers = [
       );
     }
     return HttpResponse.json(scenarios[mockControl.scenario].sourceStatus);
+  }),
+  http.get(`${base}/corridor/:corridorId/recommendations`, () => {
+    if (mockControl.failRefresh) {
+      return HttpResponse.json(
+        { error: "internal_server_error", correlation_id: "mock" },
+        { status: 500 },
+      );
+    }
+    return HttpResponse.json(recommendationsResponseFixture);
   }),
 ];
 
