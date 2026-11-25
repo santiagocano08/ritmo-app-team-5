@@ -1,16 +1,68 @@
+import type { ReactNode } from "react";
+
 export type ActiveSection = "live_central" | "alerts" | "day_plan";
 
 interface NavItem {
   section: ActiveSection;
   label: string;
-  icon: string;
+  icon: ReactNode;
   href: string;
 }
 
+const PulseIcon = (
+  <svg
+    width={20}
+    height={20}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={2}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M2 12h4l3-8 4 16 3-8h6" />
+  </svg>
+);
+
+const BellIcon = (
+  <svg
+    width={20}
+    height={20}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={2}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+  </svg>
+);
+
+const CalendarIcon = (
+  <svg
+    width={20}
+    height={20}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={2}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <rect x="3" y="4" width="18" height="18" rx="2" />
+    <path d="M16 2v4M8 2v4M3 10h18" />
+  </svg>
+);
+
 const NAV_ITEMS: NavItem[] = [
-  { section: "live_central", label: "Central en vivo", icon: "◉", href: "#live" },
-  { section: "alerts", label: "Alertas", icon: "✚", href: "#alerts" },
-  { section: "day_plan", label: "Plan del día", icon: "▦", href: "#plan" },
+  { section: "live_central", label: "Central en vivo", icon: PulseIcon, href: "#live" },
+  { section: "alerts", label: "Alertas", icon: BellIcon, href: "#alerts" },
+  { section: "day_plan", label: "Plan del día", icon: CalendarIcon, href: "#plan" },
 ];
 
 export function Sidebar({ activeSection }: { activeSection: ActiveSection }) {
@@ -20,9 +72,20 @@ export function Sidebar({ activeSection }: { activeSection: ActiveSection }) {
       className="flex h-full w-[248px] flex-col gap-1.5 bg-sidebar px-3.5 py-5 text-white"
     >
       <div className="flex items-center gap-2.5 px-2.5 pb-5 pt-1">
-        <span aria-hidden="true" className="text-2xl text-logo">
-          ⬳
-        </span>
+        <svg
+          width={26}
+          height={26}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="#FBBF24"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+          className="text-logo"
+        >
+          <path d="M2 12h4l3-8 4 16 3-8h6" />
+        </svg>
         <span className="font-brand text-xl font-bold">PulsoFlota</span>
       </div>
 
@@ -38,7 +101,7 @@ export function Sidebar({ activeSection }: { activeSection: ActiveSection }) {
                   isActive ? "bg-surface text-sidebar" : "text-sidebar-inactive"
                 }`}
               >
-                <span aria-hidden="true">{item.icon}</span>
+                {item.icon}
                 {item.label}
               </a>
             </li>
@@ -63,7 +126,21 @@ export function Sidebar({ activeSection }: { activeSection: ActiveSection }) {
           href="#logout"
           className="flex h-10 items-center gap-2.5 px-1 text-sm font-semibold text-sidebar-inactive no-underline"
         >
-          <span aria-hidden="true">⇥</span>
+          <svg
+            width={18}
+            height={18}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <path d="M16 17l5-5-5-5" />
+            <path d="M21 12H9" />
+          </svg>
           Cerrar sesión
         </a>
       </div>

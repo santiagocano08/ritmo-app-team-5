@@ -49,6 +49,15 @@ same on every computer and matches the design.
 - `frontend-ci` stays green: ESLint, `tsc --noEmit`, Vitest with coverage
   **> 80 %**, Vite build.
 
+## Design connection
+
+- **UXUI-03 — Navegación principal por rol y estado del dato:** reference for
+  the sidebar, logo, and logout icon placement. See the [story summary](../../docs/designs/resumen-historias.md),
+  [desktop mockup](../../docs/designs/mockups/escritorio/UXUI03-escritorio.png),
+  and sections 4.1–4.3 of
+  [`US-06-escritorio-estilos.md`](../US-06-frontend-home/US-06-escritorio-estilos.md)
+  for the icon shapes and sizing.
+
 ## Origin
 
 Gap found by comparing the shipped console (US-06, PR #35) with the style spec
