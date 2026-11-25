@@ -34,7 +34,7 @@ def make_row(rec_id: str, *, type: str = "hold", bus: str = "B-103", stop: str =
     if speed_pct is not None:
         action["speed_reduction_pct"] = speed_pct
     doc = {"schema_version": "1.1.0", "rec_id": rec_id, "case": case, "action": action,
-           "reason": f"{type} {bus} at {stop} saves {saving:g} s per rider", "ewt_saving_s": saving, "horizon_s": 600,
+           "reason": f"retener {bus} 60 s en {stop} ahorra {saving:g} s por pasajero", "ewt_saving_s": saving, "horizon_s": 600,
            "data_quality": "live", "expires_ts": _rfc3339(exp), "conflicts_with": [], "rank": rank, "status": status,
            "lineage": {"model_version": "1.0.0", "rule_version": "1.6.0", "snapshot_id": T_SNAPSHOT}}
     if validate:

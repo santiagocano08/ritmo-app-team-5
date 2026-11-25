@@ -76,7 +76,7 @@ def test_same_key_keeps_identity_and_refreshes_numbers() -> None:
         r1.rec_id, r1.proposed_ts, r1.expires_ts, r1.first_snapshot_id)
     assert not r2.is_new
     assert r2.doc["ewt_saving_s"] == 24.5 and r2.doc["lineage"]["snapshot_id"] == SNAP2 and r2.doc["rank"] == 1
-    assert r2.doc["reason"].endswith("saves 24.5 s per rider")
+    assert r2.doc["reason"].endswith("ahorra 24.5 s por pasajero")
 
 
 def test_a_reserve_row_carries_its_readiness_in_params() -> None:

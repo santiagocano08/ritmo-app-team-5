@@ -8,7 +8,7 @@
     "stop_id": "P-883",
     "duration_s": null
   },
-  "reason": "B-104 has broken down at P-891. A gap of 1200 s (2× planned) has opened between B-103 and B-105. Dispatch reserve B-106 from P-883.",
+  "reason": "despachar la reserva B-106 ahorra 180 s por pasajero",
   "ewt_saving_s": 180,
   "horizon_s": 1200,
   "data_quality": "live",

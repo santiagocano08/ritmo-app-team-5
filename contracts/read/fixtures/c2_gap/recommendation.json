@@ -8,7 +8,7 @@
     "stop_id": "P-891",
     "duration_s": -60
   },
-  "reason": "B-104 is running 482 s ahead of schedule, creating a gap of 1082 s (1.8× planned) behind B-101. Depart B-101 from the next stop P-891 60 s early to begin closing the gap towards B-102.",
+  "reason": "adelantar 60 s la próxima salida desde P-891 (B-101) ahorra 70 s por pasajero",
   "ewt_saving_s": 70,
   "horizon_s": 900,
   "data_quality": "live",

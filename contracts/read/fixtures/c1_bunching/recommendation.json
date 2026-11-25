@@ -8,7 +8,7 @@
     "stop_id": "P-887",
     "duration_s": 90
   },
-  "reason": "B-101 and B-103 are bunching (headway 177 s, planned 600 s). Holding B-101 at P-887 for 90 s will restore spacing towards B-103.",
+  "reason": "retener B-101 90 s en P-887 ahorra 55 s por pasajero",
   "ewt_saving_s": 55,
   "horizon_s": 600,
   "data_quality": "live",
