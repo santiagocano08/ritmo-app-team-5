@@ -54,7 +54,13 @@ export default function App() {
     <div className="flex h-full min-h-screen bg-app text-text-primary">
       <Sidebar activeSection={activeSection} onSelect={setActiveSection} />
       <div className="flex flex-1 flex-col">
-        <Header status={status} statusDetail={detail} stale={stale} />
+        <Header
+          status={status}
+          statusDetail={detail}
+          stale={stale}
+          corridorId={snapshot?.corridor_id ?? corridorId}
+          direction={snapshot?.direction}
+        />
         <DataStateBanner status={status} sourcesDown={sourcesDown} />
         <main className="flex flex-1 flex-col gap-4 p-7">
           <h1 className="font-brand text-[26px] font-bold">{section.label}</h1>
