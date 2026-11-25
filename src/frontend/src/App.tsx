@@ -9,6 +9,7 @@ import { Sidebar } from "./components/shell/Sidebar";
 import { SECTIONS, type SectionId } from "./components/shell/sections";
 import { Header } from "./components/shell/Header";
 import { DataStateBanner } from "./components/shell/DataStateBanner";
+import { formatStatusDetail } from "./components/shell/statusDetail";
 import { EmptyState } from "./components/status/EmptyState";
 import { StaleIndicator } from "./components/status/StaleIndicator";
 import { SectionPlaceholder } from "./components/status/SectionPlaceholder";
@@ -27,7 +28,11 @@ function resolveSourceStatus(
   return {
     status: lastSourceStatus.status,
     sourcesDown: lastSourceStatus.sources_down,
-    detail: `Último evento ${lastSourceStatus.as_of_ts}`,
+    detail: formatStatusDetail(
+      lastSourceStatus.status,
+      lastSourceStatus.as_of_ts,
+      lastSourceStatus.sources_down,
+    ),
   };
 }
 

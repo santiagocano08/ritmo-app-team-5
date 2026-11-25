@@ -19,4 +19,10 @@ describe("StatusBadge", () => {
     render(<StatusBadge status="no_data" detail="Sin eventos" />);
     expect(screen.getByRole("status")).toHaveTextContent("Sin datos");
   });
+
+  it("renders the estimated detail without raising an alert", () => {
+    render(<StatusBadge status="estimated" detail="Una fuente no responde desde 17:39" />);
+    expect(screen.getByRole("status")).toHaveTextContent("Una fuente no responde desde 17:39");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
 });
