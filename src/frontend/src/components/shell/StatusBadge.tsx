@@ -6,7 +6,7 @@ interface StatusBadgeProps {
   stale?: boolean;
 }
 
-const LABELS: Record<SourceStatusValue, string> = {
+export const STATUS_LABELS: Record<SourceStatusValue, string> = {
   live: "En vivo",
   estimated: "Estimado",
   no_data: "Sin datos",
@@ -29,7 +29,7 @@ export function StatusBadge({ status, detail, stale = false }: StatusBadgeProps)
         aria-hidden="true"
         className="h-2.5 w-2.5 rounded-pill bg-current"
       />
-      <span className="text-sm font-bold">{LABELS[status]}</span>
+      <span className="text-sm font-bold">{STATUS_LABELS[status]}</span>
       {detail ? <span className="text-[13px] font-normal">{detail}</span> : null}
       {stale ? <span className="text-[13px] font-normal">· sin conexión</span> : null}
     </span>

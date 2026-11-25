@@ -1,71 +1,12 @@
-import type { ReactNode } from "react";
+import type { MouseEvent } from "react";
+import { SECTIONS, type SectionId } from "./sections";
 
-export type ActiveSection = "live_central" | "alerts" | "day_plan";
-
-interface NavItem {
-  section: ActiveSection;
-  label: string;
-  icon: ReactNode;
-  href: string;
+interface SidebarProps {
+  activeSection: SectionId;
+  onSelect: (section: SectionId) => void;
 }
 
-const PulseIcon = (
-  <svg
-    width={20}
-    height={20}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={2}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <path d="M2 12h4l3-8 4 16 3-8h6" />
-  </svg>
-);
-
-const BellIcon = (
-  <svg
-    width={20}
-    height={20}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={2}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-  </svg>
-);
-
-const CalendarIcon = (
-  <svg
-    width={20}
-    height={20}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={2}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <rect x="3" y="4" width="18" height="18" rx="2" />
-    <path d="M16 2v4M8 2v4M3 10h18" />
-  </svg>
-);
-
-const NAV_ITEMS: NavItem[] = [
-  { section: "live_central", label: "Central en vivo", icon: PulseIcon, href: "#live" },
-  { section: "alerts", label: "Alertas", icon: BellIcon, href: "#alerts" },
-  { section: "day_plan", label: "Plan del día", icon: CalendarIcon, href: "#plan" },
-];
-
-export function Sidebar({ activeSection }: { activeSection: ActiveSection }) {
+export function Sidebar({ activeSection, onSelect }: SidebarProps) {
   return (
     <nav
       aria-label="Secciones"
@@ -90,12 +31,18 @@ export function Sidebar({ activeSection }: { activeSection: ActiveSection }) {
       </div>
 
       <ul className="flex flex-col gap-1.5">
-        {NAV_ITEMS.map((item) => {
-          const isActive = item.section === activeSection;
+        {SECTIONS.map((item) => {
+          const isActive = item.id === activeSection;
+          // Section state is in-memory only, so the hash must not change: a reload would ignore it.
+          const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
+            event.preventDefault();
+            onSelect(item.id);
+          };
           return (
-            <li key={item.section}>
+            <li key={item.id}>
               <a
                 href={item.href}
+                onClick={handleClick}
                 aria-current={isActive ? "page" : undefined}
                 className={`flex h-11 items-center gap-3 rounded-token px-3 text-[15px] font-semibold no-underline ${
                   isActive ? "bg-surface text-sidebar" : "text-sidebar-inactive"
