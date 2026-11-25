@@ -52,6 +52,18 @@ behaves like the design even before the sections have content.
 - `frontend-ci` stays green: ESLint, `tsc --noEmit`, Vitest with coverage
   **> 80 %**, Vite build.
 
+## Design connection
+
+- **UXUI-03 — Navegación principal por rol y estado del dato:** reference for
+  the sidebar's active item, page title, and shared navigation.
+- **UXUI-07 — Bandeja de Alertas** and **UXUI-08 — Consultar el plan del día:**
+  these are the destinations represented by the sidebar items. Their screen
+  content is contextual only; this ticket implements the placeholder, not
+  either destination's features.
+- See the [story summary](../../docs/designs/resumen-historias.md), [UXUI-03
+  desktop mockup](../../docs/designs/mockups/escritorio/UXUI03-escritorio.png),
+  and [global design styles](../../docs/designs/global-desing-styles.md).
+
 ## Origin
 
 Gap found by comparing the shipped console (US-06, PR #35) with the style spec
