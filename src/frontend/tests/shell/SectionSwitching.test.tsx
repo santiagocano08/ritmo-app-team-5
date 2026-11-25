@@ -94,7 +94,7 @@ describe("Section switching", () => {
         await user.click(sectionLink("Central en vivo"));
         expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Central en vivo");
         expect(screen.getByText("B-105")).toBeInTheDocument();
-        expect(screen.getByRole("region", { name: "Corridor summary" })).toBeInTheDocument();
+        expect(screen.getByRole("region", { name: "Resumen del corredor" })).toBeInTheDocument();
         expect(screen.queryByTestId("section-placeholder")).not.toBeInTheDocument();
 
         const requestsOnReturn = nowRequests;
