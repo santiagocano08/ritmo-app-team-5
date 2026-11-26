@@ -4,6 +4,7 @@ import { useTabTitle } from "./hooks/useTabTitle";
 import { useSourceStatus } from "./hooks/useSourceStatus";
 import { deriveFleetViewState } from "./hooks/useFleetViewState";
 import { FleetList } from "./components/fleet/FleetList";
+import { RecommendationsPanel } from "./components/recommendations/RecommendationsPanel";
 import { CorridorSummary } from "./components/summary/CorridorSummary";
 import { Sidebar } from "./components/shell/Sidebar";
 import { SECTIONS, type SectionId } from "./components/shell/sections";
@@ -72,7 +73,12 @@ export default function App() {
               ) : (
                 <>
                   {snapshot ? <CorridorSummary summary={snapshot.summary} /> : null}
-                  <FleetList buses={buses} />
+                  <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+                    <div className="min-w-0 flex-1">
+                      <FleetList buses={buses} />
+                    </div>
+                    <RecommendationsPanel corridorId={corridorId} />
+                  </div>
                 </>
               )}
             </>

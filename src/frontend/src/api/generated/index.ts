@@ -3,3 +3,4 @@
 
 export * from "./corridor-now";
 export * from "./source-status";
+export * from "./recommendation";
