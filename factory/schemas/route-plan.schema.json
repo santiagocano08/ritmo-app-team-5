@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "factory/schemas/route-plan.schema.json",
+  "title": "Route plan written by orchestrate-story",
+  "description": "The orchestrator's decision for one story: which design agents and which reviewers take part, and why. factory/board.py validates it and applies the policy floor (mandatory reviewers) before the runner executes it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "issue", "area", "risk_level", "touches_contract", "rationale", "design_agents", "reviewers"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "issue": {"type": "integer", "minimum": 1},
+    "area": {"enum": ["Frontend", "Backend", "Data", "Platform"]},
+    "risk_level": {"enum": [1, 2, 3], "description": "RITMO risk level: 1 = security or data integrity, 2 = value, 3 = cosmetic/low."},
+    "touches_contract": {"type": "boolean", "description": "True if the story changes contracts/, docs/data-contract.md, a database schema or a message the backend or frontend reads."},
+    "rationale": {"type": "string", "minLength": 20, "maxLength": 1200},
+    "design_agents": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"enum": ["data-design"]}
+    },
+    "reviewers": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["agent", "reason"],
+        "properties": {
+          "agent": {"enum": ["review-security", "review-contract", "review-acceptance"]},
+          "reason": {"type": "string", "minLength": 10, "maxLength": 400}
+        }
+      }
+    }
+  }
+}

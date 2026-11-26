@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "factory/schemas/findings.schema.json",
+  "title": "Findings written by one reviewer in round 1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "reviewer", "round", "summary", "findings"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "reviewer": {"enum": ["review-security", "review-contract", "review-acceptance"]},
+    "round": {"const": 1},
+    "summary": {"type": "string", "minLength": 5, "maxLength": 600},
+    "findings": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "severity", "file", "claim", "evidence", "suggested_fix"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^(SEC|CON|ACC)-[0-9]{1,2}$"},
+          "severity": {"enum": ["blocker", "major", "minor"]},
+          "file": {"type": "string", "minLength": 1, "description": "Repo-relative path. Must be one of the files changed by the story, or the finding is dropped by rule."},
+          "line": {"type": ["integer", "null"], "minimum": 1},
+          "claim": {"type": "string", "minLength": 10, "maxLength": 500},
+          "evidence": {"type": "string", "minLength": 5, "maxLength": 800, "description": "The line(s) from the diff or the spec requirement that show the problem."},
+          "suggested_fix": {"type": "string", "minLength": 5, "maxLength": 500}
+        }
+      }
+    }
+  }
+}

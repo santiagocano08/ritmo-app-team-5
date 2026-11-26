@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "factory/schemas/replies.schema.json",
+  "title": "Implementer's reply to the open findings of a round",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "round", "replies"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "round": {"const": 1},
+    "replies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["finding_id", "decision", "detail"],
+        "properties": {
+          "finding_id": {"type": "string", "pattern": "^(SEC|CON|ACC)-[0-9]{1,2}$"},
+          "decision": {"enum": ["fixed", "wont_fix"]},
+          "detail": {"type": "string", "minLength": 10, "maxLength": 600, "description": "What changed (files, tests) or why the finding does not apply."}
+        }
+      }
+    }
+  }
+}

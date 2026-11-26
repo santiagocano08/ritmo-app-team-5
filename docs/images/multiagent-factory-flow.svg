@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 1252" width="960" height="1252" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>RITMO multi-agent story factory</title>
+  <desc>An orchestrator agent routes a user story; Spec Kit agents build it; independent reviewers check it in parallel and argue with the implementer on a shared board; deterministic rules decide; people approve.</desc>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#3A4250"/>
+    </marker>
+    <style>
+      .t { font-size: 14px; font-weight: 700; fill: #12161C; }
+      .s { font-size: 11.5px; fill: #3A4250; }
+      .lbl { font-size: 12px; font-weight: 700; fill: #4A5361; letter-spacing: .04em; }
+      .edge { font-size: 11.5px; font-weight: 600; fill: #1E3A8A; }
+      .agent { fill: #DBEAFE; stroke: #1D4ED8; stroke-width: 1.5; }
+      .rule { fill: #F1F3F6; stroke: #4A5361; stroke-width: 1.5; }
+      .human { fill: #FEF3C7; stroke: #B45309; stroke-width: 1.5; }
+      .state { fill: #DCFCE7; stroke: #166534; stroke-width: 1.5; }
+      .frame { fill: none; stroke: #A3ACB9; stroke-width: 1.5; stroke-dasharray: 6 5; }
+      .ln { stroke: #3A4250; stroke-width: 1.6; fill: none; }
+      .dash { stroke: #166534; stroke-width: 1.3; fill: none; stroke-dasharray: 4 4; }
+    </style>
+  </defs>
+  <rect width="960" height="1252" fill="#FFFFFF"/>
+
+  <text x="20" y="34" font-size="20" font-weight="700" fill="#14213D">RITMO · multi-agent story factory</text>
+  <text x="20" y="54" class="s">Agents decide and argue · rules judge · people approve</text>
+
+  <!-- intake -->
+  <rect x="300" y="78" width="260" height="54" rx="10" class="human"/>
+  <text x="430" y="101" text-anchor="middle" class="t">GitHub issue</text>
+  <text x="430" y="119" text-anchor="middle" class="s">user story from the board</text>
+  <path d="M430 132 V160" class="ln" marker-end="url(#a)"/>
+
+  <rect x="300" y="162" width="260" height="58" rx="10" class="agent"/>
+  <text x="430" y="186" text-anchor="middle" class="t">orchestrate-story</text>
+  <text x="430" y="204" text-anchor="middle" class="s">decides area, risk, design and reviewers</text>
+  <path d="M430 220 V248" class="ln" marker-end="url(#a)"/>
+  <text x="440" y="240" class="edge">route-plan.json</text>
+
+  <rect x="300" y="250" width="260" height="58" rx="10" class="rule"/>
+  <text x="430" y="274" text-anchor="middle" class="t">board.py · policy floor</text>
+  <text x="430" y="292" text-anchor="middle" class="s">validates the plan, adds mandatory reviewers</text>
+  <path d="M430 308 V346" class="ln" marker-end="url(#a)"/>
+
+  <!-- build lane -->
+  <rect x="20" y="348" width="680" height="168" rx="12" class="frame"/>
+  <text x="34" y="370" class="lbl">BUILD · SPEC KIT AGENTS (SEQUENTIAL)</text>
+  <rect x="35" y="382" width="150" height="50" rx="9" class="agent"/>
+  <text x="110" y="412" text-anchor="middle" class="t">create-spec</text>
+  <rect x="200" y="382" width="150" height="50" rx="9" class="agent" stroke-dasharray="5 4"/>
+  <text x="275" y="404" text-anchor="middle" class="t">data-design</text>
+  <text x="275" y="421" text-anchor="middle" class="s">only if routed</text>
+  <rect x="365" y="382" width="150" height="50" rx="9" class="agent"/>
+  <text x="440" y="412" text-anchor="middle" class="t">create-plan</text>
+  <rect x="530" y="382" width="150" height="50" rx="9" class="agent"/>
+  <text x="605" y="412" text-anchor="middle" class="t">create-tasks</text>
+  <path d="M185 407 H198" class="ln" marker-end="url(#a)"/>
+  <path d="M350 407 H363" class="ln" marker-end="url(#a)"/>
+  <path d="M515 407 H528" class="ln" marker-end="url(#a)"/>
+  <path d="M605 432 V450" class="ln" marker-end="url(#a)"/>
+  <rect x="530" y="452" width="150" height="50" rx="9" class="agent"/>
+  <text x="605" y="474" text-anchor="middle" class="t">validate-plan</text>
+  <text x="605" y="491" text-anchor="middle" class="s">analyze + checklist</text>
+  <rect x="365" y="452" width="150" height="50" rx="9" class="agent"/>
+  <text x="440" y="482" text-anchor="middle" class="t">implement-code</text>
+  <rect x="200" y="452" width="150" height="50" rx="9" class="agent"/>
+  <text x="275" y="474" text-anchor="middle" class="t">review-code</text>
+  <text x="275" y="491" text-anchor="middle" class="s">converge + tests</text>
+  <path d="M530 477 H517" class="ln" marker-end="url(#a)"/>
+  <path d="M365 477 H352" class="ln" marker-end="url(#a)"/>
+  <path d="M275 502 V560" class="ln" marker-end="url(#a)"/>
+  <text x="284" y="540" class="edge">diff + spec only</text>
+
+  <!-- shared memory -->
+  <rect x="730" y="348" width="210" height="300" rx="12" class="state"/>
+  <text x="835" y="374" text-anchor="middle" class="t">Shared memory</text>
+  <text x="835" y="392" text-anchor="middle" class="s">(Spec Kit, in the repo)</text>
+  <text x="748" y="422" class="s">• constitution.md</text>
+  <text x="748" y="442" class="s">• AGENTS.md + steering</text>
+  <text x="748" y="462" class="s">• docs/ (OMD, PRD, SRD)</text>
+  <text x="748" y="482" class="s">• spec.md</text>
+  <text x="748" y="502" class="s">• plan.md · research.md</text>
+  <text x="748" y="522" class="s">• tasks.md</text>
+  <text x="748" y="542" class="s">• checklists/</text>
+  <text x="748" y="574" class="s">Every agent reads it;</text>
+  <text x="748" y="592" class="s">each build agent writes</text>
+  <text x="748" y="610" class="s">only its own artifact.</text>
+  <path d="M700 432 H728" class="dash"/>
+
+  <!-- review panel -->
+  <rect x="20" y="562" width="680" height="150" rx="12" class="frame"/>
+  <text x="34" y="584" class="lbl">REVIEW PANEL · ROUND 1 (PARALLEL, INDEPENDENT)</text>
+  <rect x="40" y="600" width="200" height="66" rx="9" class="agent"/>
+  <text x="140" y="626" text-anchor="middle" class="t">review-security</text>
+  <text x="140" y="645" text-anchor="middle" class="s">SRD · OWASP 2025</text>
+  <rect x="260" y="600" width="200" height="66" rx="9" class="agent"/>
+  <text x="360" y="626" text-anchor="middle" class="t">review-contract</text>
+  <text x="360" y="645" text-anchor="middle" class="s">contract · schemas · ADR</text>
+  <rect x="480" y="600" width="200" height="66" rx="9" class="agent"/>
+  <text x="580" y="626" text-anchor="middle" class="t">review-acceptance</text>
+  <text x="580" y="645" text-anchor="middle" class="s">spec criteria ↔ tests</text>
+  <text x="360" y="694" text-anchor="middle" class="s">each writes findings JSON · at most 5 · only on changed files</text>
+  <path d="M140 712 L300 758" class="ln" marker-end="url(#a)"/>
+  <path d="M360 712 V756" class="ln" marker-end="url(#a)"/>
+  <path d="M580 712 L420 758" class="ln" marker-end="url(#a)"/>
+
+  <!-- board -->
+  <rect x="160" y="760" width="400" height="96" rx="12" class="state"/>
+  <text x="360" y="786" text-anchor="middle" class="t">board.json · shared blackboard</text>
+  <text x="360" y="806" text-anchor="middle" class="s">findings → replies → verdicts, one entry per finding</text>
+  <text x="360" y="824" text-anchor="middle" class="s">rule: findings on files the story did not change are dropped</text>
+  <text x="360" y="842" text-anchor="middle" class="s">rule: at most 2 rounds</text>
+  <path d="M360 856 V880" class="ln" marker-end="url(#a)"/>
+
+  <!-- round 2 loop -->
+  <rect x="600" y="760" width="340" height="80" rx="10" class="agent"/>
+  <text x="770" y="786" text-anchor="middle" class="t">Round 2 · reviewers judge</text>
+  <text x="770" y="804" text-anchor="middle" class="s">each reviewer, only its own findings, in parallel:</text>
+  <text x="770" y="822" text-anchor="middle" class="s">resolved · accepted · still_open</text>
+  <path d="M600 800 H562" class="ln" marker-end="url(#a)"/>
+  <rect x="600" y="898" width="340" height="64" rx="10" class="agent"/>
+  <text x="770" y="924" text-anchor="middle" class="t">implement-code replies</text>
+  <text x="770" y="943" text-anchor="middle" class="s">per finding: fixed (code + test) or wont_fix + reason</text>
+  <path d="M770 898 V842" class="ln" marker-end="url(#a)"/>
+
+  <!-- decision -->
+  <path d="M360 882 L470 928 L360 974 L250 928 Z" class="rule"/>
+  <text x="360" y="924" text-anchor="middle" class="t">board.py decides</text>
+  <text x="360" y="942" text-anchor="middle" class="s">blocking findings open?</text>
+  <path d="M470 928 H598" class="ln" marker-end="url(#a)"/>
+  <text x="482" y="919" class="edge">yes, round 1</text>
+  <path d="M250 928 H212" class="ln" marker-end="url(#a)"/>
+  <text x="115" y="892" class="edge" text-anchor="middle">yes, after round 2</text>
+  <rect x="20" y="900" width="190" height="60" rx="10" class="human"/>
+  <text x="115" y="925" text-anchor="middle" class="t">Escalate to a person</text>
+  <text x="115" y="943" text-anchor="middle" class="s">no PR until someone decides</text>
+  <path d="M360 974 V1006" class="ln" marker-end="url(#a)"/>
+  <text x="370" y="996" class="edge">no → approved</text>
+
+  <!-- delivery -->
+  <rect x="230" y="1008" width="260" height="54" rx="10" class="rule"/>
+  <text x="360" y="1031" text-anchor="middle" class="t">Verification</text>
+  <text x="360" y="1049" text-anchor="middle" class="s">tests, lint and build for the story's area</text>
+  <path d="M360 1062 V1090" class="ln" marker-end="url(#a)"/>
+  <rect x="230" y="1092" width="260" height="54" rx="10" class="rule"/>
+  <text x="360" y="1115" text-anchor="middle" class="t">Pull request + CI</text>
+  <text x="360" y="1133" text-anchor="middle" class="s">route plan and board posted on the PR</text>
+  <path d="M360 1146 V1174" class="ln" marker-end="url(#a)"/>
+  <rect x="230" y="1176" width="260" height="54" rx="10" class="human"/>
+  <text x="360" y="1199" text-anchor="middle" class="t">Integration gate</text>
+  <text x="360" y="1217" text-anchor="middle" class="s">a person reviews and merges</text>
+
+  <!-- legend -->
+  <rect x="560" y="1100" width="16" height="16" rx="3" class="agent"/>
+  <text x="584" y="1113" class="s">LLM agent (Kiro)</text>
+  <rect x="560" y="1128" width="16" height="16" rx="3" class="rule"/>
+  <text x="584" y="1141" class="s">Deterministic rule or check</text>
+  <rect x="560" y="1156" width="16" height="16" rx="3" class="state"/>
+  <text x="584" y="1169" class="s">Shared state the agents read and write</text>
+  <rect x="560" y="1184" width="16" height="16" rx="3" class="human"/>
+  <text x="584" y="1197" class="s">Human gate</text>
+</svg>
